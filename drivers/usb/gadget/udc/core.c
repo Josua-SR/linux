@@ -1350,23 +1350,9 @@ int usb_gadget_probe_driver(struct usb_gadget_driver *driver)
 		return -EINVAL;
 
 	mutex_lock(&udc_lock);
-	if (driver->udc_name) {
-		list_for_each_entry(udc, &udc_list, list) {
-			ret = strcmp(driver->udc_name, dev_name(&udc->dev));
-			if (!ret)
-				break;
-		}
-		if (ret)
-			ret = -ENODEV;
-		else if (udc->driver)
-			ret = -EBUSY;
-		else
-			goto found;
-	} else {
-		udc = udc_detect(&udc_list, driver);
-		if (udc)
-			goto found;
-	}
+	udc = udc_detect(&udc_list, driver);
+	if (udc)
+		goto found;
 
 	if (!driver->match_existing_only) {
 		list_add_tail(&driver->pending, &gadget_driver_pending_list);
