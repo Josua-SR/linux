@@ -389,6 +389,21 @@ int phy_calibrate(struct phy *phy)
 }
 EXPORT_SYMBOL_GPL(phy_calibrate);
 
+int phy_send_command(struct phy *phy, u32 command)
+{
+	int ret;
+
+	if (!phy || !phy->ops->send_command)
+		return 0;
+
+	mutex_lock(&phy->mutex);
+	ret = phy->ops->send_command(phy, command);
+	mutex_unlock(&phy->mutex);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(phy_send_command);
+
 /**
  * _of_phy_get() - lookup and obtain a reference to a phy by phandle
  * @np: device_node for which to get the phy

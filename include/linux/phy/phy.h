@@ -51,6 +51,7 @@ enum phy_mode {
  * @set_mode: set the mode of the phy
  * @reset: resetting the phy
  * @calibrate: calibrate the phy
+ * @send_command: request specific operations from the phy
  * @owner: the module owner containing the ops
  */
 struct phy_ops {
@@ -61,6 +62,7 @@ struct phy_ops {
 	int	(*set_mode)(struct phy *phy, enum phy_mode mode, int submode);
 	int	(*reset)(struct phy *phy);
 	int	(*calibrate)(struct phy *phy);
+	int	(*send_command)(struct phy *phy, u32 command);
 	struct module *owner;
 };
 
@@ -163,6 +165,7 @@ static inline enum phy_mode phy_get_mode(struct phy *phy)
 }
 int phy_reset(struct phy *phy);
 int phy_calibrate(struct phy *phy);
+int phy_send_command(struct phy *phy, u32 command);
 static inline int phy_get_bus_width(struct phy *phy)
 {
 	return phy->attrs.bus_width;
@@ -298,6 +301,13 @@ static inline int phy_calibrate(struct phy *phy)
 	if (!phy)
 		return 0;
 	return -ENOSYS;
+}
+
+static inline int phy_send_command(struct phy *phy, u32 command)
+{
+	if (!phy)
+		return 0;
+	return -EOPNOTSUPP;
 }
 
 static inline int phy_get_bus_width(struct phy *phy)
