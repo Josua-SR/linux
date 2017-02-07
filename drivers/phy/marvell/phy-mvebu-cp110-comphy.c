@@ -15,6 +15,8 @@
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 
+#include <dt-bindings/phy/phy-comphy-mvebu.h>
+
 struct mvebu_comhy_conf {
 	enum phy_mode mode;
 	int submode;
@@ -42,6 +44,7 @@ struct mvebu_comhy_conf {
 #define MV_SIP_COMPHY_POWER_ON	0x82000001
 #define MV_SIP_COMPHY_POWER_OFF	0x82000002
 #define MV_SIP_COMPHY_PLL_LOCK	0x82000003
+#define MV_SIP_COMPHY_DIG_RESET	0x82000005
 
 #define COMPHY_FW_MODE_FORMAT(mode)		((mode) << 12)
 #define COMPHY_FW_NET_FORMAT(mode, idx, speeds)	\
@@ -364,10 +367,43 @@ static int mvebu_comphy_power_off(struct phy *phy)
 				lane->id, 0);
 }
 
+static int mvebu_comphy_send_command(struct phy *phy, u32 command)
+{
+	struct mvebu_comphy_lane *lane = phy_get_drvdata(phy);
+	struct mvebu_comphy_priv *priv = lane->priv;
+	const struct mvebu_comphy_data *data = priv->data;
+	unsigned long comphy_mode;
+	int ret = 0;
+
+	switch (command) {
+	case (COMPHY_COMMAND_DIGITAL_PWR_OFF):
+	case (COMPHY_COMMAND_DIGITAL_PWR_ON):
+		/* Map interface type to the ComPhy mode */
+		ret = mvebu_comphy_eth_get_mode(lane, &comphy_mode);
+		if (ret < 0)
+			return ret;
+
+		/* Perform digital reset of the SerDes lane */
+		ret = data->comphy_smc(MV_SIP_COMPHY_DIG_RESET, priv->phys,
+				       lane->id, comphy_mode);
+		if (ret < 0)
+			dev_err(priv->dev, "%s: smc returned %d\n",
+				__func__, ret);
+		break;
+	default:
+		dev_err(priv->dev, "%s: unsupported command (0x%x)\n",
+			__func__, command);
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
 static const struct phy_ops mvebu_comphy_ops = {
 	.power_on	= mvebu_comphy_power_on,
 	.power_off	= mvebu_comphy_power_off,
 	.set_mode	= mvebu_comphy_set_mode,
+	.send_command	= mvebu_comphy_send_command,
 	.owner		= THIS_MODULE,
 };
 
