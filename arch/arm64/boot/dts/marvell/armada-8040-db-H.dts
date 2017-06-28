@@ -90,13 +90,26 @@
 };
 
 /* CON9 on CP0 expansion */
+&cp0_utmi0 {
+	status = "okay";
+};
+
 &cp0_usb3_0 {
+	phys = <&cp0_utmi0>;
+	phy-names = "usb	";
 	status = "okay";
 };
 
 /* CON10 on CP0 expansion */
+&cp0_utmi1 {
+	status = "okay";
+};
+
 &cp0_usb3_1 {
 	status = "okay";
+	/* Generic PHY, providing serdes lanes */
+	phys = <&cp0_utmi1>, <&cp0_comphy4 1>;
+	phy-names = "usb2", "usb3";
 };
 
 &cp1_spi1 {
@@ -147,11 +160,25 @@
 };
 
 /* CON9 on CP1 expansion */
-&cp1_usb3_0 {
+&cp1_utmi0 {
 	status = "okay";
 };
 
-/* CON10 on CP1 expansion */
-&cp1_usb3_1 {
+&cp1_usb3_0 {
+	phys = <&cp1_utmi0>;
+	phy-names = "usb";
 	status = "okay";
 };
+
+/* CON10 on CP0 expansion */
+&cp1_utmi1 {
+	status = "okay";
+};
+
+&cp1_usb3_1 {
+	/* Generic PHY, providing serdes lanes */
+	phys = <&cp1_utmi1>, <&cp1_comphy4 1>;
+	phy-names = "usb2", "usb3";
+	status = "okay";
+};
+

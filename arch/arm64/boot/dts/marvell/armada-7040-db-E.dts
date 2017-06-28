@@ -65,8 +65,14 @@
 	};
 };
 
+&cp0_utmi1 {
+	status = "okay";
+};
+
 &cp0_usb3_1 {
 	usb-phy = <&cp0_usb3_1_phy>;
+	phys = <&cp0_utmi1>, <&cp0_comphy4 1>;
+	phy-names = "usb2", "usb3";
 	status = "okay";
 };
 
