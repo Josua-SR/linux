@@ -171,6 +171,8 @@ int i2c_generic_scl_recovery(struct i2c_adapter *adap)
 		pinctrl_select_state(bri->pinctrl, bri->pins_gpio);
 
 	bri->set_scl(adap, val);
+	if (bri->set_sda)
+		bri->set_sda(adap, 1);
 	ndelay(RECOVERY_NDELAY);
 
 	/*
