@@ -3220,7 +3220,6 @@ F:	drivers/mtd/nand/cavium/
 CAVIUM OCTEON-TX CRYPTO DRIVER
 M:	George Cherian <george.cherian@cavium.com>
 L:	linux-crypto@vger.kernel.org
-
 W:	http://www.cavium.com
 S:	Supported
 F:	drivers/crypto/cavium/cpt/
@@ -8325,15 +8324,6 @@ L:	linux-wireless@vger.kernel.org
 S:	Odd Fixes
 F:	drivers/net/wireless/marvell/mwl8k.c
 
-MARVELL OCTEONTX2 ETHERNET DRIVER
-M:	Sunil Goutham <sgoutham@marvell.com>
-M:	Linu Cherian <lcherian@marvell.com>
-M:	Geetha sowjanya <gakula@marvell.com>
-M:	Christina Jacob <cjacob@marvell.com>
-L:	netdev@vger.kernel.org
-S:	Maintained
-F:	drivers/net/ethernet/marvell/octeontx2
-
 MARVELL SOC MMC/SD/SDIO CONTROLLER DRIVER
 M:	Nicolas Pitre <nico@fluxnic.net>
 S:	Odd Fixes
@@ -12987,16 +12977,15 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/lee/mfd.git
 S:	Supported
 F:	drivers/mfd/syscon.c
 
-SYSTEM CONTROL & POWER/MANAGEMENT INTERFACE (SCPI/SCMI) Message Protocol drivers
+SYSTEM CONTROL & POWER INTERFACE (SCPI) Message Protocol drivers
 M:	Sudeep Holla <sudeep.holla@arm.com>
 L:	linux-arm-kernel@lists.infradead.org
 S:	Maintained
-F:	Documentation/devicetree/bindings/arm/arm,sc[mp]i.txt
-F:	drivers/clk/clk-sc[mp]i.c
-F:	drivers/cpufreq/sc[mp]i-cpufreq.c
+F:	Documentation/devicetree/bindings/arm/arm,scpi.txt
+F:	drivers/clk/clk-scpi.c
+F:	drivers/cpufreq/scpi-cpufreq.c
 F:	drivers/firmware/arm_scpi.c
-F:	drivers/firmware/arm_scmi/
-F:	include/linux/sc[mp]i_protocol.h
+F:	include/linux/scpi_protocol.h
 
 SYSTEM RESET/SHUTDOWN DRIVERS
 M:	Sebastian Reichel <sre@kernel.org>
