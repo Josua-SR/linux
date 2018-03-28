@@ -343,6 +343,7 @@ static int sfp_register_bus(struct sfp_bus *bus)
 	bus->socket_ops->attach(bus->sfp);
 	if (bus->started)
 		bus->socket_ops->start(bus->sfp);
+	bus->netdev->sfp_bus = bus;
 	bus->registered = true;
 	return 0;
 }
@@ -358,6 +359,7 @@ static void sfp_unregister_bus(struct sfp_bus *bus)
 		if (bus->phydev && ops && ops->disconnect_phy)
 			ops->disconnect_phy(bus->upstream);
 	}
+	bus->netdev->sfp_bus = NULL;
 	bus->registered = false;
 }
 
@@ -373,8 +375,6 @@ static void sfp_unregister_bus(struct sfp_bus *bus)
  */
 int sfp_get_module_info(struct sfp_bus *bus, struct ethtool_modinfo *modinfo)
 {
-	if (!bus->registered)
-		return -ENOIOCTLCMD;
 	return bus->socket_ops->module_info(bus->sfp, modinfo);
 }
 EXPORT_SYMBOL_GPL(sfp_get_module_info);
@@ -393,8 +393,6 @@ EXPORT_SYMBOL_GPL(sfp_get_module_info);
 int sfp_get_module_eeprom(struct sfp_bus *bus, struct ethtool_eeprom *ee,
 			  u8 *data)
 {
-	if (!bus->registered)
-		return -ENOIOCTLCMD;
 	return bus->socket_ops->module_eeprom(bus->sfp, ee, data);
 }
 EXPORT_SYMBOL_GPL(sfp_get_module_eeprom);
