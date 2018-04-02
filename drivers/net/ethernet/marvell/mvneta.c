@@ -2796,10 +2796,8 @@ static void mvneta_rx_reset(struct mvneta_port *pp)
 
 /* Rx/Tx queue initialization/cleanup methods */
 
-/* Create a specified RX queue */
-static int mvneta_rxq_init(struct mvneta_port *pp,
-			   struct mvneta_rx_queue *rxq)
-
+static int mvneta_rxq_sw_init(struct mvneta_port *pp,
+			      struct mvneta_rx_queue *rxq)
 {
 	rxq->size = pp->rx_ring_size;
 
@@ -2812,6 +2810,12 @@ static int mvneta_rxq_init(struct mvneta_port *pp,
 
 	rxq->last_desc = rxq->size - 1;
 
+	return 0;
+}
+
+static void mvneta_rxq_hw_init(struct mvneta_port *pp,
+			       struct mvneta_rx_queue *rxq)
+{
 	/* Set Rx descriptors queue starting address */
 	mvreg_write(pp, MVNETA_RXQ_BASE_ADDR_REG(rxq->id), rxq->descs_phys);
 	mvreg_write(pp, MVNETA_RXQ_SIZE_REG(rxq->id), rxq->size);
@@ -2835,6 +2839,20 @@ static int mvneta_rxq_init(struct mvneta_port *pp,
 		mvneta_rxq_short_pool_set(pp, rxq);
 		mvneta_rxq_non_occup_desc_add(pp, rxq, rxq->size);
 	}
+}
+
+/* Create a specified RX queue */
+static int mvneta_rxq_init(struct mvneta_port *pp,
+			   struct mvneta_rx_queue *rxq)
+
+{
+	int ret;
+
+	ret = mvneta_rxq_sw_init(pp, rxq);
+	if (ret < 0)
+		return ret;
+
+	mvneta_rxq_hw_init(pp, rxq);
 
 	return 0;
 }
@@ -2857,9 +2875,8 @@ static void mvneta_rxq_deinit(struct mvneta_port *pp,
 	rxq->descs_phys        = 0;
 }
 
-/* Create and initialize a tx queue */
-static int mvneta_txq_init(struct mvneta_port *pp,
-			   struct mvneta_tx_queue *txq)
+static int mvneta_txq_sw_init(struct mvneta_port *pp,
+			      struct mvneta_tx_queue *txq)
 {
 	int cpu;
 
@@ -2872,7 +2889,6 @@ static int mvneta_txq_init(struct mvneta_port *pp,
 	txq->tx_stop_threshold = txq->size - MVNETA_MAX_SKB_DESCS;
 	txq->tx_wake_threshold = txq->tx_stop_threshold / 2;
 
-
 	/* Allocate memory for TX descriptors */
 	txq->descs = dma_alloc_coherent(pp->dev->dev.parent,
 					txq->size * MVNETA_DESC_ALIGNED_SIZE,
@@ -2881,14 +2897,6 @@ static int mvneta_txq_init(struct mvneta_port *pp,
 		return -ENOMEM;
 
 	txq->last_desc = txq->size - 1;
-
-	/* Set maximum bandwidth for enabled TXQs */
-	mvreg_write(pp, MVETH_TXQ_TOKEN_CFG_REG(txq->id), 0x03ffffff);
-	mvreg_write(pp, MVETH_TXQ_TOKEN_COUNT_REG(txq->id), 0x3fffffff);
-
-	/* Set Tx descriptors queue starting address */
-	mvreg_write(pp, MVNETA_TXQ_BASE_ADDR_REG(txq->id), txq->descs_phys);
-	mvreg_write(pp, MVNETA_TXQ_SIZE_REG(txq->id), txq->size);
 
 	txq->tx_skb = kmalloc_array(txq->size, sizeof(*txq->tx_skb),
 				    GFP_KERNEL);
@@ -2910,7 +2918,6 @@ static int mvneta_txq_init(struct mvneta_port *pp,
 				  txq->descs, txq->descs_phys);
 		return -ENOMEM;
 	}
-	mvneta_tx_done_pkts_coal_set(pp, txq, txq->done_pkts_coal);
 
 	/* Setup XPS mapping */
 	if (txq_number > 1)
@@ -2923,9 +2930,38 @@ static int mvneta_txq_init(struct mvneta_port *pp,
 	return 0;
 }
 
+static void mvneta_txq_hw_init(struct mvneta_port *pp,
+			       struct mvneta_tx_queue *txq)
+{
+	/* Set maximum bandwidth for enabled TXQs */
+	mvreg_write(pp, MVETH_TXQ_TOKEN_CFG_REG(txq->id), 0x03ffffff);
+	mvreg_write(pp, MVETH_TXQ_TOKEN_COUNT_REG(txq->id), 0x3fffffff);
+
+	/* Set Tx descriptors queue starting address */
+	mvreg_write(pp, MVNETA_TXQ_BASE_ADDR_REG(txq->id), txq->descs_phys);
+	mvreg_write(pp, MVNETA_TXQ_SIZE_REG(txq->id), txq->size);
+
+	mvneta_tx_done_pkts_coal_set(pp, txq, txq->done_pkts_coal);
+}
+
+/* Create and initialize a tx queue */
+static int mvneta_txq_init(struct mvneta_port *pp,
+			   struct mvneta_tx_queue *txq)
+{
+	int ret;
+
+	ret = mvneta_txq_sw_init(pp, txq);
+	if (ret < 0)
+		return ret;
+
+	mvneta_txq_hw_init(pp, txq);
+
+	return 0;
+}
+
 /* Free allocated resources when mvneta_txq_init() fails to allocate memory*/
-static void mvneta_txq_deinit(struct mvneta_port *pp,
-			      struct mvneta_tx_queue *txq)
+static void mvneta_txq_sw_deinit(struct mvneta_port *pp,
+				 struct mvneta_tx_queue *txq)
 {
 	struct netdev_queue *nq = netdev_get_tx_queue(pp->dev, txq->id);
 
@@ -2946,7 +2982,11 @@ static void mvneta_txq_deinit(struct mvneta_port *pp,
 	txq->last_desc         = 0;
 	txq->next_desc_to_proc = 0;
 	txq->descs_phys        = 0;
+}
 
+static void mvneta_txq_hw_deinit(struct mvneta_port *pp,
+				 struct mvneta_tx_queue *txq)
+{
 	/* Set minimum bandwidth for disabled TXQs */
 	mvreg_write(pp, MVETH_TXQ_TOKEN_CFG_REG(txq->id), 0);
 	mvreg_write(pp, MVETH_TXQ_TOKEN_COUNT_REG(txq->id), 0);
@@ -2954,6 +2994,13 @@ static void mvneta_txq_deinit(struct mvneta_port *pp,
 	/* Set Tx descriptors queue starting address and size */
 	mvreg_write(pp, MVNETA_TXQ_BASE_ADDR_REG(txq->id), 0);
 	mvreg_write(pp, MVNETA_TXQ_SIZE_REG(txq->id), 0);
+}
+
+static void mvneta_txq_deinit(struct mvneta_port *pp,
+			      struct mvneta_tx_queue *txq)
+{
+	mvneta_txq_sw_deinit(pp, txq);
+	mvneta_txq_hw_deinit(pp, txq);
 }
 
 /* Cleanup all Tx queues */
