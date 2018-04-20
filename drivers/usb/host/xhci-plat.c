@@ -161,6 +161,7 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	struct resource         *res;
 	struct usb_hcd		*hcd;
 	struct clk              *clk;
+	struct clk              *reg_clk;
 	int			ret;
 	int			irq;
 	struct regulator	*current_limiter_regulator;
@@ -231,17 +232,27 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	hcd->rsrc_len = resource_size(res);
 
 	/*
-	 * Not all platforms have a clk so it is not an error if the
-	 * clock does not exists.
+	 * Not all platforms have clks so it is not an error if the
+	 * clock do not exist.
 	 */
+	reg_clk = devm_clk_get(&pdev->dev, "reg");
+	if (!IS_ERR(reg_clk)) {
+		ret = clk_prepare_enable(reg_clk);
+		if (ret)
+			goto put_hcd;
+	} else if (PTR_ERR(reg_clk) == -EPROBE_DEFER) {
+		ret = -EPROBE_DEFER;
+		goto put_hcd;
+	}
+
 	clk = devm_clk_get(&pdev->dev, NULL);
 	if (!IS_ERR(clk)) {
 		ret = clk_prepare_enable(clk);
 		if (ret)
-			goto put_hcd;
+			goto disable_reg_clk;
 	} else if (PTR_ERR(clk) == -EPROBE_DEFER) {
 		ret = -EPROBE_DEFER;
-		goto put_hcd;
+		goto disable_reg_clk;
 	}
 
 	xhci = hcd_to_xhci(hcd);
@@ -258,6 +269,7 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	device_wakeup_enable(hcd->self.controller);
 
 	xhci->clk = clk;
+	xhci->reg_clk = reg_clk;
 	xhci->main_hcd = hcd;
 	xhci->shared_hcd = __usb_create_hcd(driver, sysdev, &pdev->dev,
 			dev_name(&pdev->dev), hcd);
@@ -327,6 +339,9 @@ put_usb3_hcd:
 disable_clk:
 	clk_disable_unprepare(clk);
 
+disable_reg_clk:
+	clk_disable_unprepare(reg_clk);
+
 put_hcd:
 	usb_put_hcd(hcd);
 
@@ -343,6 +358,7 @@ static int xhci_plat_remove(struct platform_device *dev)
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
 	struct clk *clk = xhci->clk;
 	struct usb_hcd *shared_hcd = xhci->shared_hcd;
+	struct clk *reg_clk = xhci->reg_clk;
 
 	pm_runtime_get_sync(&dev->dev);
 	xhci->xhc_state |= XHCI_STATE_REMOVING;
@@ -355,6 +371,7 @@ static int xhci_plat_remove(struct platform_device *dev)
 	usb_put_hcd(shared_hcd);
 
 	clk_disable_unprepare(clk);
+	clk_disable_unprepare(reg_clk);
 	usb_put_hcd(hcd);
 
 	pm_runtime_disable(&dev->dev);
