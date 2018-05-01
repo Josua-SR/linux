@@ -414,6 +414,11 @@
 				compatible = "marvell,ap806-rev-info";
 				reg = <0x610fcc 0x4>;
 			};
+
+			musdk_cma {
+				compatible = "marvell,musdk-cma";
+				dma-coherent;
+			};
 		};
 	};
 
