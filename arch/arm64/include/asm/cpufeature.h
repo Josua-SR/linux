@@ -521,6 +521,14 @@ static inline bool id_aa64pfr0_sve(u64 pfr0)
 	return val > 0;
 }
 
+static inline bool id_aa64pfr0_mpam(u64 pfr0)
+{
+	u32 val = cpuid_feature_extract_unsigned_field(pfr0,
+						       ID_AA64PFR0_MPAM_SHIFT);
+
+	return val > 0;
+}
+
 void __init setup_cpu_features(void);
 void check_local_cpu_capabilities(void);
 
@@ -661,6 +669,12 @@ static inline int arm64_get_ssbd_state(void)
 }
 
 void arm64_set_ssbd_mitigation(bool state);
+
+static inline bool cpus_support_mpam(void)
+{
+	return IS_ENABLED(CONFIG_ARM64_MPAM) &&
+		cpus_have_const_cap(ARM64_MPAM);
+}
 
 extern int do_emulate_mrs(struct pt_regs *regs, u32 sys_reg, u32 rt);
 
