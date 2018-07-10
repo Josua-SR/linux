@@ -364,6 +364,10 @@ static int i2c_init_recovery(struct i2c_adapter *adap)
 			err_str = "no {get|set}_scl() found";
 			goto err;
 		}
+		if (!bri->set_sda && !bri->get_sda) {
+			err_str = "either get_sda() or set_sda() needed";
+			goto err;
+		}
 	}
 
 	return 0;
