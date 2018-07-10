@@ -438,6 +438,13 @@ void sfp_upstream_stop(struct sfp_bus *bus)
 }
 EXPORT_SYMBOL_GPL(sfp_upstream_stop);
 
+static void sfp_upstream_clear(struct sfp_bus *bus)
+{
+	bus->upstream_ops = NULL;
+	bus->upstream = NULL;
+	bus->netdev = NULL;
+}
+
 /**
  * sfp_register_upstream() - Register the neighbouring device
  * @fwnode: firmware node for the SFP bus
@@ -464,8 +471,11 @@ struct sfp_bus *sfp_register_upstream(struct fwnode_handle *fwnode,
 		bus->upstream = upstream;
 		bus->netdev = ndev;
 
-		if (bus->sfp)
+		if (bus->sfp) {
 			ret = sfp_register_bus(bus);
+			if (ret)
+				sfp_upstream_clear(bus);
+		}
 		rtnl_unlock();
 	}
 
@@ -490,8 +500,7 @@ void sfp_unregister_upstream(struct sfp_bus *bus)
 	rtnl_lock();
 	if (bus->sfp)
 		sfp_unregister_bus(bus);
-	bus->upstream = NULL;
-	bus->netdev = NULL;
+	sfp_upstream_clear(bus);
 	rtnl_unlock();
 
 	sfp_bus_put(bus);
@@ -563,6 +572,13 @@ void sfp_module_remove(struct sfp_bus *bus)
 }
 EXPORT_SYMBOL_GPL(sfp_module_remove);
 
+static void sfp_socket_clear(struct sfp_bus *bus)
+{
+	bus->sfp_dev = NULL;
+	bus->sfp = NULL;
+	bus->socket_ops = NULL;
+}
+
 struct sfp_bus *sfp_register_socket(struct device *dev, struct sfp *sfp,
 				    const struct sfp_socket_ops *ops)
 {
@@ -575,8 +591,11 @@ struct sfp_bus *sfp_register_socket(struct device *dev, struct sfp *sfp,
 		bus->sfp = sfp;
 		bus->socket_ops = ops;
 
-		if (bus->netdev)
+		if (bus->netdev) {
 			ret = sfp_register_bus(bus);
+			if (ret)
+				sfp_socket_clear(bus);
+		}
 		rtnl_unlock();
 	}
 
@@ -594,9 +613,7 @@ void sfp_unregister_socket(struct sfp_bus *bus)
 	rtnl_lock();
 	if (bus->netdev)
 		sfp_unregister_bus(bus);
-	bus->sfp_dev = NULL;
-	bus->sfp = NULL;
-	bus->socket_ops = NULL;
+	sfp_socket_clear(bus);
 	rtnl_unlock();
 
 	sfp_bus_put(bus);
