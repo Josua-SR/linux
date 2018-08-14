@@ -1503,6 +1503,7 @@ config ARM64_PTR_AUTH
 
 config ARM64_MPAM
 	bool "Enable support for MPAM"
+	select ARM_CPU_RESCTRL
 	help
 	  Memory Partitioning and Monitoring is an optional extension
 	  that allows the CPUs to mark load and store transactions with
