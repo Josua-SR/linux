@@ -11,6 +11,7 @@
 #include <linux/of.h>
 #include <linux/module.h>
 #include <linux/scmi_protocol.h>
+#include <linux/overflow.h>
 #include <asm/div64.h>
 
 struct scmi_clk {
