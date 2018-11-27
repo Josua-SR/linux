@@ -4447,12 +4447,6 @@ static int mvpp2_change_mtu(struct net_device *dev, int mtu)
 		return -EPERM;
 	}
 
-	if (!IS_ALIGNED(MVPP2_RX_PKT_SIZE(mtu), 8)) {
-		netdev_info(dev, "illegal MTU value %d, round to %d\n", mtu,
-			    ALIGN(MVPP2_RX_PKT_SIZE(mtu), 8));
-		mtu = ALIGN(MVPP2_RX_PKT_SIZE(mtu), 8);
-	}
-
 	if (running)
 		mvpp2_stop_dev(port);
 
