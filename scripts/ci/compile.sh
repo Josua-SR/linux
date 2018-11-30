@@ -90,6 +90,9 @@ esac
 case $build_name in
 	linux414_armv7* )          defconfig="mvebu_v7_defconfig"; ;;
 	linux414_armv8*_mainline ) defconfig="defconfig"; ;;
+	linux414_armv8le_octeontx )         defconfig="octeontx_defconfig"; ;;
+        linux414_armv8le_octeontx_minimal ) defconfig="octeontx_minimal_defconfig"; ;;
+        linux414_armv8le_octeontx_asim )    defconfig="octeontx_asim_defconfig"; ;;
 	linux414_armv8* )          defconfig="mvebu_v8_lsp_defconfig"; ;;
 	* ) echo "Error: Could not configure defconfig."
 		"Unsupported build ${build_name}"; exit -1; ;;
@@ -118,7 +121,6 @@ case $build_name in
 		kernel_config="""./scripts/config --file arch/$arch/configs/$defconfig --set-val CONFIG_CPU_BIG_ENDIAN y ;
 		                 ./scripts/config --file arch/$arch/configs/$defconfig --set-val CONFIG_MVPP2X y ;
  		                 ./scripts/config --file arch/$arch/configs/$defconfig --set-val CONFIG_UIO y"; ;;
-
 esac
 ###############################################################################
 
@@ -162,8 +164,7 @@ if [[ $echo_only ]]; then
 fi
 
 logfile="$$.make.log"
-(eval "$cmd") > ${logfile}
-cat $logfile
+(eval "$cmd") | tee ${logfile}
 if grep -i "warning:" $logfile; then
         echo "Error: Build has warnings. Aborted"
         exit -1

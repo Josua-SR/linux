@@ -28,4 +28,8 @@ linux414_armv8le_vpp
 linux414_armv8le_odp_musdk_a3k
 linux414_armv8le_odp_dpdk_musdk_a3k
 linux414_armv8le_odp_dpdk_musdk_nosam_a3k
-		    
+
+linux414_armv8le_octeontx
+linux414_armv8le_octeontx_minimal
+linux414_armv8le_octeontx_asim
+ 

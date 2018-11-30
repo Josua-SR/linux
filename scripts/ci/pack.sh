@@ -31,6 +31,10 @@ case $build_name in
 		cp arch/arm/boot/dts/armada-38*.dtb $DESTDIR/dtb/ || true
 		export ARCH=arm
 		;;
+	*_octeontx* )
+		cp arch/arm64/boot/Image $DESTDIR/
+                export ARCH=arm64
+                ;;
 	linux414_armv8* )
 		cp arch/arm64/boot/Image $DESTDIR/
 		cp arch/arm64/boot/dts/marvell/armada-37*.dtb $DESTDIR/dtb/ || true
