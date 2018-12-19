@@ -90,10 +90,8 @@ esac
 case $build_name in
 	linux414_armv7* )          defconfig="mvebu_v7_defconfig"; ;;
 	linux414_armv8*_mainline ) defconfig="defconfig"; ;;
-	linux414_armv8le_octeontx )         defconfig="octeontx_defconfig"; ;;
-        linux414_armv8le_octeontx_minimal ) defconfig="octeontx_minimal_defconfig"; ;;
-        linux414_armv8le_octeontx_asim )    defconfig="octeontx_asim_defconfig"; ;;
-	linux414_armv8* )          defconfig="mvebu_v8_lsp_defconfig"; ;;
+	linux414_armv8be* )        defconfig="mvebu_v8_lsp_defconfig"; ;;
+	linux414_armv8le* )        defconfig="marvell_v8_sdk_defconfig"; ;;
 	* ) echo "Error: Could not configure defconfig."
 		"Unsupported build ${build_name}"; exit -1; ;;
 esac
@@ -112,6 +110,24 @@ case $build_name in
 
 	linux414_armv8le_strongswan_ipsec )
 		kernel_config=$(perl -pe "$make_config" tools/configs/strongswan-ipsec); ;;
+
+	linux414_armv8le_4k_pages )
+		kernel_config=$(perl -pe "$make_config" tools/configs/4k-pages); ;;
+
+	linux414_armv8le_edac )
+		kernel_config=$(perl -pe "$make_config" tools/configs/edac); ;;
+
+	linux414_armv8le_mmc_testsuite )
+		kernel_config=$(perl -pe "$make_config" tools/configs/mmc-testsuite); ;;
+
+	linux414_armv8le_offload_testing )
+		kernel_config=$(perl -pe "$make_config" tools/configs/offload-testing); ;;
+
+	linux414_armv8le_pbus )
+		kernel_config=$(perl -pe "$make_config" tools/configs/pbus); ;;
+
+	linux414_armv8le_pf_vf_bgx_rgx_modules )
+		kernel_config=$(perl -pe "$make_config" tools/configs/pf-vf-bgx-rgx-modules); ;;
 
  	*_armv8le_*musdk*|*_armv8le_dpdk*|*_armv8le_vpp )
 		kernel_config="""./scripts/config --file arch/$arch/configs/$defconfig --set-val CONFIG_MVPP2X y ;
