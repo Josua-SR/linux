@@ -111,8 +111,8 @@ case $build_name in
 	linux414_armv8le_strongswan_ipsec )
 		kernel_config=$(perl -pe "$make_config" tools/configs/strongswan-ipsec); ;;
 
-	linux414_armv8le_4k_pages )
-		kernel_config=$(perl -pe "$make_config" tools/configs/4k-pages); ;;
+	linux414_armv8le_64k_pages )
+		kernel_config=$(perl -pe "$make_config" tools/configs/64k-pages); ;;
 
 	linux414_armv8le_edac )
 		kernel_config=$(perl -pe "$make_config" tools/configs/edac); ;;
