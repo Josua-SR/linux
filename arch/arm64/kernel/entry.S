@@ -439,6 +439,16 @@ tsk	.req	x28		// current thread_info
 	mov w5, w5
 	mov w6, w6
 	mov w7, w7
+#ifdef CONFIG_CONTEXT_TRACKING
+	/*
+	 * Store the values back so after tracing
+	 * they will be loaded correctly.
+	 */
+	stp     x0, x1, [sp]
+	stp     x2, x3, [sp, #S_X2]
+	stp     x4, x5, [sp, #S_X4]
+	stp     x6, x7, [sp, #S_X6]
+#endif
 	.endm
 #endif
 
