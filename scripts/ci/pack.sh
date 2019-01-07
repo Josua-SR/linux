@@ -41,6 +41,7 @@ case $build_name in
 		cp arch/arm64/boot/dts/marvell/armada-39*.dtb $DESTDIR/dtb/ || true
 		cp arch/arm64/boot/dts/marvell/armada-70*.dtb $DESTDIR/dtb/ || true
 		cp arch/arm64/boot/dts/marvell/armada-80*.dtb $DESTDIR/dtb/ || true
+		cp arch/arm64/boot/dts/marvell/cn9*.dtb $DESTDIR/dtb/ || true
 		export ARCH=arm64
 		;;
 	* )	echo "Error: Unsupported build ${build_name}"; exit -1; ;;
