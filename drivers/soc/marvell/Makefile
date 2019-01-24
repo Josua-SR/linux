@@ -10,5 +10,6 @@ obj-$(CONFIG_MDIO_DEBUGFS) += mdio_debugfs.o
 obj-$(CONFIG_OCTEONTX2_PCI_CONSOLE) += otx2-pci-console.o
 obj-y		+= octeontx2-ghes/
 obj-y		+= octeontx2-llc/
+obj-y		+= octeontx2-ccu/
 obj-y 		+= hw-access/
 obj-$(CONFIG_MARVELL_AVS_RESET) += avs_bus_reset.o

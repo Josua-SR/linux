@@ -224,4 +224,16 @@ config MARVELL_AVS_RESET
 	  bus operation after SoC reset for all devices.
 	  If unsure, say N here.
 
+config OCTEONTX2_CCU
+	tristate "OcteonTX2 Cache Controller Unit (CCU) driver"
+	depends on ARM64
+	default n
+	help
+	  This driver supports configuring and monitoring the OcteonTX2 Cache
+	  Controller Unit. The driver provides debugfs files to mask LLC ways
+	  for a single or multiple cpus. A README file is included which
+	  provides details on how to configure the LLC ways.
+
+	  To compile as a module choose M here.
+
 endmenu
