@@ -2818,7 +2818,15 @@ static int mvneta_poll(struct napi_struct *napi, int budget)
 	rx_queue = fls(((cause_rx_tx >> 8) & 0xff));
 	if (rx_queue) {
 		rx_queue = rx_queue - 1;
+#if defined(CONFIG_ARM64)
+		/* Hardcode branch prediction for 64-bit variant,
+		 * which is a workaround for generic issues with using
+		 * static_branch array.
+		 */
+		if (unlikely(pp->bm_priv))
+#else
 		if (pp->bm_priv)
+#endif
 			rx_done = mvneta_rx_hwbm(napi, pp, budget,
 						 &pp->rxqs[rx_queue]);
 		else
