@@ -225,11 +225,14 @@ static void do_switch(struct cvm_mmc_host *host, u64 emm_switch)
 	check_switch_errors(host);
 }
 
+/* need to change hardware state to match software requirements? */
 static bool switch_val_changed(struct cvm_mmc_slot *slot, u64 new_val)
 {
 	/* Match BUS_ID, HS_TIMING, BUS_WIDTH, POWER_CLASS, CLK_HI, CLK_LO */
 	u64 match = 0x3001070fffffffffull;
 
+	if (!slot->host->powered)
+		return true;
 	return (slot->cached_switch & match) != (new_val & match);
 }
 
@@ -252,19 +255,20 @@ static void cvm_mmc_reset_bus(struct cvm_mmc_slot *slot)
 	struct cvm_mmc_host *host = slot->host;
 	u64 emm_switch, wdog;
 
-	emm_switch = readq(slot->host->base + MIO_EMM_SWITCH(host));
+	emm_switch = readq(host->base + MIO_EMM_SWITCH(host));
 	emm_switch &= ~(MIO_EMM_SWITCH_EXE | MIO_EMM_SWITCH_ERR0 |
 			MIO_EMM_SWITCH_ERR1 | MIO_EMM_SWITCH_ERR2);
 	set_bus_id(&emm_switch, slot->bus_id);
 
-	wdog = readq(slot->host->base + MIO_EMM_WDOG(host));
-	do_switch(slot->host, emm_switch);
+	wdog = readq(host->base + MIO_EMM_WDOG(host));
+	do_switch(host, emm_switch);
 
 	slot->cached_switch = emm_switch;
+	host->powered = true;
 
 	msleep(20);
 
-	writeq(wdog, slot->host->base + MIO_EMM_WDOG(host));
+	writeq(wdog, host->base + MIO_EMM_WDOG(host));
 }
 
 /* Switch to another slot if needed */
@@ -285,8 +289,14 @@ static void cvm_mmc_switch_to(struct cvm_mmc_slot *slot)
 
 	writeq(slot->cached_rca, host->base + MIO_EMM_RCA(host));
 	emm_switch = slot->cached_switch;
+	/* Due to errata 29956 the clock is not set properly when the
+	 * bus_id is non-zero.
+	 */
+	set_bus_id(&emm_switch, 0);
+	do_switch(host, emm_switch & GENMASK_ULL(0, 31));
 	set_bus_id(&emm_switch, slot->bus_id);
 	do_switch(host, emm_switch);
+	host->powered = true;
 
 	emm_sample = FIELD_PREP(MIO_EMM_SAMPLE_CMD_CNT, slot->cmd_cnt) |
 		     FIELD_PREP(MIO_EMM_SAMPLE_DAT_CNT, slot->dat_cnt);
@@ -654,11 +664,27 @@ static void cvm_mmc_dma_request(struct mmc_host *mmc,
 	struct cvm_mmc_host *host = slot->host;
 	struct mmc_data *data;
 	u64 emm_dma, addr;
+	int seg;
 
 	if (!mrq->data || !mrq->data->sg || !mrq->data->sg_len ||
 	    !mrq->stop || mrq->stop->opcode != MMC_STOP_TRANSMISSION) {
 		dev_err(&mmc->card->dev,
 			"Error: cmv_mmc_dma_request no data\n");
+		goto error;
+	}
+
+	/* cleared by successful termination */
+	mrq->cmd->error = -EINVAL;
+
+	/* unaligned multi-block DMA has problems, so forbid all unaligned */
+	for (seg = 0; seg < mrq->data->sg_len; seg++) {
+		struct scatterlist *sg = &mrq->data->sg[seg];
+		u64 align = (sg->offset | sg->length | sg->dma_address);
+
+		if (!(align & 7))
+			continue;
+		dev_info(&mmc->card->dev,
+			"Error:64bit alignment required\n");
 		goto error;
 	}
 
@@ -687,6 +713,9 @@ static void cvm_mmc_dma_request(struct mmc_host *mmc,
 	if (host->dmar_fixup)
 		host->dmar_fixup(host, mrq->cmd, data, addr);
 
+	if (host->dmar_fixup)
+		host->dmar_fixup(host, mrq->cmd, data, addr);
+
 	/*
 	 * If we have a valid SD card in the slot, we set the response
 	 * bit mask to check for CRC errors and timeouts only.
@@ -700,7 +729,6 @@ static void cvm_mmc_dma_request(struct mmc_host *mmc,
 	return;
 
 error:
-	mrq->cmd->error = -EINVAL;
 	if (mrq->done)
 		mrq->done(mrq);
 	host->release_bus(host);
@@ -828,28 +856,27 @@ static void cvm_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	int clk_period = 0, power_class = 10, bus_width = 0;
 	u64 clock, emm_switch;
 
+	if (ios->power_mode == MMC_POWER_OFF) {
+		if (host->powered) {
+			cvm_mmc_reset_bus(slot);
+			if (host->global_pwr_gpiod)
+				host->set_shared_power(host, 0);
+			else if (!IS_ERR(mmc->supply.vmmc))
+				mmc_regulator_set_ocr(mmc, mmc->supply.vmmc, 0);
+			host->powered = false;
+		}
+		set_wdog(slot, 0);
+		return;
+	}
+
 	host->acquire_bus(host);
 	cvm_mmc_switch_to(slot);
 
-	/* Set the power state */
-	switch (ios->power_mode) {
-	case MMC_POWER_ON:
-		break;
-
-	case MMC_POWER_OFF:
-		cvm_mmc_reset_bus(slot);
-		if (host->global_pwr_gpiod)
-			host->set_shared_power(host, 0);
-		else if (!IS_ERR(mmc->supply.vmmc))
-			mmc_regulator_set_ocr(mmc, mmc->supply.vmmc, 0);
-		break;
-
-	case MMC_POWER_UP:
+	if (ios->power_mode == MMC_POWER_UP) {
 		if (host->global_pwr_gpiod)
 			host->set_shared_power(host, 1);
 		else if (!IS_ERR(mmc->supply.vmmc))
 			mmc_regulator_set_ocr(mmc, mmc->supply.vmmc, ios->vdd);
-		break;
 	}
 
 	/* Convert bus width to HW definition */
@@ -892,6 +919,7 @@ static void cvm_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	set_wdog(slot, 0);
 	do_switch(host, emm_switch);
 	slot->cached_switch = emm_switch;
+	host->powered = true;
 out:
 	host->release_bus(host);
 }
@@ -935,6 +963,7 @@ static int cvm_mmc_init_lowlevel(struct cvm_mmc_slot *slot)
 	do_switch(host, emm_switch);
 
 	slot->cached_switch = emm_switch;
+	host->powered = true;
 
 	/*
 	 * Set watchdog timeout value and default reset value
@@ -953,7 +982,6 @@ static int cvm_mmc_of_parse(struct device *dev, struct cvm_mmc_slot *slot)
 	u32 id, cmd_skew = 0, dat_skew = 0, bus_width = 0;
 	struct device_node *node = dev->of_node;
 	struct mmc_host *mmc = slot->mmc;
-	u64 clock_period;
 	int ret;
 
 	ret = of_property_read_u32(node, "reg", &id);
@@ -962,8 +990,14 @@ static int cvm_mmc_of_parse(struct device *dev, struct cvm_mmc_slot *slot)
 		return ret;
 	}
 
-	if (id >= CAVIUM_MAX_MMC || slot->host->slot[id]) {
-		dev_err(dev, "Invalid reg property on %pOF\n", node);
+	if (id >= CAVIUM_MAX_MMC) {
+		dev_err(dev, "Invalid reg=<%d> property on %pOF\n", id, node);
+		return -EINVAL;
+	}
+
+	if (slot->host->slot[id]) {
+		dev_err(dev, "Duplicate reg=<%d> property on %pOF\n",
+			id, node);
 		return -EINVAL;
 	}
 
@@ -999,11 +1033,10 @@ static int cvm_mmc_of_parse(struct device *dev, struct cvm_mmc_slot *slot)
 	mmc->f_min = 400000;
 
 	/* Sampling register settings, period in picoseconds */
-	clock_period = 1000000000000ull / slot->host->sys_freq;
 	of_property_read_u32(node, "cavium,cmd-clk-skew", &cmd_skew);
 	of_property_read_u32(node, "cavium,dat-clk-skew", &dat_skew);
-	slot->cmd_cnt = (cmd_skew + clock_period / 2) / clock_period;
-	slot->dat_cnt = (dat_skew + clock_period / 2) / clock_period;
+	slot->cmd_cnt = cmd_skew;
+	slot->dat_cnt = dat_skew;
 
 	return id;
 }

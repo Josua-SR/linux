@@ -9,12 +9,14 @@
 /* ETHTOOL Support for VNIC_VF Device*/
 
 #include <linux/pci.h>
+#include <linux/net_tstamp.h>
 
 #include "nic_reg.h"
 #include "nic.h"
 #include "nicvf_queues.h"
 #include "q_struct.h"
 #include "thunder_bgx.h"
+#include "../common/cavium_ptp.h"
 
 #define DRV_NAME	"thunder-nicvf"
 #define DRV_VERSION     "1.0"
@@ -99,6 +101,8 @@ static const struct nicvf_stat nicvf_drv_stats[] = {
 	NICVF_DRV_STAT(tx_mem_fault),
 	NICVF_DRV_STAT(tx_csum_overlap),
 	NICVF_DRV_STAT(tx_csum_overflow),
+	NICVF_DRV_STAT(tx_csum_derr),
+	NICVF_DRV_STAT(tx_csum_perr),
 
 	NICVF_DRV_STAT(tx_tso),
 	NICVF_DRV_STAT(tx_timeout),
@@ -824,6 +828,31 @@ static int nicvf_set_pauseparam(struct net_device *dev,
 	return 0;
 }
 
+static int nicvf_get_ts_info(struct net_device *netdev,
+			     struct ethtool_ts_info *info)
+{
+	struct nicvf *nic = netdev_priv(netdev);
+
+	if (!nic->ptp_clock)
+		return ethtool_op_get_ts_info(netdev, info);
+
+	info->so_timestamping = SOF_TIMESTAMPING_TX_SOFTWARE |
+				SOF_TIMESTAMPING_RX_SOFTWARE |
+				SOF_TIMESTAMPING_SOFTWARE |
+				SOF_TIMESTAMPING_TX_HARDWARE |
+				SOF_TIMESTAMPING_RX_HARDWARE |
+				SOF_TIMESTAMPING_RAW_HARDWARE;
+
+	info->phc_index = cavium_ptp_clock_index(nic->ptp_clock);
+
+	info->tx_types = (1 << HWTSTAMP_TX_OFF) | (1 << HWTSTAMP_TX_ON);
+
+	info->rx_filters = (1 << HWTSTAMP_FILTER_NONE) |
+			   (1 << HWTSTAMP_FILTER_ALL);
+
+	return 0;
+}
+
 static const struct ethtool_ops nicvf_ethtool_ops = {
 	.get_link		= nicvf_get_link,
 	.get_drvinfo		= nicvf_get_drvinfo,
@@ -847,7 +876,7 @@ static const struct ethtool_ops nicvf_ethtool_ops = {
 	.set_channels		= nicvf_set_channels,
 	.get_pauseparam         = nicvf_get_pauseparam,
 	.set_pauseparam         = nicvf_set_pauseparam,
-	.get_ts_info		= ethtool_op_get_ts_info,
+	.get_ts_info		= nicvf_get_ts_info,
 	.get_link_ksettings	= nicvf_get_link_ksettings,
 };
 

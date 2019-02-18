@@ -20,11 +20,13 @@
 #include <linux/bpf.h>
 #include <linux/bpf_trace.h>
 #include <linux/filter.h>
+#include <linux/net_tstamp.h>
 
 #include "nic_reg.h"
 #include "nic.h"
 #include "nicvf_queues.h"
 #include "thunder_bgx.h"
+#include "../common/cavium_ptp.h"
 
 #define DRV_NAME	"thunder-nicvf"
 #define DRV_VERSION	"1.0"
@@ -71,6 +73,11 @@ static int cpi_alg = CPI_ALG_NONE;
 module_param(cpi_alg, int, S_IRUGO);
 MODULE_PARM_DESC(cpi_alg,
 		 "PFC algorithm (0=none, 1=VLAN, 2=VLAN16, 3=IP Diffserv)");
+
+struct nicvf_xdp_tx {
+	u64 dma_addr;
+	u8  qidx;
+};
 
 static inline u8 nicvf_netdev_qidx(struct nicvf *nic, u8 qidx)
 {
@@ -403,7 +410,7 @@ static void nicvf_request_sqs(struct nicvf *nic)
 		return;
 
 	mbx.sqs_alloc.msg = NIC_MBOX_MSG_ALLOC_SQS;
-	mbx.sqs_alloc.vf_id = nic->vf_id;
+	mbx.sqs_alloc.spec = 0; /* Let PF choose which SQS to alloc */
 	mbx.sqs_alloc.qs_count = nic->sqs_count;
 	if (nicvf_send_msg_to_pf(nic, &mbx)) {
 		/* No response from PF */
@@ -518,14 +525,29 @@ static int nicvf_init_resources(struct nicvf *nic)
 	return 0;
 }
 
+static void nicvf_unmap_page(struct nicvf *nic, struct page *page, u64 dma_addr)
+{
+	/* Check if it's a recycled page, if not unmap the DMA mapping.
+	 * Recycled page holds an extra reference.
+	 */
+	if (page_ref_count(page) == 1) {
+		dma_addr &= PAGE_MASK;
+		dma_unmap_page_attrs(&nic->pdev->dev, dma_addr,
+				     RCV_FRAG_LEN + XDP_HEADROOM,
+				     DMA_FROM_DEVICE,
+				     DMA_ATTR_SKIP_CPU_SYNC);
+	}
+}
+
 static inline bool nicvf_xdp_rx(struct nicvf *nic, struct bpf_prog *prog,
 				struct cqe_rx_t *cqe_rx, struct snd_queue *sq,
 				struct sk_buff **skb)
 {
 	struct xdp_buff xdp;
 	struct page *page;
+	struct nicvf_xdp_tx *xdp_tx = NULL;
 	u32 action;
-	u16 len, offset = 0;
+	u16 len, err, offset = 0;
 	u64 dma_addr, cpu_addr;
 	void *orig_data;
 
@@ -539,7 +561,7 @@ static inline bool nicvf_xdp_rx(struct nicvf *nic, struct bpf_prog *prog,
 	cpu_addr = (u64)phys_to_virt(cpu_addr);
 	page = virt_to_page((void *)cpu_addr);
 
-	xdp.data_hard_start = page_address(page);
+	xdp.data_hard_start = page_address(page) + RCV_BUF_HEADROOM;
 	xdp.data = (void *)cpu_addr;
 	xdp.data_end = xdp.data + len;
 	orig_data = xdp.data;
@@ -557,18 +579,7 @@ static inline bool nicvf_xdp_rx(struct nicvf *nic, struct bpf_prog *prog,
 
 	switch (action) {
 	case XDP_PASS:
-		/* Check if it's a recycled page, if not
-		 * unmap the DMA mapping.
-		 *
-		 * Recycled page holds an extra reference.
-		 */
-		if (page_ref_count(page) == 1) {
-			dma_addr &= PAGE_MASK;
-			dma_unmap_page_attrs(&nic->pdev->dev, dma_addr,
-					     RCV_FRAG_LEN + XDP_PACKET_HEADROOM,
-					     DMA_FROM_DEVICE,
-					     DMA_ATTR_SKIP_CPU_SYNC);
-		}
+		nicvf_unmap_page(nic, page, dma_addr);
 
 		/* Build SKB and pass on packet to network stack */
 		*skb = build_skb(xdp.data,
@@ -581,6 +592,20 @@ static inline bool nicvf_xdp_rx(struct nicvf *nic, struct bpf_prog *prog,
 	case XDP_TX:
 		nicvf_xdp_sq_append_pkt(nic, sq, (u64)xdp.data, dma_addr, len);
 		return true;
+	case XDP_REDIRECT:
+		/* Save DMA address for use while transmitting */
+		xdp_tx = (struct nicvf_xdp_tx *)page_address(page);
+		xdp_tx->dma_addr = dma_addr;
+		xdp_tx->qidx = nicvf_netdev_qidx(nic, cqe_rx->rq_idx);
+
+		err = xdp_do_redirect(nic->pnicvf->netdev, &xdp, prog);
+		if (!err)
+			return true;
+
+		/* Free the page on error */
+		nicvf_unmap_page(nic, page, dma_addr);
+		put_page(page);
+		break;
 	default:
 		bpf_warn_invalid_xdp_action(action);
 		/* fall through */
@@ -588,22 +613,49 @@ static inline bool nicvf_xdp_rx(struct nicvf *nic, struct bpf_prog *prog,
 		trace_xdp_exception(nic->netdev, prog, action);
 		/* fall through */
 	case XDP_DROP:
-		/* Check if it's a recycled page, if not
-		 * unmap the DMA mapping.
-		 *
-		 * Recycled page holds an extra reference.
-		 */
-		if (page_ref_count(page) == 1) {
-			dma_addr &= PAGE_MASK;
-			dma_unmap_page_attrs(&nic->pdev->dev, dma_addr,
-					     RCV_FRAG_LEN + XDP_PACKET_HEADROOM,
-					     DMA_FROM_DEVICE,
-					     DMA_ATTR_SKIP_CPU_SYNC);
-		}
+		nicvf_unmap_page(nic, page, dma_addr);
 		put_page(page);
 		return true;
 	}
 	return false;
+}
+
+static void nicvf_snd_ptp_handler(struct net_device *netdev,
+				  struct cqe_send_t *cqe_tx)
+{
+	struct nicvf *nic = netdev_priv(netdev);
+	struct skb_shared_hwtstamps ts;
+	u64 ns;
+
+	nic = nic->pnicvf;
+
+	/* Sync for 'ptp_skb' */
+	smp_rmb();
+
+	/* New timestamp request can be queued now */
+	atomic_set(&nic->tx_ptp_skbs, 0);
+
+	/* Check for timestamp requested skb */
+	if (!nic->ptp_skb)
+		return;
+
+	/* Check if timestamping is timedout, which is set to 10us */
+	if (cqe_tx->send_status == CQ_TX_ERROP_TSTMP_TIMEOUT ||
+	    cqe_tx->send_status == CQ_TX_ERROP_TSTMP_CONFLICT)
+		goto no_tstamp;
+
+	/* Get the timestamp */
+	memset(&ts, 0, sizeof(ts));
+	ns = cavium_ptp_tstamp2time(nic->ptp_clock, cqe_tx->ptp_timestamp);
+	ts.hwtstamp = ns_to_ktime(ns);
+	skb_tstamp_tx(nic->ptp_skb, &ts);
+
+no_tstamp:
+	/* Free the original skb */
+	dev_kfree_skb_any(nic->ptp_skb);
+	nic->ptp_skb = NULL;
+	/* Sync 'ptp_skb' */
+	smp_wmb();
 }
 
 static void nicvf_snd_pkt_handler(struct net_device *netdev,
@@ -662,7 +714,12 @@ static void nicvf_snd_pkt_handler(struct net_device *netdev,
 		prefetch(skb);
 		(*tx_pkts)++;
 		*tx_bytes += skb->len;
-		napi_consume_skb(skb, budget);
+		/* If timestamp is requested for this skb, don't free it */
+		if (skb_shinfo(skb)->tx_flags & SKBTX_IN_PROGRESS &&
+		    !nic->pnicvf->ptp_skb)
+			nic->pnicvf->ptp_skb = skb;
+		else
+			napi_consume_skb(skb, budget);
 		sq->skbuff[cqe_tx->sqe_ptr] = (u64)NULL;
 	} else {
 		/* In case of SW TSO on 88xx, only last segment will have
@@ -699,6 +756,21 @@ static inline void nicvf_set_rxhash(struct net_device *netdev,
 	}
 
 	skb_set_hash(skb, hash, hash_type);
+}
+
+static inline void nicvf_set_rxtstamp(struct nicvf *nic, struct sk_buff *skb)
+{
+	u64 ns;
+
+	if (!nic->ptp_clock || !nic->hw_rx_tstamp)
+		return;
+
+	/* The first 8 bytes is the timestamp */
+	ns = cavium_ptp_tstamp2time(nic->ptp_clock,
+				    be64_to_cpu(*(u64 *)skb->data));
+	skb_hwtstamps(skb)->hwtstamp = ns_to_ktime(ns);
+
+	__skb_pull(skb, 8);
 }
 
 static void nicvf_rcv_pkt_handler(struct net_device *netdev,
@@ -751,6 +823,7 @@ static void nicvf_rcv_pkt_handler(struct net_device *netdev,
 		return;
 	}
 
+	nicvf_set_rxtstamp(nic, skb);
 	nicvf_set_rxhash(netdev, cqe_rx, skb);
 
 	skb_record_rx_queue(skb, rq_idx);
@@ -825,10 +898,12 @@ loop:
 					      &tx_pkts, &tx_bytes);
 			tx_done++;
 		break;
+		case CQE_TYPE_SEND_PTP:
+			nicvf_snd_ptp_handler(netdev, (void *)cq_desc);
+		break;
 		case CQE_TYPE_INVALID:
 		case CQE_TYPE_RX_SPLIT:
 		case CQE_TYPE_RX_TCP:
-		case CQE_TYPE_SEND_PTP:
 			/* Ignore for now */
 		break;
 		}
@@ -1023,6 +1098,7 @@ static irqreturn_t nicvf_qs_err_intr_handler(int irq, void *nicvf_irq)
 static void nicvf_set_irq_affinity(struct nicvf *nic)
 {
 	int vec, cpu;
+	int irqnum;
 
 	for (vec = 0; vec < nic->num_vec; vec++) {
 		if (!nic->irq_allocated[vec])
@@ -1039,8 +1115,11 @@ static void nicvf_set_irq_affinity(struct nicvf *nic)
 
 		cpumask_set_cpu(cpumask_local_spread(cpu, nic->node),
 				nic->affinity_mask[vec]);
-		irq_set_affinity_hint(pci_irq_vector(nic->pdev, vec),
-				      nic->affinity_mask[vec]);
+		irqnum = pci_irq_vector(nic->pdev, vec);
+		irq_set_affinity_hint(irqnum, nic->affinity_mask[vec]);
+		if (irq_can_set_affinity(irqnum))
+			__irq_set_affinity(irqnum,
+					   nic->affinity_mask[vec], false);
 	}
 }
 
@@ -1324,10 +1403,26 @@ int nicvf_stop(struct net_device *netdev)
 
 	nicvf_free_cq_poll(nic);
 
+	/* Free any pending SKB saved to receive timestamp */
+	if (nic->ptp_skb) {
+		dev_kfree_skb_any(nic->ptp_skb);
+		nic->ptp_skb = NULL;
+	}
+
 	/* Clear multiqset info */
 	nic->pnicvf = nic;
 
 	return 0;
+}
+
+static int nicvf_config_hw_rx_tstamp(struct nicvf *nic, bool enable)
+{
+	union nic_mbx mbx = {};
+
+	mbx.ptp.msg = NIC_MBOX_MSG_PTP_CFG;
+	mbx.ptp.enable = enable;
+
+	return nicvf_send_msg_to_pf(nic, &mbx);
 }
 
 static int nicvf_update_hw_max_frs(struct nicvf *nic, int mtu)
@@ -1397,6 +1492,12 @@ int nicvf_open(struct net_device *netdev)
 	nicvf_request_sqs(nic);
 	if (nic->sqs_mode)
 		nicvf_get_primary_vf_struct(nic);
+
+	/* Configure PTP timestamp */
+	if (nic->ptp_clock)
+		nicvf_config_hw_rx_tstamp(nic, nic->hw_rx_tstamp);
+	atomic_set(&nic->tx_ptp_skbs, 0);
+	nic->ptp_skb = NULL;
 
 	/* Configure receive side scaling and MTU */
 	if (!nic->sqs_mode) {
@@ -1795,6 +1896,118 @@ static int nicvf_xdp(struct net_device *netdev, struct netdev_xdp *xdp)
 	}
 }
 
+int nicvf_config_hwtstamp(struct net_device *netdev, struct ifreq *ifr)
+{
+	struct hwtstamp_config config;
+	struct nicvf *nic = netdev_priv(netdev);
+
+	if (!nic->ptp_clock)
+		return -ENODEV;
+
+	if (copy_from_user(&config, ifr->ifr_data, sizeof(config)))
+		return -EFAULT;
+
+	/* reserved for future extensions */
+	if (config.flags)
+		return -EINVAL;
+
+	switch (config.tx_type) {
+	case HWTSTAMP_TX_OFF:
+	case HWTSTAMP_TX_ON:
+		break;
+	default:
+		return -ERANGE;
+	}
+
+	switch (config.rx_filter) {
+	case HWTSTAMP_FILTER_NONE:
+		nic->hw_rx_tstamp = false;
+		break;
+	case HWTSTAMP_FILTER_ALL:
+	case HWTSTAMP_FILTER_SOME:
+	case HWTSTAMP_FILTER_PTP_V1_L4_EVENT:
+	case HWTSTAMP_FILTER_PTP_V1_L4_SYNC:
+	case HWTSTAMP_FILTER_PTP_V1_L4_DELAY_REQ:
+	case HWTSTAMP_FILTER_PTP_V2_L4_EVENT:
+	case HWTSTAMP_FILTER_PTP_V2_L4_SYNC:
+	case HWTSTAMP_FILTER_PTP_V2_L4_DELAY_REQ:
+	case HWTSTAMP_FILTER_PTP_V2_L2_EVENT:
+	case HWTSTAMP_FILTER_PTP_V2_L2_SYNC:
+	case HWTSTAMP_FILTER_PTP_V2_L2_DELAY_REQ:
+	case HWTSTAMP_FILTER_PTP_V2_EVENT:
+	case HWTSTAMP_FILTER_PTP_V2_SYNC:
+	case HWTSTAMP_FILTER_PTP_V2_DELAY_REQ:
+		nic->hw_rx_tstamp = true;
+		config.rx_filter = HWTSTAMP_FILTER_ALL;
+		break;
+	default:
+		return -ERANGE;
+	}
+
+	if (netif_running(netdev)) {
+		if (nic->hw_rx_tstamp)
+			nicvf_config_hw_rx_tstamp(nic, true);
+		else
+			nicvf_config_hw_rx_tstamp(nic, false);
+	}
+
+	if (copy_to_user(ifr->ifr_data, &config, sizeof(config)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int nicvf_ioctl(struct net_device *netdev, struct ifreq *req, int cmd)
+{
+	switch (cmd) {
+	case SIOCSHWTSTAMP:
+		return nicvf_config_hwtstamp(netdev, req);
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+static int nicvf_xdp_xmit(struct net_device *netdev, struct xdp_buff *xdp)
+{
+	struct nicvf *nic = netdev_priv(netdev);
+	struct nicvf *snic = nic;
+	struct nicvf_xdp_tx *xdp_tx;
+	struct snd_queue *sq;
+	struct page *page;
+	int err, qidx;
+
+	if (!netif_running(netdev) || !nic->xdp_prog)
+		return -EINVAL;
+
+	page = virt_to_page(xdp->data);
+	xdp_tx = (struct nicvf_xdp_tx *)page_address(page);
+	qidx = xdp_tx->qidx;
+
+	if (xdp_tx->qidx >= nic->xdp_tx_queues)
+		return -EINVAL;
+
+	/* Get secondary Qset's info */
+	if (xdp_tx->qidx >= MAX_SND_QUEUES_PER_QS) {
+		qidx = xdp_tx->qidx / MAX_SND_QUEUES_PER_QS;
+		snic = (struct nicvf *)nic->snicvf[qidx - 1];
+		if (!snic)
+			return -EINVAL;
+		qidx = xdp_tx->qidx % MAX_SND_QUEUES_PER_QS;
+	}
+
+	sq = &snic->qs->sq[qidx];
+	err = nicvf_xdp_sq_append_pkt(snic, sq, (u64)xdp->data,
+				      xdp_tx->dma_addr,
+				      xdp->data_end - xdp->data);
+	if (err)
+		return -ENOMEM;
+
+	nicvf_xdp_sq_doorbell(snic, sq, qidx);
+	return 0;
+}
+
+static void nicvf_xdp_flush(struct net_device *dev) {}
+
 static const struct net_device_ops nicvf_netdev_ops = {
 	.ndo_open		= nicvf_open,
 	.ndo_stop		= nicvf_stop,
@@ -1806,6 +2019,9 @@ static const struct net_device_ops nicvf_netdev_ops = {
 	.ndo_fix_features       = nicvf_fix_features,
 	.ndo_set_features       = nicvf_set_features,
 	.ndo_xdp		= nicvf_xdp,
+	.ndo_do_ioctl           = nicvf_ioctl,
+	.ndo_xdp_xmit		= nicvf_xdp_xmit,
+	.ndo_xdp_flush          = nicvf_xdp_flush,
 };
 
 static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -1815,6 +2031,16 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct nicvf *nic;
 	int    err, qcount;
 	u16    sdevid;
+	struct cavium_ptp *ptp_clock;
+
+	ptp_clock = cavium_ptp_get();
+	if (IS_ERR(ptp_clock)) {
+		if (PTR_ERR(ptp_clock) == -ENODEV)
+			/* In virtualized environment we proceed without ptp */
+			ptp_clock = NULL;
+		else
+			return PTR_ERR(ptp_clock);
+	}
 
 	err = pci_enable_device(pdev);
 	if (err) {
@@ -1869,6 +2095,7 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	 */
 	if (!nic->t88)
 		nic->max_queues *= 2;
+	nic->ptp_clock = ptp_clock;
 
 	/* MAP VF's configuration registers */
 	nic->reg_base = pcim_iomap(pdev, PCI_CFG_REG_BAR_NUM, 0);
@@ -1982,6 +2209,7 @@ static void nicvf_remove(struct pci_dev *pdev)
 	pci_set_drvdata(pdev, NULL);
 	if (nic->drv_stats)
 		free_percpu(nic->drv_stats);
+	cavium_ptp_put(nic->ptp_clock);
 	free_netdev(netdev);
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);

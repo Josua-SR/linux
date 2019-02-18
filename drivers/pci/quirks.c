@@ -849,6 +849,86 @@ DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_CAVIUM, 0xa018, quirk_cavium_sriov_rnm_lin
 #endif
 
 /*
+ * Cavium OcteonTx needs Multibyte atomic I/O (LDST) for some devices.
+ * LDST needs LMTLINE and LMTCANCEL to be mapped along with devices,
+ * to be usable by software.
+ * Unfortunately devices like PKO and SSO don't adevertize it in their BAR's
+ * This quirks adds LMT region in to PKO and SSOW at VBAR 2.
+ */
+#define LMTLINE_SIZE	0x10000
+static void quirk_octeontx_lmtline(struct pci_dev *dev)
+{
+	struct resource *res = dev->resource + PCI_IOV_RESOURCES + 2;
+	struct pci_bus_region bus_region;
+	u16 devid;
+
+	pci_read_config_word(dev, PCI_DEVICE_ID, &devid);
+	res->name = pci_name(dev);
+	res->flags = IORESOURCE_MEM | IORESOURCE_PCI_FIXED |
+		IORESOURCE_PCI_EA_BEI;
+
+	/*
+	 * Because 83XX doesn't have a Multi node config not
+	 * included node into address.
+	 * If this changes add NODE id of the device into address.
+	 */
+	if (devid == 0xA048)
+		bus_region.start = 0x87F191000000;
+	else
+		bus_region.start = 0x87F101000000;
+
+	bus_region.end = bus_region.start + LMTLINE_SIZE - 1;
+	pcibios_bus_to_resource(dev->bus, res, &bus_region);
+
+	dev_info(&dev->dev, "quirk(LMTLINE): added at VBAR 2\n");
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_CAVIUM, 0XA048, quirk_octeontx_lmtline);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_CAVIUM, 0XA04C, quirk_octeontx_lmtline);
+
+/*
+ * OcteonTx 83XX has SRIOV for PKO, SSO, FPA etc etc
+ * most of them dont have a Mailbox to communicate.
+ * The proposed Resource manager desgin depends on SSO mailbox
+ * for this.
+ *
+ * Problem with these devices is PF is fully loaded,
+ * VF needs to do lot of communication with PF for things like
+ * setup, getting stats, getting link state etc.
+ * The mailbox provided by SSO is 64 bits in each direction, which  is not
+ * sufficient for this. the latencies to do a trivial task is very high.
+ * Solution is to hava a RAM based mailbox, this quirk adds a VF BAR
+ * to SSOW with 64K RAM so that VF and PF can use this to send messages.
+ * the desgin still uses SSO Mailbox for identity and sending
+ * interrupts/notifications when message is pending.
+ *
+ * Ideally the BAR should go to SSO Vf,
+ * because its already full creaing a BAR in SSOW.
+ *
+ * This patch Assumes the Firmware did appropriate changes to
+ * create a hole in RAM at address 0x1400000 with sufficient space.
+ */
+#define SSO_MBOX_BASE	0x1400000
+#define SSO_MBOX_SIZE	0x10000
+static void quirk_octeontx_ssombox(struct pci_dev *dev)
+{
+	struct resource *res = dev->resource + PCI_IOV_RESOURCES + 4;
+	struct pci_bus_region bus_region;
+	u16 devid;
+
+	pci_read_config_word(dev, PCI_DEVICE_ID, &devid);
+	res->name = pci_name(dev);
+	res->flags = IORESOURCE_MEM | IORESOURCE_PCI_FIXED |
+		IORESOURCE_PCI_EA_BEI;
+
+	bus_region.start = SSO_MBOX_BASE;
+	bus_region.end = bus_region.start + SSO_MBOX_SIZE - 1;
+	pcibios_bus_to_resource(dev->bus, res, &bus_region);
+
+	dev_info(&dev->dev, "quirk(SSO MBOX): added at BAR 4\n");
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_CAVIUM, 0XA04C, quirk_octeontx_ssombox);
+
+/*
  * Some settings of MMRBC can lead to data corruption so block changes.
  * See AMD 8131 HyperTransport PCI-X Tunnel Revision Guide
  */
@@ -3401,6 +3481,20 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_ATHEROS, 0x0032, quirk_no_bus_reset);
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_ATHEROS, 0x003c, quirk_no_bus_reset);
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_ATHEROS, 0x0033, quirk_no_bus_reset);
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_ATHEROS, 0x0034, quirk_no_bus_reset);
+/*octeontx-83xx has no FLR support.
+ * and Reset of blocks are highly dependent of each other.
+ * so lets disable bus reset and do device reset though octeontx
+ */
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_CAVIUM, 0xa047, quirk_no_bus_reset);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_CAVIUM, 0xa0dd, quirk_no_bus_reset);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_CAVIUM, 0xa048, quirk_no_bus_reset);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_CAVIUM, 0xa049, quirk_no_bus_reset);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_CAVIUM, 0xa04a, quirk_no_bus_reset);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_CAVIUM, 0xa04b, quirk_no_bus_reset);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_CAVIUM, 0xa04c, quirk_no_bus_reset);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_CAVIUM, 0xa04d, quirk_no_bus_reset);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_CAVIUM, 0xa052, quirk_no_bus_reset);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_CAVIUM, 0xa053, quirk_no_bus_reset);
 
 static void quirk_no_pm_reset(struct pci_dev *dev)
 {
@@ -3849,9 +3943,56 @@ static int reset_chelsio_generic_dev(struct pci_dev *dev, int probe)
 	return 0;
 }
 
+
 #define PCI_DEVICE_ID_INTEL_82599_SFP_VF   0x10ed
 #define PCI_DEVICE_ID_INTEL_IVB_M_VGA      0x0156
 #define PCI_DEVICE_ID_INTEL_IVB_M2_VGA     0x0166
+
+#define PCI_DEVICE_ID_OCTEONTX_SSO_VF	0xA04B
+#define SSO_VF_VHGRPX_PF_MBOXX(x, y)	(0x200ULL | ((x) << 20) | ((y) << 3))
+#define MBOX_TRIGGER_OOB_RESET	0x01 /* OOB reset request */
+#define MBOX_TRIGGER_OOB_RES	0x80 /* OOB response mask */
+#define MBOX_OPERATION_TIMEOUT	1000 /* set timeout 1 second */
+
+atomic_t octtx_sso_reset[64] = ATOMIC_INIT(0);
+EXPORT_SYMBOL(octtx_sso_reset);
+#define SSO_VF_ID(x) (((x) >> 20) & 0x3f)
+/*
+ * Device-specific reset method for Cavium OcteonTx SSO
+ * It will notify the PF that VF had reset. PF in turn will reset the OcteonTX
+ * domain.
+ */
+static int reset_cavium_octeon_vf(struct pci_dev *pdev, int probe)
+{
+	u64 val;
+	u64 addr;
+	int vf_id;
+	int count = 2000;
+
+	dev_dbg(&pdev->dev, "reset_cavium_octeon_vf() called probe=%d\n",
+			probe);
+
+	if (probe)
+		return 0;
+
+	addr = pci_resource_start(pdev, 0);
+	vf_id = SSO_VF_ID(addr);
+	atomic_set(&octtx_sso_reset[vf_id], 1);
+	/* make sure other party reads it*/
+	mb();
+
+	while (count) {
+		usleep_range(1000, 2000);
+		val = atomic_read(&octtx_sso_reset[vf_id]);
+		if (!val)
+			goto exit;
+		count--;
+	}
+	dev_err(&pdev->dev, "reset_cavium_octeon_vf() reset timeout\n");
+exit:
+	return 0;
+}
+
 
 static const struct pci_dev_reset_methods pci_dev_reset_methods[] = {
 	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82599_SFP_VF,
@@ -3862,6 +4003,8 @@ static const struct pci_dev_reset_methods pci_dev_reset_methods[] = {
 		reset_ivb_igd },
 	{ PCI_VENDOR_ID_CHELSIO, PCI_ANY_ID,
 		reset_chelsio_generic_dev },
+	{ PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_OCTEONTX_SSO_VF,
+		reset_cavium_octeon_vf },
 	{ 0 }
 };
 

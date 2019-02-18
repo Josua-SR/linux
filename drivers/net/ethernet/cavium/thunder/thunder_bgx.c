@@ -169,6 +169,20 @@ unsigned bgx_get_map(int node)
 }
 EXPORT_SYMBOL(bgx_get_map);
 
+/* Return the BGX CSR block base address and size.*/
+u64 bgx_get_reg_base(int node, int bgx_idx, u64 *iosize)
+{
+	struct bgx *bgx;
+
+	bgx = get_bgx(node, bgx_idx);
+	if (bgx) {
+		*iosize = pci_resource_len(bgx->pdev, 0);
+		return pci_resource_start(bgx->pdev, 0);
+	}
+	return 0;
+}
+EXPORT_SYMBOL(bgx_get_reg_base);
+
 /* Return number of LMAC configured for this BGX */
 int bgx_get_lmac_count(int node, int bgx_idx)
 {
@@ -253,6 +267,35 @@ void bgx_lmac_rx_tx_enable(int node, int bgx_idx, int lmacid, bool enable)
 		xcv_setup_link(enable ? lmac->link_up : 0, lmac->last_speed);
 }
 EXPORT_SYMBOL(bgx_lmac_rx_tx_enable);
+
+/* Enables or disables timestamp insertion by BGX for Rx packets */
+void bgx_config_timestamping(int node, int bgx_idx, int lmacid, bool enable)
+{
+	struct bgx *bgx = get_bgx(node, bgx_idx);
+	struct lmac *lmac;
+	u64 csr_offset, cfg;
+
+	if (!bgx)
+		return;
+
+	lmac = &bgx->lmac[lmacid];
+
+	if (lmac->lmac_type == BGX_MODE_SGMII ||
+	    lmac->lmac_type == BGX_MODE_QSGMII ||
+	    lmac->lmac_type == BGX_MODE_RGMII)
+		csr_offset = BGX_GMP_GMI_RXX_FRM_CTL;
+	else
+		csr_offset = BGX_SMUX_RX_FRM_CTL;
+
+	cfg = bgx_reg_read(bgx, lmacid, csr_offset);
+
+	if (enable)
+		cfg |= BGX_PKT_RX_PTP_EN;
+	else
+		cfg &= ~BGX_PKT_RX_PTP_EN;
+	bgx_reg_write(bgx, lmacid, csr_offset, cfg);
+}
+EXPORT_SYMBOL(bgx_config_timestamping);
 
 void bgx_lmac_get_pfc(int node, int bgx_idx, int lmacid, void *pause)
 {
@@ -448,6 +491,28 @@ u64 bgx_get_tx_stats(int node, int bgx_idx, int lmac, int idx)
 }
 EXPORT_SYMBOL(bgx_get_tx_stats);
 
+static void bgx_enable_rx_tx(int node, int bgx_idx, int lmacid)
+{
+	bgx_lmac_rx_tx_enable(node, bgx_idx, lmacid, 1);
+}
+
+static void bgx_disable_rx_tx(int node, int bgx_idx, int lmacid)
+{
+	bgx_lmac_rx_tx_enable(node, bgx_idx, lmacid, 0);
+}
+
+struct thunder_bgx_com_s thunder_bgx_com = {
+	.get_bgx_count = bgx_get_map,
+	.get_reg_base = bgx_get_reg_base,
+	.get_lmac_count = bgx_get_lmac_count,
+	.get_link_status = bgx_get_lmac_link_state,
+	.get_mac_addr = bgx_get_lmac_mac,
+	.set_mac_addr = bgx_set_lmac_mac,
+	.enable = bgx_enable_rx_tx,
+	.disable = bgx_disable_rx_tx,
+};
+EXPORT_SYMBOL(thunder_bgx_com);
+
 static void bgx_flush_dmac_addrs(struct bgx *bgx, int lmac)
 {
 	u64 offset;
@@ -604,11 +669,15 @@ static int bgx_lmac_xaui_init(struct bgx *bgx, struct lmac *lmac)
 	cfg &= ~SPU_FEC_CTL_FEC_EN;
 	bgx_reg_write(bgx, lmacid, BGX_SPUX_FEC_CONTROL, cfg);
 
-	/* Disable autoneg */
+	/* Enable autoneg for KR interfaces */
 	cfg = bgx_reg_read(bgx, lmacid, BGX_SPUX_AN_CONTROL);
-	cfg = cfg & ~(SPU_AN_CTL_AN_EN | SPU_AN_CTL_XNP_EN);
-	bgx_reg_write(bgx, lmacid, BGX_SPUX_AN_CONTROL, cfg);
+	cfg = cfg & ~SPU_AN_CTL_XNP_EN;
+	if (lmac->use_training)
+		cfg |= SPU_AN_CTL_AN_EN;
+	else
+		cfg &= ~SPU_AN_CTL_AN_EN;
 
+	bgx_reg_write(bgx, lmacid, BGX_SPUX_AN_CONTROL, cfg);
 	cfg = bgx_reg_read(bgx, lmacid, BGX_SPUX_AN_ADV);
 	if (lmac->lmac_type == BGX_MODE_10G_KR)
 		cfg |= (1 << 23);
@@ -620,7 +689,12 @@ static int bgx_lmac_xaui_init(struct bgx *bgx, struct lmac *lmac)
 	bgx_reg_write(bgx, lmacid, BGX_SPUX_AN_ADV, cfg);
 
 	cfg = bgx_reg_read(bgx, 0, BGX_SPU_DBG_CONTROL);
-	cfg &= ~SPU_DBG_CTL_AN_ARB_LINK_CHK_EN;
+
+	if (lmac->use_training)
+		cfg |= SPU_DBG_CTL_AN_ARB_LINK_CHK_EN;
+	else
+		cfg &= ~SPU_DBG_CTL_AN_ARB_LINK_CHK_EN;
+
 	bgx_reg_write(bgx, 0, BGX_SPU_DBG_CONTROL, cfg);
 
 	/* Enable lmac */
@@ -991,7 +1065,7 @@ static void bgx_lmac_disable(struct bgx *bgx, u8 lmacid)
 
 static void bgx_init_hw(struct bgx *bgx)
 {
-	int i;
+	int i, pkind_idx;
 	struct lmac *lmac;
 
 	bgx_reg_modify(bgx, 0, BGX_CMR_GLOBAL_CFG, CMR_GLOBAL_CFG_FCS_STRIP);
@@ -1003,6 +1077,11 @@ static void bgx_init_hw(struct bgx *bgx)
 		lmac = &bgx->lmac[i];
 		bgx_reg_write(bgx, i, BGX_CMRX_CFG,
 			      (lmac->lmac_type << 8) | lmac->lane_to_sds);
+
+		/* Set PKIND for this LMAC */
+		pkind_idx = (bgx->bgx_id * MAX_LMAC_PER_BGX) + lmac->lmacid;
+		bgx_reg_write(bgx, i, BGX_CMRX_RX_ID_MAP, pkind_idx & 0x3F);
+
 		bgx->lmac[i].lmacid_bd = lmac_count;
 		lmac_count++;
 	}

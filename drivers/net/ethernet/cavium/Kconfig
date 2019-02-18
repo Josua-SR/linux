@@ -27,6 +27,7 @@ config THUNDER_NIC_PF
 
 config THUNDER_NIC_VF
 	tristate "Thunder Virtual function driver"
+	select CAVIUM_PTP
 	depends on 64BIT
 	---help---
 	  This driver supports Thunder's NIC virtual function
@@ -50,10 +51,24 @@ config	THUNDER_NIC_RGX
 	  This driver supports configuring XCV block of RGX interface
 	  present on CN81XX chip.
 
+config CAVIUM_PTP
+	tristate "Cavium PTP coprocessor as PTP clock"
+	depends on 64BIT
+	depends on PTP_1588_CLOCK
+	select CAVIUM_RST
+	default y
+	---help---
+	  This driver adds support for the Precision Time Protocol Clocks and
+	  Timestamping coprocessor (PTP) found on Cavium processors.
+	  PTP provides timestamping mechanism that is suitable for use in IEEE 1588
+	  Precision Time Protocol or other purposes.  Timestamps can be used in
+	  BGX, TNS, GTI, and NIC blocks.
+
 config LIQUIDIO
 	tristate "Cavium LiquidIO support"
 	depends on 64BIT
 	imply PTP_1588_CLOCK
+	select PTP_1588_CLOCK_CAVIUM_PTP
 	select FW_LOADER
 	select LIBCRC32C
 	---help---
@@ -85,5 +100,83 @@ config LIQUIDIO_VF
 	  To compile this driver as a module, choose M here: The module
 	  will be called liquidio_vf. MSI-X interrupt support is required
 	  for this driver to work correctly
+
+config OCTEONTX_FPA_PF
+	tristate "OcteonTX free pool allocator physical function driver(FPA_PF)"
+	depends on 64BIT
+	default y
+	help
+	  Select this option to enable FPA Physical function.
+          FPA provides hardware assisted memory management for
+	  OcteonTX coprocessors.
+
+config OCTEONTX_FPA_VF
+	tristate "OcteonTX free pool allocator virtual function driver(FPA_VF)"
+	depends on 64BIT
+	default y
+	help
+	  Select this option to enable FPA Virtual function.
+          FPA provides hardware assisted memory management for
+	  OcteonTX coprocessors. Each VF owns single FPA pool.
+
+config OCTEONTX_RST
+	tristate "OcteonTX Reset driver(RST)"
+	depends on 64BIT
+	default y
+	help
+	  Select this option to enable RST.
+
+config OCTEONTX_SSO_PF
+	tristate "OcteonTX SSO physical function driver(SSO_PF)"
+	depends on 64BIT && OCTEONTX_FPA_PF && OCTEONTX_FPA_VF && OCTEONTX_RST
+	default y
+	help
+	  Select this option to enable SSO Physical function.
+          SSO is a way to submit work from Cores.
+
+config OCTEONTX_SSOW_PF
+	tristate "OcteonTX SSOW physical function driver(SSOW_PF)"
+	depends on 64BIT
+	default y
+	help
+	  Select this option to enable SSOW Physical function.
+          SSOW is a way to get work for cores.
+
+config OCTEONTX_PKO_PF
+	tristate "OcteonTX PKO physical function driver(PKO_PF)"
+	depends on 64BIT
+	default y
+	help
+	  Select this option to enable PKO Physical function.
+
+config OCTEONTX_LBK
+	tristate "OcteonTX Loopback Interface driver(LBK)"
+	depends on 64BIT
+	default y
+	help
+	  Select this option to enable LBK.
+
+config OCTEONTX_TIM_PF
+	tristate "OcteonTX TIM physical function driver(TIM_PF)"
+	depends on 64BIT && OCTEONTX_RST
+	default y
+	help
+	  Select this option to enable TIM Physical function.
+
+config OCTEONTX_PKI
+	tristate "OcteonTX Input packet parser(PKI)"
+	depends on 64BIT
+	default y
+	help
+	  Select this option to enable PKI.
+          PKI parses input packets and create work.
+
+config OCTEONTX
+	tristate "OcteonTX coprocessor maintanier"
+	depends on THUNDER_NIC_BGX && OCTEONTX_FPA_PF && OCTEONTX_SSO_PF
+	depends on OCTEONTX_PKO_PF
+	default y
+	help
+	  Select this option to enable Octeon coprocessor management.
 
 endif # NET_VENDOR_CAVIUM
