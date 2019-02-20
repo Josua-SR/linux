@@ -90,7 +90,7 @@ esac
 case $build_name in
 	linux414_armv7* )          defconfig="mvebu_v7_defconfig"; ;;
 	linux414_armv8*_mainline ) defconfig="defconfig"; ;;
-	linux414_armv8be* )        defconfig="mvebu_v8_lsp_defconfig"; ;;
+	linux414_armv8be* )        defconfig="marvell_v8_sdk_defconfig"; ;;
 	linux414_armv8le* )        defconfig="marvell_v8_sdk_defconfig"; ;;
 	* ) echo "Error: Could not configure defconfig."
 		"Unsupported build ${build_name}"; exit -1; ;;
