@@ -22,6 +22,7 @@
 #include <linux/random.h>
 #include <linux/slab.h>
 #include <linux/wait.h>
+#include <linux/raid/xor.h>
 
 static unsigned int test_buf_size = 16384;
 module_param(test_buf_size, uint, S_IRUGO | S_IWUSR);
@@ -29,56 +30,78 @@ MODULE_PARM_DESC(test_buf_size, "Size of the memcpy test buffer");
 
 static char test_channel[20];
 module_param_string(channel, test_channel, sizeof(test_channel),
-		S_IRUGO | S_IWUSR);
+		0644);
 MODULE_PARM_DESC(channel, "Bus ID of the channel to test (default: any)");
 
 static char test_device[32];
 module_param_string(device, test_device, sizeof(test_device),
-		S_IRUGO | S_IWUSR);
+		0644);
 MODULE_PARM_DESC(device, "Bus ID of the DMA Engine to test (default: any)");
 
 static unsigned int threads_per_chan = 1;
-module_param(threads_per_chan, uint, S_IRUGO | S_IWUSR);
+module_param(threads_per_chan, uint, 0644);
 MODULE_PARM_DESC(threads_per_chan,
 		"Number of threads to start per channel (default: 1)");
 
 static unsigned int max_channels;
-module_param(max_channels, uint, S_IRUGO | S_IWUSR);
+module_param(max_channels, uint, 0644);
 MODULE_PARM_DESC(max_channels,
 		"Maximum number of channels to use (default: all)");
 
 static unsigned int iterations;
-module_param(iterations, uint, S_IRUGO | S_IWUSR);
+module_param(iterations, uint, 0644);
 MODULE_PARM_DESC(iterations,
 		"Iterations before stopping test (default: infinite)");
 
 static unsigned int dmatest;
-module_param(dmatest, uint, S_IRUGO | S_IWUSR);
+module_param(dmatest, uint, 0644);
 MODULE_PARM_DESC(dmatest,
 		"dmatest 0-memcpy 1-memset (default: 0)");
 
 static unsigned int xor_sources = 3;
-module_param(xor_sources, uint, S_IRUGO | S_IWUSR);
+module_param(xor_sources, uint, 0644);
 MODULE_PARM_DESC(xor_sources,
 		"Number of xor source buffers (default: 3)");
 
 static unsigned int pq_sources = 3;
-module_param(pq_sources, uint, S_IRUGO | S_IWUSR);
+module_param(pq_sources, uint, 0644);
 MODULE_PARM_DESC(pq_sources,
 		"Number of p+q source buffers (default: 3)");
 
 static int timeout = 3000;
-module_param(timeout, uint, S_IRUGO | S_IWUSR);
+module_param(timeout, uint, 0644);
 MODULE_PARM_DESC(timeout, "Transfer Timeout in msec (default: 3000), "
 		 "Pass -1 for infinite timeout");
 
 static bool noverify;
-module_param(noverify, bool, S_IRUGO | S_IWUSR);
+module_param(noverify, bool, 0644);
 MODULE_PARM_DESC(noverify, "Disable random data setup and verification");
 
 static bool verbose;
-module_param(verbose, bool, S_IRUGO | S_IWUSR);
+module_param(verbose, bool, 0644);
 MODULE_PARM_DESC(verbose, "Enable \"success\" result messages (default: off)");
+
+static unsigned int caps_mask = 0x7;
+module_param(caps_mask, uint, 0644);
+MODULE_PARM_DESC(caps_mask, "Mask of required DMA capabilities to be tested. COPY=0x1, XOR=0x2, PQ=0x4  (default: 0x7 [all])");
+
+static bool performance;
+module_param(performance, bool, 0644);
+MODULE_PARM_DESC(performance, "Run in performance measurement mode (default: off)");
+
+static int outstanding_req = 1;
+module_param(outstanding_req, uint, 0644);
+MODULE_PARM_DESC(outstanding_req, "Number of outstanding requests to send to engine (default: 1).");
+
+static bool sw_mode;
+module_param(sw_mode, bool, 0644);
+MODULE_PARM_DESC(sw_mode, "Execute memory operation by software, instead of using the DMA engine (default: off)");
+
+static bool cached_src;
+module_param(cached_src, bool, 0644);
+MODULE_PARM_DESC(cached_src, "Use the same source buffer for all operations (default: off)");
+
+static int buf_pool_size = (4 << 20); /* 4MB */
 
 /**
  * struct dmatest_params - test parameters.
@@ -350,26 +373,30 @@ static unsigned int dmatest_verify(u8 **bufs, unsigned int start,
 	return error_count;
 }
 
-
 static void dmatest_callback(void *arg)
 {
 	struct dmatest_done *done = arg;
-	struct dmatest_thread *thread =
-		container_of(done, struct dmatest_thread, test_done);
+	struct dmatest_thread *thread;
+
+	if (!done)
+		return;
+	thread = container_of(done, struct dmatest_thread, test_done);
 	if (!thread->done) {
 		done->done = true;
 		wake_up_all(done->wait);
 	} else {
 		/*
-		 * If thread->done, it means that this callback occurred
-		 * after the parent thread has cleaned up. This can
-		 * happen in the case that driver doesn't implement
-		 * the terminate_all() functionality and a dma operation
-		 * did not occur within the timeout period
+		 * If thread->done, it means that this callback
+		 * occurred after the parent thread has cleaned up.
+		 *  This can happen in the case that driver doesn't
+		 * implement the terminate_all() functionality and a
+		 * dma operation did not occur within the timeout
+		 * period
 		 */
 		WARN(1, "dmatest: Kernel memory may be corrupted!!\n");
 	}
 }
+
 
 static unsigned int min_odd(unsigned int x, unsigned int y)
 {
@@ -422,6 +449,294 @@ static unsigned long long dmatest_KBs(s64 runtime, unsigned long long len)
 {
 	return dmatest_persec(runtime, len >> 10);
 }
+
+static int dmatest_perf_func(void *data)
+{
+	struct dmatest_thread	*thread = data;
+	struct dmatest_info	*info;
+	struct dmatest_params	*params;
+	struct dma_chan		*chan;
+	struct dma_device	*dev;
+	unsigned int		failed_tests = 0;
+	unsigned int		total_tests = 0;
+	unsigned int		outs_push = 0, outs_pop = 0;
+	dma_cookie_t		*cookie = NULL;
+	enum dma_status		status;
+	enum dma_ctrl_flags	flags;
+	u8			*pq_coefs = NULL;
+	int			ret;
+	int			src_cnt;
+	int			dst_cnt;
+	int			i;
+	ktime_t			ktime;
+	s64			runtime = 0;
+	unsigned long long	total_len = 0;
+	void			*buf_pool_addr, *buf_pool_ptr = NULL;
+	struct dmaengine_unmap_data *um;
+	struct dmaengine_unmap_data **um_list = NULL;
+
+	set_freezable();
+
+	ret = -ENOMEM;
+
+	smp_rmb();
+	thread->srcs = NULL;
+	thread->dsts = NULL;
+	info = thread->info;
+	params = &info->params;
+	chan = thread->chan;
+	dev = chan->device;
+	if (thread->type == DMA_MEMCPY)
+		src_cnt = dst_cnt = 1;
+	else if (thread->type == DMA_XOR) {
+		/* force odd to ensure dst = src */
+		src_cnt = min_odd(params->xor_sources | 1, dev->max_xor);
+		dst_cnt = 1;
+	} else if (thread->type == DMA_PQ) {
+		/* force odd to ensure dst = src */
+		src_cnt = min_odd(params->pq_sources | 1, dma_maxpq(dev, 0));
+		dst_cnt = 2;
+
+		pq_coefs = kmalloc(params->pq_sources+1, GFP_KERNEL);
+		if (!pq_coefs)
+			goto err_thread_type;
+
+		for (i = 0; i < src_cnt; i++)
+			pq_coefs[i] = 1;
+	} else
+		goto err_thread_type;
+
+	cookie = kcalloc(outstanding_req, sizeof(dma_cookie_t), GFP_KERNEL);
+	if (!cookie)
+		goto alloc_fail;
+
+	um_list = kcalloc(outstanding_req, sizeof(um), GFP_KERNEL);
+	if (!um_list)
+		goto alloc_fail;
+
+	buf_pool_ptr = buf_pool_addr = kmalloc(buf_pool_size, GFP_KERNEL);
+	if (!buf_pool_addr)
+		goto alloc_fail;
+
+	thread->srcs = kcalloc(src_cnt+1, sizeof(u8 *), GFP_KERNEL);
+	if (!thread->srcs)
+		goto alloc_fail;
+
+	thread->dsts = kcalloc(dst_cnt+1, sizeof(u8 *), GFP_KERNEL);
+	if (!thread->dsts)
+		goto alloc_fail;
+
+	set_user_nice(current, 10);
+
+	/*
+	 * src and dst buffers are freed by ourselves below
+	 */
+	flags = DMA_CTRL_ACK | DMA_PREP_INTERRUPT;
+
+	ktime = ktime_get();
+	while (!kthread_should_stop()
+	       && !(params->iterations && total_tests >= params->iterations)) {
+		struct dma_async_tx_descriptor *tx = NULL;
+		dma_addr_t srcs[src_cnt];
+		dma_addr_t *dsts;
+		unsigned int src_off = 0, dst_off = 0, len;
+		u8 align = 0;
+
+		total_tests++;
+
+		/* honor alignment restrictions */
+		if (thread->type == DMA_MEMCPY)
+			align = dev->copy_align;
+		else if (thread->type == DMA_XOR)
+			align = dev->xor_align;
+
+		if (1 << align > params->buf_size) {
+			pr_err("%u-byte buffer too small for %d-byte alignment\n",
+			       params->buf_size, 1 << align);
+			break;
+		}
+
+		len = params->buf_size;
+
+		len = (len >> align) << align;
+		if (!len)
+			len = 1 << align;
+
+		total_len += len;
+
+		if ((cached_src == false) || (total_tests == 1)) {
+			for (i = 0; i < src_cnt; i++) {
+				thread->srcs[i] = buf_pool_ptr;
+				buf_pool_ptr += params->buf_size;
+				if ((buf_pool_ptr - buf_pool_addr +
+				     params->buf_size) >= buf_pool_size)
+					buf_pool_ptr = buf_pool_addr;
+			}
+		}
+
+		for (i = 0; i < dst_cnt; i++) {
+			thread->dsts[i] = buf_pool_ptr;
+			buf_pool_ptr += params->buf_size;
+			if ((buf_pool_ptr - buf_pool_addr +
+			     params->buf_size) >= buf_pool_size)
+				buf_pool_ptr = buf_pool_addr;
+		}
+
+		if (sw_mode) {
+			if (thread->type == DMA_MEMCPY)
+				memcpy(thread->dsts[0], thread->srcs[0], len);
+			else if (thread->type == DMA_XOR)
+				xor_blocks(src_cnt, len, thread->dsts[0],
+					   (void **)thread->srcs);
+			continue;
+		}
+
+		um = dmaengine_get_unmap_data(dev->dev, src_cnt+dst_cnt,
+					      GFP_KERNEL);
+		if (!um) {
+			failed_tests++;
+			result("unmap data NULL", total_tests,
+			       src_off, dst_off, len, ret);
+			continue;
+		}
+
+		um->len = params->buf_size;
+		for (i = 0; i < src_cnt; i++) {
+			void *buf = thread->srcs[i];
+			struct page *pg = virt_to_page(buf);
+			unsigned long pg_off = (unsigned long) buf &
+				~PAGE_MASK;
+
+			um->addr[i] = dma_map_page(dev->dev, pg, pg_off,
+						   um->len, DMA_TO_DEVICE);
+			srcs[i] = um->addr[i] + src_off;
+			ret = dma_mapping_error(dev->dev, um->addr[i]);
+			if (ret) {
+				dmaengine_unmap_put(um);
+				result("src mapping error", total_tests,
+				       src_off, dst_off, len, ret);
+				failed_tests++;
+				continue;
+			}
+			um->to_cnt++;
+		}
+
+		/* map with DMA_BIDIRECTIONAL to force writeback/invalidate */
+		dsts = &um->addr[src_cnt];
+		for (i = 0; i < dst_cnt; i++) {
+			void *buf = thread->dsts[i];
+			struct page *pg = virt_to_page(buf);
+			unsigned long pg_off = (unsigned long) buf &
+				~PAGE_MASK;
+
+			dsts[i] = dma_map_page(dev->dev, pg, pg_off, um->len,
+					       DMA_BIDIRECTIONAL);
+			ret = dma_mapping_error(dev->dev, dsts[i]);
+			if (ret) {
+				dmaengine_unmap_put(um);
+				result("dst mapping error", total_tests,
+				       src_off, dst_off, len, ret);
+				failed_tests++;
+				continue;
+			}
+			um->bidi_cnt++;
+		}
+
+		if (thread->type == DMA_MEMCPY)
+			tx = dev->device_prep_dma_memcpy(chan,
+							 dsts[0] + dst_off,
+							 srcs[0], len, flags);
+		else if (thread->type == DMA_XOR)
+			tx = dev->device_prep_dma_xor(chan,
+						      dsts[0] + dst_off,
+						      srcs, src_cnt,
+						      len, flags);
+		else if (thread->type == DMA_PQ) {
+			dma_addr_t dma_pq[dst_cnt];
+
+			for (i = 0; i < dst_cnt; i++)
+				dma_pq[i] = dsts[i] + dst_off;
+			tx = dev->device_prep_dma_pq(chan, dma_pq, srcs,
+						     src_cnt, pq_coefs,
+						     len, flags);
+		}
+
+		if (!tx) {
+			dmaengine_unmap_put(um);
+			result("prep error", total_tests, src_off,
+			       dst_off, len, ret);
+			msleep(100);
+			failed_tests++;
+			continue;
+		}
+
+		tx->callback = dmatest_callback;
+		tx->callback_param = NULL;
+		cookie[outs_push] = tx->tx_submit(tx);
+		um_list[outs_push] = um;
+
+		if (dma_submit_error(cookie[outs_push])) {
+			dmaengine_unmap_put(um);
+			result("submit error", total_tests, src_off,
+			       dst_off, len, ret);
+			msleep(100);
+			failed_tests++;
+			continue;
+		}
+		dma_async_issue_pending(chan);
+
+		outs_push = (outs_push + 1) % outstanding_req;
+		while (1) {
+			status = dma_async_is_tx_complete(chan,
+				cookie[outs_pop], NULL, NULL);
+			if (status == DMA_COMPLETE) {
+				dmaengine_unmap_put(um_list[outs_pop]);
+			} else {
+				if ((outs_push == outs_pop) ||
+				    (total_tests == params->iterations))
+					continue;
+				break;
+			}
+			outs_pop = (outs_pop + 1) % outstanding_req;
+			if (outs_pop == outs_push)
+				break;
+		}
+
+		if (status == DMA_ERROR) {
+			pr_err("DMA Error was reported.\n");
+			failed_tests++;
+			continue;
+		}
+
+		verbose_result("test passed", total_tests, src_off,
+			       dst_off, len, 0);
+	}
+	runtime = ktime_us_delta(ktime_get(), ktime);
+
+	ret = 0;
+
+alloc_fail:
+	kfree(thread->dsts);
+	kfree(thread->srcs);
+	kfree(buf_pool_ptr);
+	kfree(cookie);
+	kfree(um_list);
+err_thread_type:
+	pr_info("%s: summary %u tests, %u failures %llu iops %llu KB/s (%d)\n",
+		current->comm, total_tests, failed_tests,
+		dmatest_persec(runtime, total_tests),
+		dmatest_KBs(runtime, total_len), ret);
+
+	/* terminate all transfers on specified channels */
+	if (ret)
+		dmaengine_terminate_all(chan);
+
+	thread->done = true;
+	wake_up(&thread_wait);
+
+	return ret;
+}
+
 
 /*
  * This function repeatedly tests DMA transfers of various lengths and
@@ -853,8 +1168,13 @@ static int dmatest_add_threads(struct dmatest_info *info,
 		thread->test_done.wait = &thread->done_wait;
 		init_waitqueue_head(&thread->done_wait);
 		smp_wmb();
-		thread->task = kthread_create(dmatest_func, thread, "%s-%s%u",
-				dma_chan_name(chan), op, i);
+		if (performance)
+			thread->task = kthread_create(dmatest_perf_func,
+				thread, "%s-%s%u",
+					dma_chan_name(chan), op, i);
+		else
+			thread->task = kthread_create(dmatest_func, thread,
+				"%s-%s%u", dma_chan_name(chan), op, i);
 		if (IS_ERR(thread->task)) {
 			pr_warn("Failed to create thread %s-%s%u\n",
 				dma_chan_name(chan), op, i);
