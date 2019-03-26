@@ -19,6 +19,7 @@ linux414_armv8le_mmc_testsuite
 linux414_armv8le_offload_testing
 linux414_armv8le_pbus
 linux414_armv8le_pf_vf_bgx_rgx_modules
+linux414_armv8le_dmatest
 
 linux414_armv8be
 linux414_armv8be_mainline

@@ -129,6 +129,10 @@ case $build_name in
 	linux414_armv8le_pf_vf_bgx_rgx_modules )
 		kernel_config=$(perl -pe "$make_config" tools/configs/pf-vf-bgx-rgx-modules); ;;
 
+	linux414_armv8le_dmatest )
+		kernel_config="./scripts/config --file arch/$arch/configs/$defconfig --set-val CONFIG_ASYNC_TX_DMA n;
+			       ./scripts/config --file arch/$arch/configs/$defconfig --set-val CONFIG_DMATEST y;"; ;;
+
  	*_armv8le_*musdk*|*_armv8le_dpdk*|*_armv8le_vpp )
 		kernel_config="""./scripts/config --file arch/$arch/configs/$defconfig --set-val CONFIG_MVPP2X y ;
 		                 ./scripts/config --file arch/$arch/configs/$defconfig --set-val CONFIG_UIO y"; ;;
