@@ -5945,9 +5945,6 @@ static void mvpp2_xlg_config(struct mvpp2_port *port, unsigned int mode,
 	ctrl0 = readl(port->base + MVPP22_XLG_CTRL0_REG);
 	ctrl4 = readl(port->base + MVPP22_XLG_CTRL4_REG);
 
-	ctrl0 &= ~(MVPP22_XLG_CTRL0_TX_FLOW_CTRL_EN |
-		   MVPP22_XLG_CTRL0_RX_FLOW_CTRL_EN);
-
 	if (state->pause & MLO_PAUSE_TX)
 		ctrl0 |= MVPP22_XLG_CTRL0_TX_FLOW_CTRL_EN;
 	if (state->pause & MLO_PAUSE_RX)
