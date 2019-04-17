@@ -5317,6 +5317,7 @@ static int mvpp2_port_musdk_cfg(struct net_device *dev, bool ena)
 	} *us;
 
 	struct mvpp2_port *port = netdev_priv(dev);
+	int rxq;
 
 	if (ena) {
 		/* Disable Queues and IntVec allocations for MUSDK,
@@ -5351,6 +5352,13 @@ static int mvpp2_port_musdk_cfg(struct net_device *dev, bool ena)
 		}
 		kfree(us);
 		port->us_cfg = NULL;
+
+		/* Restore RxQ/pool association */
+		for (rxq = 0; rxq < port->nrxqs; rxq++) {
+			mvpp2_rxq_long_pool_set(port, rxq, port->pool_long->id);
+			mvpp2_rxq_short_pool_set(port, rxq,
+						 port->pool_short->id);
+		}
 	}
 	return 0;
 }
