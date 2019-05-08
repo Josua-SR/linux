@@ -34,11 +34,23 @@ struct scmi_msg_resp_sensor_description {
 		__le32 attributes_high;
 #define SENSOR_TYPE(x)		((x) & 0xff)
 #define SENSOR_SCALE(x)		(((x) >> 11) & 0x3f)
+#define SENSOR_SCALE_SIGN	BIT(4)
+#define	SENSOR_SCALE_EXTEND	GENMASK(31, 5)
 #define SENSOR_UPDATE_SCALE(x)	(((x) >> 22) & 0x1f)
 #define SENSOR_UPDATE_BASE(x)	(((x) >> 27) & 0x1f)
 		    u8 name[SCMI_MAX_STR_SIZE];
 	} desc[0];
 };
+
+/* Sign extend to a full s32 */
+#define S32_EXT(v)							\
+	({								\
+		int __v = (v);						\
+									\
+		if (__v & SENSOR_SCALE_SIGN)				\
+			__v |= SENSOR_SCALE_EXTEND;			\
+		__v;							\
+	})
 
 struct scmi_msg_set_sensor_config {
 	__le32 id;
@@ -140,6 +152,7 @@ static int scmi_sensor_description_get(const struct scmi_handle *handle,
 			s = &si->sensors[desc_index + cnt];
 			s->id = le32_to_cpu(buf->desc[cnt].id);
 			s->type = SENSOR_TYPE(attrh);
+			s->scale = S32_EXT(SENSOR_SCALE(attrh));
 			memcpy(s->name, buf->desc[cnt].name, SCMI_MAX_STR_SIZE);
 		}
 
