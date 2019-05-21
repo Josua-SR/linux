@@ -184,7 +184,7 @@ if [[ $echo_only ]]; then
 fi
 
 logfile="$$.make.log"
-(eval "$cmd") | tee ${logfile}
+(eval "$cmd") 2>&1 | tee ${logfile}
 if grep -i "warning:" $logfile; then
         echo "Error: Build has warnings. Aborted"
         exit -1
