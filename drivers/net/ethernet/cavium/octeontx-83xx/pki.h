@@ -408,6 +408,16 @@ enum PKI_PCAM_TERM_E {
 	PKI_PCAM_TERM_LG_CUSTOM	= 0x39
 };
 
+#define MAX_BGX_PKIND	16
+#define MAX_LBK_PKIND	19
+#define MAX_SDP_PKIND	15
+#define MAX_LBK_LOOP_PKIND	7
+
+#define BGX_PKIND_BASE	1
+#define LBK_PKIND_BASE	20
+#define SDP_PKIND_BASE	40
+#define LBK_LOOP_PKIND_BASE	(SDP_PKIND_BASE + MAX_SDP_PKIND + 1)
+
 #define MAX_PKI_PORTS	64
 #define NUM_FRAME_LEN_REG	2
 
@@ -489,6 +499,7 @@ struct pki_t {
 	u32			flags;
 	struct pkipf_vf		vf[PKI_MAX_VF];
 	u16			*qpg_domain;
+	u16			*loop_pkind_domain;
 };
 
 struct pki_com_s {
@@ -544,6 +555,7 @@ static inline void set_field(u64 *ptr, u64 field_mask, u8 field_shift, u64 val)
 
 int assign_pkind_bgx(struct pkipf_vf *vf, struct octtx_bgx_port *port);
 int assign_pkind_lbk(struct pkipf_vf *vf, struct octtx_lbk_port *port);
+void free_loop_pkind_lbk(struct pkipf_vf *vf, u16 domain_id);
 int assign_pkind_sdp(struct pkipf_vf *vf, struct octtx_sdp_port *port);
 void init_styles(struct pki_t *pki);
 

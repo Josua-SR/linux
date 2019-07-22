@@ -421,6 +421,8 @@ static int pki_destroy_domain(u32 id, u16 domain_id, struct kobject *kobj)
 	for (i = 0; i < PKI_MAX_VF; i++) {
 		if (pki->vf[i].domain.in_use &&
 		    pki->vf[i].domain.domain_id == domain_id) {
+			free_loop_pkind_lbk(&pki->vf[i], domain_id);
+
 			pki->vf[i].domain.in_use = false;
 
 			virtfn = pci_get_domain_bus_and_slot(
@@ -818,6 +820,13 @@ static int pki_init(struct pki_t *pki)
 	}
 	memset(pki->qpg_domain, 0, sizeof(*pki->qpg_domain) * pki->max_qpgs);
 
+	pki->loop_pkind_domain = vzalloc(sizeof(*pki->loop_pkind_domain) *
+					 (MAX_LBK_LOOP_PKIND + 1));
+	if (!pki->loop_pkind_domain) {
+		res = -ENOMEM;
+		goto err;
+	}
+
 	load_ucode(pki);
 	delay = max(0xa0, (800 / pki->max_cls));
 	reg = PKI_ICG_CFG_MAXIPE_USE(0x14) | PKI_ICG_CFG_CLUSTERS(0x3) |
@@ -945,6 +954,7 @@ static void pki_remove(struct pci_dev *pdev)
 
 	pki_sriov_configure(pdev, 0);
 	vfree(pki->qpg_domain);
+	vfree(pki->loop_pkind_domain);
 	pki_irq_free(pki);
 }
 

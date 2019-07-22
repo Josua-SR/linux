@@ -8,16 +8,10 @@
 
 #include "pki.h"
 
-#define MAX_BGX_PKIND	16
-#define MAX_LBK_PKIND	19
-#define MAX_SDP_PKIND	16
-
-#define BGX_PKIND_BASE	1
-#define LBK_PKIND_BASE	20
-#define SDP_PKIND_BASE	40
 #define PKI_DROP_STYLE	0
 
 #define QPG_INVALID	((u32)-1)
+#define PKIND_INVALID	((u32)-1)
 
 enum PKI_PORT_STATE {
 	PKI_PORT_CLOSE	 = 0,
@@ -107,17 +101,68 @@ int assign_pkind_bgx(struct pkipf_vf *vf, struct octtx_bgx_port *port)
 	return pkind;
 }
 
+static u32 loop_pkind_off_lookup_by_domain(struct pki_t *pki, u16 domain_id)
+{
+	u32 curr_num = 0;
+
+	while (curr_num <= MAX_LBK_LOOP_PKIND) {
+		if (pki->loop_pkind_domain[curr_num] == (u16)(~domain_id))
+			return curr_num;
+		curr_num++;
+	}
+
+	return PKIND_INVALID;
+}
+
+static void loop_pkind_off_assign_to_domain(struct pki_t *pki, u32 pkind,
+					    u16 domain_id)
+{
+	pki->loop_pkind_domain[pkind] = ~domain_id;
+}
+
+static u32 loop_pkind_alloc(struct pki_t *pki, u16 domain_id)
+{
+	u16 null_domain = ~((u16)0u);
+	u32 pkind = loop_pkind_off_lookup_by_domain(pki, null_domain);
+
+	if (pkind == PKIND_INVALID)
+		goto exit;
+	loop_pkind_off_assign_to_domain(pki, pkind, domain_id);
+exit:
+	return LBK_LOOP_PKIND_BASE + pkind;
+}
+
+static int loop_pkind_free(struct pki_t *pki, u16 domain_id)
+{
+	u16 null_domain = ~((u16)0u);
+	u32 pkind_id = loop_pkind_off_lookup_by_domain(pki, domain_id);
+
+	while (pkind_id != PKIND_INVALID) {
+		loop_pkind_off_assign_to_domain(pki, pkind_id, null_domain);
+		pkind_id = loop_pkind_off_lookup_by_domain(pki, domain_id);
+	}
+
+	return 0;
+}
+
 int assign_pkind_lbk(struct pkipf_vf *vf, struct octtx_lbk_port *port)
 {
+	struct pki_t *pki = vf->pki;
 	int pkind;
 
 	if (vf->lbk_port[port->dom_port_idx].valid)
 		return -EEXIST;
 
-	pkind = LBK_PKIND_BASE + LBK_PORT_GIDX_PRIM(port);
-
-	if (pkind > (LBK_PKIND_BASE + MAX_LBK_PKIND))
-		return -EINVAL;
+	if (port->glb_port_idx == LBK_PORT_GIDX_ANY) {
+		pkind = loop_pkind_alloc(pki, port->domain_id);
+		dev_dbg(&pki->pdev->dev, "assigned pkind %d\n", pkind);
+		if (pkind == PKIND_INVALID)
+			return -EINVAL; /* return sth more verbose */
+	} else {
+		pkind = LBK_PKIND_BASE + LBK_PORT_GIDX_PRIM(port);
+		if (pkind > (LBK_PKIND_BASE + MAX_LBK_PKIND))
+			return -EINVAL;
+	}
 
 	vf->lbk_port[port->dom_port_idx].valid = true;
 	vf->lbk_port[port->dom_port_idx].pkind = pkind;
@@ -127,7 +172,13 @@ int assign_pkind_lbk(struct pkipf_vf *vf, struct octtx_lbk_port *port)
 	vf->lbk_port[port->dom_port_idx].has_fcs = false;
 	vf->lbk_port[port->dom_port_idx].state = PKI_PORT_CLOSE;
 
+	dev_dbg(&pki->pdev->dev, "returning pkind %d\n", pkind);
 	return pkind;
+}
+
+void free_loop_pkind_lbk(struct pkipf_vf *vf, u16 domain_id)
+{
+	loop_pkind_free(vf->pki, domain_id);
 }
 
 int assign_pkind_sdp(struct pkipf_vf *vf, struct octtx_sdp_port *port)

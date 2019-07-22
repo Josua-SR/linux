@@ -163,6 +163,7 @@ struct octtx_lbk_port {
 /* LBK port/peer global indexes: (8-bit peer << 8) | 8-bit port. */
 #define LBK_PORT_GIDX_FULL_GEN(_i, _k) (((_i) << 4) | (_k))
 #define LBK_PORT_GIDX_PRIM(_p) ((_p)->glb_port_idx & 0x1FF)
+#define LBK_PORT_GIDX_ANY -1
 
 enum octtx_coprocessor {
 	OCTTX_SSO,
