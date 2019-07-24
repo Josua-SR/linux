@@ -32,6 +32,7 @@
 #include "dpi.h"
 #include "zip.h"
 #include "cpt.h"
+#include "rst.h"
 
 #define DRV_NAME "octeontx"
 #define DRV_VERSION "1.0"
@@ -64,6 +65,7 @@ static struct ssowpf_com_s *ssowpf;
 static struct pki_com_s *pki;
 static struct dpipf_com_s *dpipf;
 static struct zippf_com_s *zippf;
+static struct rst_com_s *rst;
 
 struct delayed_work dwork;
 struct delayed_work dwork_reset;
@@ -377,6 +379,7 @@ static int rm_receive_message(struct octtx_domain *domain, struct mbox_hdr *hdr,
 			      union mbox_data *resp, void *mdata)
 {
 	struct mbox_intf_ver *msg = mdata;
+	struct scfg_resp *scfg = mdata;
 	u32 rm_plat, rm_maj, rm_min;
 	u32 app_plat, app_maj, app_min;
 
@@ -410,6 +413,12 @@ static int rm_receive_message(struct octtx_domain *domain, struct mbox_hdr *hdr,
 				rm_plat, rm_maj, rm_min);
 			break;
 		}
+		break;
+	case RM_GETSYSTEMCFG:
+		scfg->rclk_freq = rst->get_rclk_freq(domain->node) / 1000000;
+		scfg->sclk_freq = rst->get_sclk_freq(domain->node) / 1000000;
+		resp->data = sizeof(struct scfg_resp);
+		hdr->res_code = MBOX_RET_SUCCESS;
 		break;
 	default:
 		goto err;
@@ -1516,12 +1525,21 @@ static int __init octeontx_init_module(void)
 	bgx = bgx_octeontx_init();
 	if (!bgx)
 		return -ENODEV;
+	rst = try_then_request_module(symbol_get(rst_com), "rst");
+	if (!rst) {
+		ret = -ENODEV;
+		goto rst_err;
+	}
 	slipf = try_then_request_module(symbol_get(slipf_com), "slipf");
-	if (!slipf)
-		return -ENODEV;
+	if (!slipf) {
+		ret = -ENODEV;
+		goto slipf_err;
+	}
 	lbk = try_then_request_module(symbol_get(lbk_com), "lbk");
-	if (!lbk)
-		return -ENODEV;
+	if (!lbk) {
+		ret = -ENODEV;
+		goto lbk_err;
+	}
 	fpapf = try_then_request_module(symbol_get(fpapf_com), "fpapf");
 	if (!fpapf) {
 		ret = -ENODEV;
@@ -1689,7 +1707,12 @@ ssopf_err:
 
 fpapf_err:
 	symbol_put(lbk_com);
+lbk_err:
 	symbol_put(slipf_com);
+slipf_err:
+	symbol_put(rst_com);
+rst_err:
+	symbol_put(thunder_bgx_com);
 
 	return ret;
 }
@@ -1721,6 +1744,7 @@ static void __exit octeontx_cleanup_module(void)
 	symbol_put(cptpf_com);
 	symbol_put(lbk_com);
 	symbol_put(slipf_com);
+	symbol_put(rst_com);
 	symbol_put(thunder_bgx_com);
 	task_cleanup_handler_remove(cleanup_el3_irqs);
 }

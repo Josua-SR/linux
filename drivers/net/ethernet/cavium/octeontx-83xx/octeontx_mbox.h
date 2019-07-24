@@ -53,6 +53,7 @@ enum coproc_t {
 
 #define RM_START_APP		0x1
 #define RM_INTERFACE_VERSION	0x2
+#define RM_GETSYSTEMCFG		0x3
 
 /*resp messages*/
 #define MBOX_RET_SUCCESS	0x0
@@ -228,6 +229,11 @@ struct __attribute__((__packed__)) dcfg_resp {
 	u8	pci_port_count;
 };
 
+struct __attribute__((__packed__)) scfg_resp {
+	u16	rclk_freq; /* RCLK frequency (in MHz) */
+	u16	sclk_freq; /* SCLK frequency (in MHz) */
+};
+
 /* FPA specific */
 struct mbox_fpa_cfg {
 	int	aid;
@@ -270,7 +276,7 @@ struct mbox_intf_ver {
 static const struct mbox_intf_ver MBOX_INTERFACE_VERSION = {
 	.platform = 0x01,
 	.major = 0x01,
-	.minor = 0x01
+	.minor = 0x02
 };
 
 /* FIXME: This union is temporary until we agree to move all messages to RAM */

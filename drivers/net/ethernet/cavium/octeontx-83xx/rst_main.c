@@ -84,9 +84,25 @@ static u64 rst_get_sclk_freq(int node)
 	return sclk_freq;
 }
 
+static u64 rst_get_rclk_freq(int node)
+{
+	u64 rclk_freq;
+	struct rstpf *rst = NULL;
+
+	rst = rst_get(node);
+	if (!rst)
+		return 0;
+
+	/* Bit 46:40 is C_MULL */
+	rclk_freq = (rst_reg_read(rst, RST_BOOT) >> 40) & 0x3f;
+	rclk_freq *= PLL_REF_CLK;
+
+	return rclk_freq;
+}
+
 struct rst_com_s rst_com = {
-	.get_sclk_freq = rst_get_sclk_freq
-/* add future RST function here !!!: TODO  */
+	.get_sclk_freq = rst_get_sclk_freq,
+	.get_rclk_freq = rst_get_rclk_freq
 };
 EXPORT_SYMBOL(rst_com);
 

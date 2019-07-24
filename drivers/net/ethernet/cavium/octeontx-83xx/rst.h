@@ -20,7 +20,7 @@
 
 struct rst_com_s {
 	u64 (*get_sclk_freq)(int id);
-	/* Will add rest function based on use-case */
+	u64 (*get_rclk_freq)(int id);
 };
 
 extern struct rst_com_s rst_com;
