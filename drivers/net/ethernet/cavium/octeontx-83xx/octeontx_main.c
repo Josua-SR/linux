@@ -344,12 +344,97 @@ error:
 	return count;
 }
 
+static void enable_pmccntr_el0(void *data)
+{
+	u64 val;
+	/* Disable cycle counter overflow interrupt */
+	asm volatile("mrs %0, pmintenset_el1" : "=r" (val));
+	val &= ~BIT_ULL(31);
+	asm volatile("msr pmintenset_el1, %0" : : "r" (val));
+	/* Enable cycle counter */
+	asm volatile("mrs %0, pmcntenset_el0" : "=r" (val));
+	val |= BIT_ULL(31);
+	asm volatile("msr pmcntenset_el0, %0" :: "r" (val));
+	/* Enable user-mode access to cycle counters. */
+	asm volatile("mrs %0, pmuserenr_el0" : "=r" (val));
+	val |= BIT(2) | BIT(0);
+	asm volatile("msr pmuserenr_el0, %0" : : "r"(val));
+	/* Start cycle counter */
+	asm volatile("mrs %0, pmcr_el0" : "=r" (val));
+	val |= BIT(0);
+	isb();
+	asm volatile("msr pmcr_el0, %0" : : "r" (val));
+	asm volatile("mrs %0, pmccfiltr_el0" : "=r" (val));
+	val |= BIT(27);
+	asm volatile("msr pmccfiltr_el0, %0" : : "r" (val));
+}
+
+static void disable_pmccntr_el0(void *data)
+{
+	u64 val;
+	/* Disable cycle counter */
+	asm volatile("mrs %0, pmcntenset_el0" : "=r" (val));
+	val &= ~BIT_ULL(31);
+	asm volatile("msr pmcntenset_el0, %0" :: "r" (val));
+	/* Disable user-mode access to counters. */
+	asm volatile("mrs %0, pmuserenr_el0" : "=r" (val));
+	val &= ~(BIT(2) | BIT(0));
+	asm volatile("msr pmuserenr_el0, %0" : : "r"(val));
+}
+
+static void check_pmccntr_el0(void *data)
+{
+	int *out = data;
+	u64 val;
+
+	asm volatile("mrs %0, pmuserenr_el0" : "=r" (val));
+	*out = *out & !!(val & (BIT(2) | BIT(0)));
+}
+
+static ssize_t octtx_pmccntr_el0_show(struct device *dev,
+				      struct device_attribute *attr, char *buf)
+{
+	int out = 1;
+
+	on_each_cpu(check_pmccntr_el0, &out, 1);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", out);
+}
+
+static ssize_t octtx_pmccntr_el0_store(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf, size_t count)
+{
+	char tmp_buf[64];
+	long enable = 0;
+	char *tmp_ptr;
+	ssize_t used;
+
+	strlcpy(tmp_buf, buf, 64);
+	used = strlen(tmp_buf);
+	tmp_ptr = strim(tmp_buf);
+	if (kstrtol(tmp_ptr, 0, &enable)) {
+		dev_err(dev, "Invalid value, expected 1/0\n");
+		return -EIO;
+	}
+
+	if (enable)
+		on_each_cpu(enable_pmccntr_el0, NULL, 1);
+	else
+		on_each_cpu(disable_pmccntr_el0, NULL, 1);
+
+	return count;
+}
+
 static DEVICE_ATTR(create_domain, 0200, NULL, octtx_create_domain_store);
 static DEVICE_ATTR(destroy_domain, 0200, NULL, octtx_destroy_domain_store);
+static DEVICE_ATTR(pmccntr_el0, 0644, octtx_pmccntr_el0_show,
+		   octtx_pmccntr_el0_store);
 
 static struct attribute *octtx_attrs[] = {
 	&dev_attr_create_domain.attr,
 	&dev_attr_destroy_domain.attr,
+	&dev_attr_pmccntr_el0.attr,
 	NULL
 };
 
