@@ -98,6 +98,7 @@ struct octtx_domain {
 	int bgx_count;
 	int lbk_count;
 	int sdp_count;
+	int loop_vf_id;
 	struct octtx_bgx_port bgx_port[OCTTX_MAX_BGX_PORTS];
 	struct octtx_lbk_port lbk_port[OCTTX_MAX_LBK_PORTS];
 	struct octtx_sdp_port sdp_port[OCTTX_MAX_SDP_PORTS];
@@ -154,7 +155,7 @@ static int octeontx_reset_domain(void *master_data);
 static const struct mbox_intf_ver MBOX_INTERFACE_VERSION = {
 	.platform = 0x01,
 	.major = 0x01,
-	.minor = 0x02
+	.minor = 0x03
 };
 
 static ssize_t octtx_destroy_domain_store(struct device *dev,
@@ -568,6 +569,7 @@ static int octtx_master_receive_message(struct mbox_hdr *hdr,
 			dcfg->net_port_count = domain->bgx_count;
 			dcfg->virt_port_count = domain->lbk_count;
 			dcfg->pci_port_count = domain->sdp_count;
+			dcfg->loop_vf_id = domain->loop_vf_id;
 			resp->data = sizeof(struct dcfg_resp);
 			hdr->res_code = MBOX_RET_SUCCESS;
 			break;
@@ -898,6 +900,7 @@ int octeontx_create_domain(const char *name, int type, int sso_count,
 	domain->domain_id = domain_id;
 	memcpy(domain->name, name, strlen(name));
 	domain->type = type;
+	domain->loop_vf_id = -1;
 
 	domain->kobj = kobject_create_and_add(domain->name,
 					      &octtx_device->kobj);
@@ -973,9 +976,10 @@ int octeontx_create_domain(const char *name, int type, int sso_count,
 
 	domain->lbk_count = 0;
 	for (i = 0; i < lbk_count; i++) {
-		if (lbk_port[i] != LBK_PORT_GIDX_ANY &&
-		    (lbk_port[i] > LBK_PORT_PN_BASE_IDX +
-		     LBK_PORT_PN_MAX - 1)) {
+		if (lbk_port[i] == LBK_PORT_GIDX_ANY) {
+			domain->loop_vf_id = i;
+		} else if (lbk_port[i] > LBK_PORT_PN_BASE_IDX +
+			   LBK_PORT_PN_MAX - 1) {
 			dev_err(octtx_device, "LBK invalid port g%ld\n",
 				lbk_port[i]);
 			goto error;

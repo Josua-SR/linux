@@ -295,7 +295,7 @@ static struct intr_hand intr[] = {
 static void identify(struct pkopf_vf *vf, u16 domain_id,
 		     u16 subdomain_id)
 {
-	u64 reg = (((u64)subdomain_id << 16) | (domain_id)) << 7;
+	u64 reg = ((subdomain_id) << 16 | (domain_id)) << 7;
 
 	writeq_relaxed(reg, vf->domain.reg_base + PKO_VF_DQ_FC_CONFIG);
 }

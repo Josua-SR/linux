@@ -227,6 +227,7 @@ struct __attribute__((__packed__)) dcfg_resp {
 	u8	net_port_count;
 	u8	virt_port_count;
 	u8	pci_port_count;
+	int	loop_vf_id;
 };
 
 struct __attribute__((__packed__)) scfg_resp {
