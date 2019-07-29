@@ -4029,14 +4029,14 @@ static int reset_cavium_octeon_vf(struct pci_dev *pdev, int probe)
 	vf_id = pdev->devfn - 1;
 	dev_dbg(&pdev->dev, "setting 0x%p bit %d\n",
 		&octtx_vf_reset[cop], vf_id);
-	atomic64_fetch_or(1 << vf_id, &octtx_vf_reset[cop]);
+	atomic64_fetch_or(1ULL << vf_id, &octtx_vf_reset[cop]);
 	/* make sure other party reads it*/
 	mb();
 
 	while (count) {
 		usleep_range(1000, 2000);
 		val = atomic_read(&octtx_vf_reset[cop]);
-		if ((val & (1 << vf_id)) == 0)
+		if ((val & (1ULL << vf_id)) == 0)
 			goto exit;
 		count--;
 	}
