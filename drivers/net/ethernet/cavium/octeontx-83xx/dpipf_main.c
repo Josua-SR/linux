@@ -13,6 +13,7 @@ static DEFINE_MUTEX(octeontx_dpi_devices_lock);
 static LIST_HEAD(octeontx_dpi_devices);
 
 static int dpi_init(struct dpipf *dpi);
+static int dpi_fini(struct dpipf *dpi);
 static int dpi_queue_init(struct dpipf *dpi, u16 domain_id,
 			  u16 subdomain_id, int buf_size,
 			  u16 aura);
@@ -592,6 +593,21 @@ int dpi_init(struct dpipf *dpi)
 	return 0;
 }
 
+int dpi_fini(struct dpipf *dpi)
+{
+	int engine = 0;
+
+	for (engine = 0; engine < dpi_dma_engine_get_num(); engine++) {
+		dpi_reg_write(dpi, DPI_ENGX_BUF(engine), 0x0ULL);
+		dpi_reg_write(dpi, DPI_DMA_ENGX_EN(engine), 0x0ULL);
+	}
+
+	dpi_reg_write(dpi, DPI_DMA_CONTROL, 0x0ULL);
+	dpi_reg_write(dpi, DPI_CTL, ~DPI_CTL_EN);
+
+	return 0;
+}
+
 int dpi_queue_init(struct dpipf *dpi, u16 domain_id,
 		   u16 vf, int buf_size, u16 aura)
 {
@@ -818,6 +834,7 @@ static void dpi_remove(struct pci_dev *pdev)
 {
 	struct dpipf *dpi = pci_get_drvdata(pdev);
 
+	dpi_fini(dpi);
 	dpi_irq_free(dpi);
 	dpi_sriov_configure(pdev, 0);
 }
