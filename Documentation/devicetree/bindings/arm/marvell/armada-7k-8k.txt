@@ -27,6 +27,9 @@ Boards:
    - "marvell,armada3900-db-vd"
       when the board being used is the Armada 3900 validation board
 
+   - "marvell,armada7020-amc"
+      when the board being used is the Armada 7020 AMC card
+
    - "marvell,armada7040-db-default", "marvell,armada7040-db"
       when the board being used is the Armada 7040 Development board
 
