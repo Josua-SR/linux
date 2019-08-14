@@ -1854,7 +1854,7 @@ static void mvpp2_hw_get_stats(struct mvpp2_port *port, u64 *pstats)
 	}
 
 	/* Extend SW counters (i=MVPP2_FIRST_CNT_SW) */
-	for (cpu = 0; cpu < 4; cpu++)
+	for_each_present_cpu(cpu)
 		*pstats++ = mvpp2_tx_done_guard_get_stats(port, cpu);
 }
 
