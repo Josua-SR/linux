@@ -115,6 +115,97 @@
 			};
 		};
 
+		CP110_LABEL(mvpp2x_gop): gop {
+			CP110_LABEL(mvpp2x_emac0): mac0 {
+				interrupts = <ICU_GRP_NSR 129 IRQ_TYPE_LEVEL_HIGH>;  /* Link IRQ */
+				port-id = <0>; /* gop_port_id */
+				status = "disabled";
+			};
+			CP110_LABEL(mvpp2x_emac2): mac2 {
+				interrupts = <ICU_GRP_NSR 128 IRQ_TYPE_LEVEL_HIGH>;  /* Link IRQ */
+				port-id = <2>; /* gop_port_id */
+				status = "disabled";
+			};
+			CP110_LABEL(mvpp2x_emac3): mac3 {
+				interrupts = <ICU_GRP_NSR 127 IRQ_TYPE_LEVEL_HIGH>;  /* Link IRQ */
+				port-id = <3>; /* gop_port_id */
+				status = "disabled";
+			};
+		};
+
+		CP110_LABEL(mvpp2x_ethernet): mvpp2x_ethernet@0 {
+			compatible = "marvell,mv-pp22";
+			reg = <0x000000 0x90000>,/* Packet Processor regs */
+			      <0x129000 0x0600>, /* XMIB regs */
+			      <0x12a000 0x200>,  /* LED regs */
+			      <0x12a200 0x200>,  /* SMI regs */
+			      <0x12a400 0x200>,  /* TAI regs */
+			      <0x12a600 0x200>,  /* XSMI regs */
+			      <0x12b000 0x1000>, /* MG Internal regs */
+			      <0x130000 0x6000>, /* MSPG regs */
+			      <0x130400 0x200>,  /* MSPG - XPCS regs */
+			      <0x130600 0x200>,  /* FCA - flow control regs*/
+			      <0x130e00 0x100>,  /* MSPG - GMAC regs */
+			      <0x130f00 0x100>,  /* MSPG - XLG MAC regs */
+			      <0x441100 0x100>,  /* RFU-1 Regs */
+			      <0x220000 0x800>;  /* CM3 SRAM */
+			reg-names = "pp", "xmib", "led", "smi", "tai", "xsmi",
+				    "mg", "mspg", "xpcs","fca", "gmac", "xlg",
+				    "rfu1", "cm3";
+			clocks = <&CP110_LABEL(clk) 1 3>, <&CP110_LABEL(clk) 1 9>,
+				 <&CP110_LABEL(clk) 1 5>, <&CP110_LABEL(clk) 1 6>,
+				 <&CP110_LABEL(clk) 1 18>;
+			clock-names = "pp_clk", "gop_clk",
+				      "mg_clk", "mg_core_clk", "gop_core_clk";
+			status = "disabled";
+			dma-coherent;
+
+			CP110_LABEL(mvpp2x_eth0): mvpp2x_eth0@010000 {
+				interrupts = <ICU_GRP_NSR 39 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 43 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 47 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 51 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 55 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 59 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 63 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 67 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 71 IRQ_TYPE_LEVEL_HIGH>;
+				port-id = <0>; /* pp2_port_id */
+				emac-data = <&CP110_LABEL(mvpp2x_emac0)>;
+				status = "disabled";
+			};
+
+			CP110_LABEL(mvpp2x_eth1): mvpp2x_eth1@020000 {
+				interrupts = <ICU_GRP_NSR 40 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 44 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 48 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 52 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 56 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 60 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 64 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 68 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 72 IRQ_TYPE_LEVEL_HIGH>;
+				port-id = <1>; /* pp2_port_id */
+				emac-data = <&CP110_LABEL(mvpp2x_emac2)>;
+				status = "disabled";
+			};
+
+			CP110_LABEL(mvpp2x_eth2): mvpp2x_eth2@030000 {
+				interrupts = <ICU_GRP_NSR 41 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 45 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 49 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 53 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 57 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 61 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 65 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 69 IRQ_TYPE_LEVEL_HIGH>,
+					     <ICU_GRP_NSR 73 IRQ_TYPE_LEVEL_HIGH>;
+				port-id = <2>; /* pp2_port_id */
+				emac-data = <&CP110_LABEL(mvpp2x_emac3)>;
+				status = "disabled";
+			};
+		};
+
 		CP110_LABEL(uio_ethernet): EVALUATOR(uio_pp_, CP110_NUM)@0 {
 			compatible = "generic-uio";
 			reg = <0x0 0x90000>, <0x130000 0x6000>,
