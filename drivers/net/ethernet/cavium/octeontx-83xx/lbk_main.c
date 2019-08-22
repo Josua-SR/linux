@@ -29,8 +29,7 @@
 #define LBK0_MAX_PORTS      16
 #define LBK1_MAX_PORTS      4
 #define LBK2_MAX_PORTS      4
-/* 16 ports in lbk0 device and 1 port in lbk1/lbk2 device */
-#define LBK_MAX_PORTS		(LBK0_MAX_PORTS + LBK1_MAX_PORTS)
+#define LBK_MAX_PORTS		64
 #define LBK_INVALID_ID		(-1)
 
 #define LBK_NUM_CHANS		64
@@ -72,6 +71,10 @@ struct lbkpf {
 /* Global list of LBK devices and ports. */
 static DEFINE_MUTEX(octeontx_lbk_lock);
 static LIST_HEAD(octeontx_lbk_devices);
+/* 16 ports in lbk0 device and 1 port in lbk1/lbk2 device
+ * + 8 regular lbk0 based loop interfaces at the end of the array
+ * glb_port_index can be translated to channel number
+ */
 static struct octtx_lbk_port octeontx_lbk_ports[LBK_MAX_PORTS] = {
 	{.glb_port_idx = LBK_PORT_PP_BASE_IDX, .domain_id = LBK_INVALID_ID},
 	{.glb_port_idx = LBK_PORT_PP_BASE_IDX + 1, .domain_id = LBK_INVALID_ID},
@@ -98,7 +101,32 @@ static struct octtx_lbk_port octeontx_lbk_ports[LBK_MAX_PORTS] = {
 	{.glb_port_idx = LBK_PORT_PN_BASE_IDX, .domain_id = LBK_INVALID_ID},
 	{.glb_port_idx = LBK_PORT_PN_BASE_IDX + 1, .domain_id = LBK_INVALID_ID},
 	{.glb_port_idx = LBK_PORT_PN_BASE_IDX + 2, .domain_id = LBK_INVALID_ID},
-	{.glb_port_idx = LBK_PORT_PN_BASE_IDX + 3, .domain_id = LBK_INVALID_ID}
+	{.glb_port_idx = LBK_PORT_PN_BASE_IDX + 3, .domain_id = LBK_INVALID_ID},
+	/* Assign last indices to loopback ports*/
+	[LBK_PORT_PP_LOOP_BASE_IDX] = {
+		.glb_port_idx = LBK_PORT_PP_LOOP_BASE_IDX,
+		.domain_id = LBK_INVALID_ID},
+	[LBK_PORT_PP_LOOP_BASE_IDX + 1] = {
+		.glb_port_idx = LBK_PORT_PP_LOOP_BASE_IDX + 1,
+		.domain_id = LBK_INVALID_ID},
+	[LBK_PORT_PP_LOOP_BASE_IDX + 2] = {
+		.glb_port_idx = LBK_PORT_PP_LOOP_BASE_IDX + 2,
+		.domain_id = LBK_INVALID_ID},
+	[LBK_PORT_PP_LOOP_BASE_IDX + 3] = {
+		.glb_port_idx = LBK_PORT_PP_LOOP_BASE_IDX + 3,
+		.domain_id = LBK_INVALID_ID},
+	[LBK_PORT_PP_LOOP_BASE_IDX + 4] = {
+		.glb_port_idx = LBK_PORT_PP_LOOP_BASE_IDX + 4,
+		.domain_id = LBK_INVALID_ID},
+	[LBK_PORT_PP_LOOP_BASE_IDX + 5] = {
+		.glb_port_idx = LBK_PORT_PP_LOOP_BASE_IDX + 5,
+		.domain_id = LBK_INVALID_ID},
+	[LBK_PORT_PP_LOOP_BASE_IDX + 6] = {
+		.glb_port_idx = LBK_PORT_PP_LOOP_BASE_IDX + 6,
+		.domain_id = LBK_INVALID_ID},
+	[LBK_PORT_PP_LOOP_BASE_IDX + 7] = {
+		.glb_port_idx = LBK_PORT_PP_LOOP_BASE_IDX + 7,
+		.domain_id = LBK_INVALID_ID}
 };
 
 /* Interface with Thunder NIC driver */
@@ -273,7 +301,11 @@ int lbk_port_start(struct octtx_lbk_port *port)
 	int rc, pkind, i;
 	struct lbkpf *lbk;
 
-	if (port->glb_port_idx >= LBK_PORT_PN_BASE_IDX) {
+	if (port->glb_port_idx >= LBK_PORT_PP_LOOP_BASE_IDX) {
+		pkind = port->pkind;
+		/* LBK channel to set PKIND for LBK0 port */
+		i = port->glb_port_idx;
+	} else if (port->glb_port_idx >= LBK_PORT_PN_BASE_IDX) {
 		rc = thlbk->port_start();
 		if (rc)
 			return -EIO;
@@ -400,39 +432,56 @@ static int lbk_create_domain(u32 id, u16 domain_id,
 	mutex_lock(&octeontx_lbk_lock);
 	for (i = 0; i < port_count; i++) {
 		port = &port_tbl[i];
-		for (j = 0; j < LBK_MAX_PORTS; j++) {
-			gport = &octeontx_lbk_ports[j];
-			if (LBK_PORT_GIDX_PRIM(port) !=
-					LBK_PORT_GIDX_PRIM(gport))
-				continue;
-			/* Check for conflicts with other domains. */
-			if (gport->domain_id != LBK_INVALID_ID) {
+		/* search for free loop port */
+		if (port->glb_port_idx == LBK_PORT_GIDX_ANY) {
+			for (j = LBK_PORT_PP_LOOP_BASE_IDX; j <
+			     LBK_MAX_PORTS; j++) {
+				gport = &octeontx_lbk_ports[j];
+				/* Check for conflicts with other domains. */
+				if (gport->domain_id == LBK_INVALID_ID)
+					break;
+			}
+			if (j == LBK_MAX_PORTS) {
+				/* no more free loopbacks */
 				ret = -EINVAL;
 				goto err_unlock;
 			}
-			/* Sync up global and domain ports. */
-			port->node = gport->node;
-			port->ilbk = gport->ilbk;
-			port->olbk = gport->olbk;
-			port->ilbk_base_chan = gport->ilbk_base_chan;
-			port->ilbk_num_chans = gport->ilbk_num_chans;
-			port->olbk_base_chan = gport->olbk_base_chan;
-			port->olbk_num_chans = gport->olbk_num_chans;
-
-			gport->pkind = port->pkind;
-			gport->domain_id = domain_id;
-			gport->dom_port_idx = i;
-
-			/* sysfs entry: */
-			ret = kobject_init_and_add(&port->kobj, get_ktype(kobj),
-						   kobj, "virt%d", i);
-			if (ret)
-				goto err_unlock;
-			ret = sysfs_create_file(&port->kobj,
-						&lbk_port_stats_attr.attr);
-			if (ret < 0)
-				goto err_unlock;
+			port->glb_port_idx = j;
+		} else {
+			for (j = 0; j < LBK_PORT_PP_LOOP_BASE_IDX; j++) {
+				gport = &octeontx_lbk_ports[j];
+				if (LBK_PORT_GIDX_PRIM(port) !=
+						LBK_PORT_GIDX_PRIM(gport))
+					continue;
+				/* Check for conflicts with other domains. */
+				if (gport->domain_id != LBK_INVALID_ID) {
+					ret = -EINVAL;
+					goto err_unlock;
+				}
+			}
 		}
+		/* Sync up global and domain ports. */
+		port->node = gport->node;
+		port->ilbk = gport->ilbk;
+		port->olbk = gport->olbk;
+		port->ilbk_base_chan = gport->ilbk_base_chan;
+		port->ilbk_num_chans = gport->ilbk_num_chans;
+		port->olbk_base_chan = gport->olbk_base_chan;
+		port->olbk_num_chans = gport->olbk_num_chans;
+
+		gport->pkind = port->pkind;
+		gport->domain_id = domain_id;
+		gport->dom_port_idx = i;
+
+		/* sysfs entry: */
+		ret = kobject_init_and_add(&port->kobj, get_ktype(kobj),
+					   kobj, "virt%d", i);
+		if (ret)
+			goto err_unlock;
+		ret = sysfs_create_file(&port->kobj,
+					&lbk_port_stats_attr.attr);
+		if (ret < 0)
+			goto err_unlock;
 	}
 
 	mutex_unlock(&octeontx_lbk_lock);

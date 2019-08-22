@@ -103,8 +103,12 @@ static int pko_get_lbk_chan(int lbk_base_chan, int lbk_port)
 	/* channel 15 */
 	if (lbk_port < LBK_PORT_PN_BASE_IDX)
 		chan = (lbk_port & 0x1) ? (lbk_port - 1) : (lbk_port + 1);
-	else /* lbk1/lbk2 port is connected to base channel id */
+	/* lbk1/lbk2 port is connected to base channel id */
+	else if (lbk_port < LBK_PORT_PP_LOOP_BASE_IDX)
 		chan = lbk_base_chan;
+	else /* regular loopback ports */
+		chan = lbk_port;
+
 	return chan;
 }
 

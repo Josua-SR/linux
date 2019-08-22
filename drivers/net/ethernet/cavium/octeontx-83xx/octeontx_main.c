@@ -199,6 +199,7 @@ static ssize_t octtx_create_domain_store(struct device *dev,
 	long int lbk_port[OCTTX_MAX_LBK_PORTS];
 	long int bgx_port[OCTTX_MAX_BGX_PORTS];
 	long int sdp_port[OCTTX_MAX_SDP_PORTS];
+	long loop_count = 0;
 	char *errmsg = "Wrong domain specification format.";
 	long i, k;
 
@@ -275,6 +276,14 @@ static ssize_t octtx_create_domain_store(struct device *dev,
 			if (kstrtol(strim(start), 10, &bgx_port[bgx_count]))
 				goto error;
 			bgx_count++;
+		} else if (!strncmp(strim(start), "loop", sizeof("loop") - 1)) {
+			if (loop_count != 0) {
+				errmsg = "Only one loop per domain allowed.";
+				goto error;
+			}
+			loop_count++;
+			lbk_port[lbk_count] = LBK_PORT_GIDX_ANY;
+			lbk_count++;
 		} else if (!strncmp(strim(start), "lbk", sizeof("lbk") - 1)) {
 			/* lbk:X:X - LBK port format is */
 			/* LBK<device_id>:<channel_num> */
@@ -964,8 +973,9 @@ int octeontx_create_domain(const char *name, int type, int sso_count,
 
 	domain->lbk_count = 0;
 	for (i = 0; i < lbk_count; i++) {
-		if (lbk_port[i] > LBK_PORT_PN_BASE_IDX +
-				LBK_PORT_PN_MAX - 1) {
+		if (lbk_port[i] != LBK_PORT_GIDX_ANY &&
+		    (lbk_port[i] > LBK_PORT_PN_BASE_IDX +
+		     LBK_PORT_PN_MAX - 1)) {
 			dev_err(octtx_device, "LBK invalid port g%ld\n",
 				lbk_port[i]);
 			goto error;

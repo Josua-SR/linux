@@ -139,6 +139,7 @@ struct octtx_bgx_port {
 #define LBK_PORT_PN_BASE_IDX   16
 /* Base port index of lbk0 port */
 #define LBK_PORT_PP_BASE_IDX   0
+#define LBK_PORT_PP_LOOP_BASE_IDX   56
 #define LBK0_DEVICE   0
 #define LBK1_DEVICE   1
 #define OCTTX_MAX_LBK_PORTS    (LBK_PORT_PN_MAX + LBK_PORT_PP_MAX)
