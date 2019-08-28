@@ -273,12 +273,6 @@ struct mbox_intf_ver {
 	u32	minor:10;
 };
 
-static const struct mbox_intf_ver MBOX_INTERFACE_VERSION = {
-	.platform = 0x01,
-	.major = 0x01,
-	.minor = 0x02
-};
-
 /* FIXME: This union is temporary until we agree to move all messages to RAM */
 union mbox_data {
 	u64			data;
