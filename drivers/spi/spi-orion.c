@@ -328,6 +328,7 @@ orion_spi_setup_transfer(struct spi_device *spi, struct spi_transfer *t)
 static void orion_spi_set_cs(struct spi_device *spi, bool enable)
 {
 	struct orion_spi *orion_spi;
+	u32 val;
 	int cs;
 
 	orion_spi = spi_master_get_devdata(spi->master);
@@ -337,15 +338,17 @@ static void orion_spi_set_cs(struct spi_device *spi, bool enable)
 	else
 		cs = spi->chip_select;
 
-	orion_spi_clrbits(orion_spi, ORION_SPI_IF_CTRL_REG, ORION_SPI_CS_MASK);
-	orion_spi_setbits(orion_spi, ORION_SPI_IF_CTRL_REG,
-				ORION_SPI_CS(cs));
+	val = readl(spi_reg(orion_spi, ORION_SPI_IF_CTRL_REG));
+	val &= ~ORION_SPI_CS_MASK;
+	val |= ORION_SPI_CS(cs);
 
 	/* Chip select logic is inverted from spi_set_cs */
 	if (!enable)
-		orion_spi_setbits(orion_spi, ORION_SPI_IF_CTRL_REG, 0x1);
+		val |= 0x1;
 	else
-		orion_spi_clrbits(orion_spi, ORION_SPI_IF_CTRL_REG, 0x1);
+		val &= ~0x1;
+
+	writel(val, spi_reg(orion_spi, ORION_SPI_IF_CTRL_REG));
 }
 
 static inline int orion_spi_wait_till_ready(struct orion_spi *orion_spi)
