@@ -275,13 +275,6 @@ static ssize_t octtx_create_domain_store(struct device *dev,
 			if (kstrtol(strim(start), 10, &bgx_port[bgx_count]))
 				goto error;
 			bgx_count++;
-		} else if (!strncmp(strim(start), "virt", sizeof("virt") - 1)) {
-			temp = strsep(&start, ":");
-			if (!start)
-				goto error;
-			if (kstrtol(strim(start), 10, &lbk_port[lbk_count]))
-				goto error;
-			lbk_count++;
 		} else if (!strncmp(strim(start), "lbk", sizeof("lbk") - 1)) {
 			/* lbk:X:X - LBK port format is */
 			/* LBK<device_id>:<channel_num> */
@@ -969,12 +962,6 @@ int octeontx_create_domain(const char *name, int type, int sso_count,
 	}
 	domain->pki_domain_created = true;
 
-	/* OCTEONTX allows to create two internal duplex (from the dataplane
-	 * user point of view) ports out of four available LBK devices:
-	 * virt0: transferring packets between PKO and PKI (LBK0);
-	 * virt1: transferring packets between PKO/PKI and NIC (LBK1 + LBK2).
-	 * NOTE: The domain specification validity should be done here.
-	 */
 	domain->lbk_count = 0;
 	for (i = 0; i < lbk_count; i++) {
 		if (lbk_port[i] > LBK_PORT_PN_BASE_IDX +
