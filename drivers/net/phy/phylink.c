@@ -1257,6 +1257,7 @@ int phylink_ethtool_set_pauseparam(struct phylink *pl,
 				   struct ethtool_pauseparam *pause)
 {
 	struct phylink_link_state *config = &pl->link_config;
+	u32 advertising = 0;
 
 	ASSERT_RTNL();
 
@@ -1277,12 +1278,35 @@ int phylink_ethtool_set_pauseparam(struct phylink *pl,
 	if (pause->tx_pause)
 		config->pause |= MLO_PAUSE_TX;
 
+	if (pause->autoneg) {
+		phylink_clear(config->advertising, Pause);
+		phylink_clear(config->advertising, Asym_Pause);
+		if (pause->rx_pause && pause->tx_pause) {
+			phylink_set(config->advertising, Pause);
+		} else if (pause->tx_pause) {
+			phylink_set(config->advertising, Asym_Pause);
+		} else if (pause->rx_pause) {
+			phylink_set(config->advertising, Pause);
+			phylink_set(config->advertising, Asym_Pause);
+		}
+		ethtool_convert_link_mode_to_legacy_u32(&advertising,
+							config->advertising);
+		if (pl->phydev)
+			pl->phydev->advertising = advertising;
+	}
+
 	if (!test_bit(PHYLINK_DISABLE_STOPPED, &pl->phylink_disable_state)) {
 		switch (pl->link_an_mode) {
 		case MLO_AN_PHY:
-			/* Silently mark the carrier down, and then trigger a resolve */
-			netif_carrier_off(pl->netdev);
-			phylink_run_resolve(pl);
+			if (pause->autoneg) {
+				phy_start_aneg(pl->phydev);
+			} else {
+				/* Silently mark the carrier down, and then
+				 * trigger a resolve.
+				 */
+				netif_carrier_off(pl->netdev);
+				phylink_run_resolve(pl);
+			}
 			break;
 
 		case MLO_AN_FIXED:
