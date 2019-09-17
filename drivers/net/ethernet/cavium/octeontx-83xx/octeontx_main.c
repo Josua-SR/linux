@@ -154,7 +154,7 @@ static int octeontx_reset_domain(void *master_data);
 static const struct mbox_intf_ver MBOX_INTERFACE_VERSION = {
 	.platform = 0x01,
 	.major = 0x01,
-	.minor = 0x01
+	.minor = 0x02
 };
 
 static ssize_t octtx_destroy_domain_store(struct device *dev,
