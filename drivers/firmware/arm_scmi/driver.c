@@ -361,7 +361,11 @@ scmi_xfer_poll_done(const struct scmi_chan_info *cinfo, struct scmi_xfer *xfer)
 		SCMI_SHMEM_CHAN_STAT_CHANNEL_FREE);
 }
 
+#ifdef CONFIG_MVL_MHU
+#define SCMI_MAX_POLL_TO_NS	(5000 * NSEC_PER_USEC)
+#else
 #define SCMI_MAX_POLL_TO_NS	(100 * NSEC_PER_USEC)
+#endif
 
 static bool scmi_xfer_done_no_timeout(const struct scmi_chan_info *cinfo,
 				      struct scmi_xfer *xfer, ktime_t stop)
