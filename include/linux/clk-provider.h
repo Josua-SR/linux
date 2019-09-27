@@ -217,6 +217,7 @@ struct clk_ops {
 	int		(*set_phase)(struct clk_hw *hw, int degrees);
 	void		(*init)(struct clk_hw *hw);
 	int		(*debug_init)(struct clk_hw *hw, struct dentry *dentry);
+	int		(*get_available_rates)(struct clk_hw *hw, u64 *rate);
 };
 
 /**
