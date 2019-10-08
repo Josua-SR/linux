@@ -713,6 +713,24 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.cpu_enable = cpu_enable_trap_zva_access,
 	},
 #endif
+#ifdef CONFIG_MRVL_ERRATUM_37119
+	{
+	/* Marvell OcteonTX 2, 96xx pass A0, A1, and B0 */
+		.desc = "Marvell erratum 37119",
+		.capability = ARM64_WORKAROUND_MRVL_37119,
+		ERRATA_MIDR_RANGE(MIDR_MRVL_OCTEONTX2_96XX,
+					0, 0,
+					1, 0),
+	},
+	{
+	/* Marvell OcteonTX 2, 95 pass A0/A1 */
+		.desc = "Marvell erratum 37119",
+		.capability = ARM64_WORKAROUND_MRVL_37119,
+		ERRATA_MIDR_RANGE(MIDR_MRVL_OCTEONTX2_95XX,
+					0, 0,
+					0, 1),
+	},
+#endif
 	{
 		.desc = "Mismatched cache line size",
 		.capability = ARM64_MISMATCHED_CACHE_LINE_SIZE,
