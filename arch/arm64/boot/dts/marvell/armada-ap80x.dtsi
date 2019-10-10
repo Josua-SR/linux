@@ -434,6 +434,13 @@
 				      <0x6f8084 0x8>;
 			};
 
+			edac_mc: edac-mc@20000 {
+				compatible = "marvell,armada-ap80x-edac-mc";
+				reg = <0x20000 0x1000>;
+				interrupts = <GIC_SPI 5 IRQ_TYPE_LEVEL_HIGH>;
+				status = "disabled";
+			};
+
 			revision-info@610fcc {
 				compatible = "marvell,ap806-rev-info";
 				reg = <0x610fcc 0x4>;
