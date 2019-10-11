@@ -1059,6 +1059,12 @@ static int arm_smmu_find_sme(struct arm_smmu_device *smmu, u16 id, u16 mask)
 	struct arm_smmu_smr *smrs = smmu->smrs;
 	int i, free_idx = -ENOSPC;
 
+	/* HACK: Save stream matching registers by not allocating for ECAM0 Bus1
+	 * devices
+	 */
+	if (smmu->model == CAVIUM_SMMUV2 && (id >> 8 == 1))
+		return -ENOSPC;
+
 	/* Stream indexing is blissfully easy */
 	if (!smrs)
 		return id;
