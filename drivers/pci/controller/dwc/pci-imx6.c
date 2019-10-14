@@ -34,6 +34,7 @@
 #include <linux/reset.h>
 #include <linux/busfreq-imx.h>
 #include <linux/regulator/consumer.h>
+#include <linux/wait.h>
 #include "../../pci.h"
 
 #include "pcie-designware.h"
@@ -98,7 +99,11 @@ struct imx_pcie {
 	struct regulator	*pcie_phy_regulator;
 	struct regulator	*pcie_bus_regulator;
 	struct regulator	*epdev_on;
+	wait_queue_head_t rq;
+	wait_queue_head_t wq;
 };
+
+struct pcie_port *ppp;
 
 /* Parameters for the waiting for PCIe PHY PLL to lock on i.MX7 */
 #define PHY_PLL_LOCK_WAIT_MAX_RETRIES	2000
@@ -2193,6 +2198,7 @@ static irqreturn_t imx_pcie_dma_isr(int irq, void *param)
 		writel(irqs & DMA_DONE_INT_STS,
 				pci->dbi_base + offset + DMA_WRITE_INT_CLR);
 		dma_w_end = 1;
+		wake_up(&imx_pcie->wq);
 	} else if (irqs & DMA_ABORT_INT_STS) {
 		pr_info("imx pcie dma write error 0x%0x.\n", irqs);
 	}
@@ -2203,6 +2209,7 @@ static irqreturn_t imx_pcie_dma_isr(int irq, void *param)
 		writel(irqs & DMA_DONE_INT_STS,
 				pci->dbi_base + offset + DMA_READ_INT_CLR);
 		dma_r_end = 1;
+		wake_up(&imx_pcie->rq);
 	} else if (irqs & DMA_ABORT_INT_STS) {
 		pr_info("imx pcie dma read error 0x%0x.", irqs);
 	}
@@ -2219,7 +2226,7 @@ static irqreturn_t imx_pcie_dma_isr(int irq, void *param)
  * @len: transfer length.
  */
 static int imx_pcie_local_dma_start(struct pcie_port *pp, bool dir,
-		unsigned int chl, dma_addr_t src, dma_addr_t dst,
+		unsigned int chl, void *ptr, dma_addr_t src, dma_addr_t dst,
 		unsigned int len)
 {
 	u32 offset, doorbell, unroll_cal;
@@ -2233,14 +2240,18 @@ static int imx_pcie_local_dma_start(struct pcie_port *pp, bool dir,
 
 	offset = imx_pcie->dma_unroll_offset;
 	/* enable dma engine, dir 1:read. 0:write. */
-	if (dir)
+	if (dir) {
+		dma_map_single (imx_pcie->pci->dev, ptr, len, DMA_FROM_DEVICE);
 		writel(DMA_READ_ENGINE_EN,
 				pci->dbi_base + offset
 				+ DMA_READ_ENGINE_EN_OFF);
-	else
+	}
+	else {
+		dma_map_single (imx_pcie->pci->dev, ptr, len, DMA_TO_DEVICE);
 		writel(DMA_WRITE_ENGINE_EN,
 				pci->dbi_base + offset
 				+ DMA_WRITE_ENGINE_EN_OFF);
+	}
 	writel(0x0, pci->dbi_base + offset + DMA_WRITE_INT_MASK);
 	writel(0x0, pci->dbi_base + offset + DMA_READ_INT_MASK);
 	 /* ch dir and ch num */
@@ -2266,11 +2277,53 @@ static int imx_pcie_local_dma_start(struct pcie_port *pp, bool dir,
 		writel(0x0, pci->dbi_base + unroll_cal + 0x18);
 	}
 
+	wmb();
 	doorbell = dir ? DMA_READ_DOORBELL : DMA_WRITE_DOORBELL;
 	writel(chl, pci->dbi_base + offset + doorbell);
 
 	return 0;
 }
+
+int imx8mm_read_from_pcie(void * ptr, dma_addr_t dst, dma_addr_t src, unsigned int length)
+{
+	int ret;
+	int sig;
+	struct dw_pcie *pci = to_dw_pcie_from_pp(ppp);
+	struct imx_pcie *imx_pcie = to_imx_pcie(pci);
+	dma_r_end = 0;
+
+	ret = imx_pcie_local_dma_start(ppp, 1 /*read*/, 0, ptr, src, dst, length);
+	if (ret != 0) {
+		printk ("error in DMA - %d\n",ret);
+	}
+	sig = wait_event_interruptible(imx_pcie->rq, dma_r_end == 1);
+	if (sig) {
+		printk ("Got non zero signal\n");
+		return -EINTR;
+	}
+	return ret;
+}
+EXPORT_SYMBOL(imx8mm_read_from_pcie);
+
+int imx8mm_write_to_pcie(void * ptr, dma_addr_t dst, dma_addr_t src, unsigned int length)
+{
+	int ret;
+	int sig;
+	struct dw_pcie *pci = to_dw_pcie_from_pp(ppp);
+	struct imx_pcie *imx_pcie = to_imx_pcie(pci);
+	dma_w_end = 0;
+	ret = imx_pcie_local_dma_start(ppp, 0 /*write */, 0, ptr, src, dst, length);
+	if (ret != 0) {
+		printk ("error in DMA - %d\n",ret);
+	}
+	sig = wait_event_interruptible(imx_pcie->wq, dma_w_end == 1);
+	if (sig) {
+		printk ("Got non zero signal\n");
+		return -EINTR;
+	}
+	return ret;
+}
+EXPORT_SYMBOL(imx8mm_write_to_pcie);
 
 static int imx_pcie_probe(struct platform_device *pdev)
 {
@@ -2728,7 +2781,7 @@ static int imx_pcie_probe(struct platform_device *pdev)
 
 		/* EP write the test region to remote RC's DDR memory */
 		if (dma_en) {
-			imx_pcie_local_dma_start(pp, 0, 0, test_reg1_dma,
+			imx_pcie_local_dma_start(pp, 0, 0, test_reg1, test_reg1_dma,
 					pp->mem_base + pp->cpu_addr_offset,
 					test_region_size);
 			timeout = jiffies + msecs_to_jiffies(300);
@@ -2751,7 +2804,7 @@ static int imx_pcie_probe(struct platform_device *pdev)
 		/* EP read the test region back from remote RC's DDR memory */
 		if (dma_en) {
 			imx_pcie_local_dma_start(pp, 1, 0,
-					pp->mem_base + pp->cpu_addr_offset,
+					test_reg2, pp->mem_base + pp->cpu_addr_offset,
 					test_reg2_dma, test_region_size);
 			timeout = jiffies + msecs_to_jiffies(300);
 			do {
@@ -2793,6 +2846,8 @@ static int imx_pcie_probe(struct platform_device *pdev)
 			dev_info(dev, "pcie ep: Data transfer is failed.\n");
 		} /* end of self io test. */
 	} else {
+		int irq;
+		struct pcie_port *pp = &pci->pp;
 		/* add attributes for bus freq */
 		imx_pcie_attrgroup.attrs = imx_pcie_rc_attrs;
 		ret = sysfs_create_group(&pdev->dev.kobj, &imx_pcie_attrgroup);
@@ -2839,6 +2894,29 @@ static int imx_pcie_probe(struct platform_device *pdev)
 		if (IS_ENABLED(CONFIG_RC_MODE_IN_EP_RC_SYS)
 				&& (imx_pcie->hard_wired == 0))
 			imx_pcie_regions_setup(&pdev->dev);
+		init_waitqueue_head(&imx_pcie->wq);
+		init_waitqueue_head(&imx_pcie->rq);
+
+		irq = of_irq_get(node, 1);
+		if (irq > 0)
+			dma_en = 1;
+		else
+			dma_en = 0;
+		/* configure the DMA INT ISR */
+		ret = request_irq(irq, imx_pcie_dma_isr,
+				  IRQF_SHARED, "imx-pcie-dma", pp);
+		if (ret) {
+			pr_err("register interrupt %d failed, rc %d\n",
+				irq, ret);
+			dma_en = 0;
+		}
+		ppp = pp;
+		val = readl(pci->dbi_base + DMA_CTRL_VIEWPORT_OFF);
+		if (val == 0xffffffff)
+			imx_pcie->dma_unroll_offset =
+				DMA_UNROLL_CDM_OFFSET - DMA_REG_OFFSET;
+		else
+			imx_pcie->dma_unroll_offset = 0;
 	}
 	pci_imx_set_msi_en(&pci->pp);
 
