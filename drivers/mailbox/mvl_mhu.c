@@ -5,7 +5,7 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 2018 Marvell
+ * Copyright (C) 2019 Marvell
  *
  */
 #include <linux/pci.h>
@@ -19,8 +19,11 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 
-#define DRV_NAME "mbox-thunderx"
 #define BAR0 0
+#define SCP_INDEX    0x0
+#define DEV_AP0      0x2
+#define SCP_TO_AP_INTERRUPT 2
+#define DRV_NAME "mbox-thunderx"
 
 #define XCPX_DEVY_XCP_MBOX_LINT_OFFSET 0x000E1C00
 #define XCP_TO_DEV_XCP_MBOX_LINT(xcp_core, device_id)  \
@@ -29,9 +32,6 @@
 	((uint64_t)device_id << 4))
 
 #define AP0_TO_SCP_MBOX_LINT    XCP_TO_DEV_XCP_MBOX_LINT(SCP_INDEX, DEV_AP0)
-
-#define SCP_INDEX    0x0
-#define DEV_AP0      0x2
 
 /*
  * Doorbell-Register: XCP(0..1)_DEV(0..7)_XCP_MBOX
@@ -63,6 +63,13 @@
 
 #define MHU_NUM_PCHANS	3	/* Secure, Non-Secure High and Low Priority */
 #define MHU_CHAN_MAX	20	/* Max channels to save on unused RAM */
+
+#define XCPX_XCP_DEVY_MBOX_RINT_OFFSET 0x000D1C00
+#define XCPX_XCP_DEVY_MBOX_RINT(xcp_core, device_id) \
+	(XCPX_XCP_DEVY_MBOX_RINT_OFFSET | \
+	((uint64_t) xcp_core << 36) | \
+	((uint64_t)device_id << 4))
+#define SCP_TO_AP0_MBOX_RINT  XCPX_XCP_DEVY_MBOX_RINT(SCP_INDEX, DEV_AP0)
 
 struct mvl_mhu_link {
 	unsigned int irq;
@@ -292,26 +299,33 @@ static struct mbox_chan *mvl_mhu_mbox_xlate(struct mbox_controller *mbox,
 	return chan;
 }
 
-#ifdef MVL_MHU_INTERRUPT_MODE
-static irqreturn_t mvl_mhu_rx_interrupt(int irq, void *p)
+/* top half of rx interrupt */
+static irqreturn_t mvl_mhu_rx_interrupt_thread(int irq, void *p)
 {
 	struct mvl_mhu *mhu = p;
-	unsigned int pchan = mvl_mhu_mbox_irq_to_pchan_num(mhu, irq);
-	struct mbox_chan *chan = mvl_mhu_mbox_to_channel(&mhu->mbox, pchan, 0);
-	void __iomem *base = mhu->mlink[pchan].rx_reg;
-	u32 val;
+	void __iomem *base = mhu->base;
 
-	val = readl_relaxed(base + INTR_STAT_OFS);
-	if (!val)
-		return IRQ_NONE;
+	pr_err("!!! FATAL ERROR IN AVS BUS !!! FATAL ERROR IN AVS BUS !!!\n");
 
-	mbox_chan_received_data(chan, (void *)&val);
-
-	writel_relaxed(val, base + INTR_CLR_OFS);
+	/* Clear the interrupt : Write on clear */
+	writel_relaxed(0x1, base + SCP_TO_AP0_MBOX_RINT);
 
 	return IRQ_HANDLED;
 }
-#endif
+
+static irqreturn_t mvl_mhu_rx_interrupt(int irq, void *p)
+{
+	u64 val;
+	struct mvl_mhu *mhu = p;
+	void __iomem *base = mhu->base;
+
+	/* Read interrupt status register */
+	val = readl_relaxed(base + SCP_TO_AP0_MBOX_RINT);
+	if (!val)
+		return IRQ_NONE;
+
+	return IRQ_WAKE_THREAD;
+}
 
 static bool mvl_mhu_last_tx_done(struct mbox_chan *chan)
 {
@@ -372,11 +386,10 @@ static const struct mvl_mhu_mbox_pdata mvl_mhu_doorbell_pdata = {
 	.support_doorbells = true,
 };
 
-
 static int mvl_mhu_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	u32 cell_count;
-	int i, err, max_chans, ret;
+	int i, err, max_chans, ret, nvec, irq_num;
 	irq_handler_t handler;
 	struct mvl_mhu *mhu;
 	struct mbox_chan *chans;
@@ -418,11 +431,11 @@ static int mvl_mhu_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (!mhu)
 		return -ENOMEM;
 
-#ifdef MVL_MHU_INTERRUPT_MODE
-	err = pci_enable_device(adev);
+
+	err = pci_enable_device(pdev);
 	if (err)
 		dev_err(dev, "Failed to enable PCI device: err %d\n", err);
-#endif
+
 	ret = pci_request_region(pdev, BAR0, DRV_NAME);
 	if (ret)
 		return ret;
@@ -506,6 +519,23 @@ static int mvl_mhu_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (ret)
 		dev_err(dev, "devm_request_irq FAILED ret : %d\n", ret);
 #endif
+
+
+	nvec = pci_alloc_irq_vectors(pdev, 0, 3, PCI_IRQ_MSIX);
+	if (nvec < 0) {
+		dev_err(dev, "irq vectors allocation failed:%d\n", nvec);
+		return nvec;
+	}
+
+	/* Obtain irq number for scp to AP interrupt */
+	irq_num = pci_irq_vector(pdev, SCP_TO_AP_INTERRUPT);
+	/* register interrupts */
+	ret =  request_threaded_irq(irq_num, mvl_mhu_rx_interrupt,
+					mvl_mhu_rx_interrupt_thread, 0,
+					       DRV_NAME, mhu);
+	if (ret)
+		dev_err(dev, "request_irq failed:%d\n", ret);
+
 	return 0;
 }
 
