@@ -1663,7 +1663,7 @@ static int __init octeontx_init_module(void)
 		goto dpipf_err;
 	}
 
-	zippf = try_then_request_module(symbol_get(zippf_com), "zippf");
+	zippf = try_then_request_module(symbol_get(zippf_com), "octeontx-zip");
 	if (!zippf) {
 		ret = -ENODEV;
 		goto zippf_err;

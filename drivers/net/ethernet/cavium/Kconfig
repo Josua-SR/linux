@@ -181,14 +181,6 @@ config OCTEONTX_DPI
 	  It transfers data between onchip IO bus and SLI.
 	  SLI interfaces PEM(PCIe) blocks.
 
-config OCTEONTX_ZIP_PF
-	tristate "OcteonTX ZIP physical function driver(ZIP_PF)"
-	depends on 64BIT
-	default y
-	help
-	  Select this option to enable ZIP Physical function.
-	  ZIP provides hardware compression/decompression support.
-
 config OCTEONTX_SLI_PF
 	tristate "OcteonTX SLI physical function driver(SLI_PF)"
 	depends on 64BIT && OCTEONTX_DPI && OCTEONTX_RST
@@ -204,7 +196,7 @@ config OCTEONTX
 	depends on THUNDER_NIC_BGX && OCTEONTX_FPA_PF && OCTEONTX_SSO_PF
 	depends on OCTEONTX_PKO_PF && OCTEONTX_SSOW_PF && OCTEONTX_PKI
 	depends on OCTEONTX_DPI && OCTEONTX_LBK && OCTEONTX_TIM_PF
-	depends on OCTEONTX_ZIP_PF && OCTEONTX_SLI_PF
+	depends on OCTEONTX_SLI_PF
 	depends on CRYPTO_DEV_OCTEONTX_CPT
 	default y
 	help
