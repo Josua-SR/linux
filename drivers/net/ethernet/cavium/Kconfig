@@ -198,6 +198,7 @@ config OCTEONTX
 	depends on OCTEONTX_DPI && OCTEONTX_LBK && OCTEONTX_TIM_PF
 	depends on OCTEONTX_SLI_PF
 	depends on CRYPTO_DEV_OCTEONTX_CPT
+	depends on CRYPTO_DEV_OCTEONTX_ZIP
 	default y
 	help
 	  Select this option to enable Octeon coprocessor management.
