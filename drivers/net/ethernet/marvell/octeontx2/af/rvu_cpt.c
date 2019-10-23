@@ -419,14 +419,13 @@ int rvu_mbox_handler_cpt_inline_ipsec_cfg(struct rvu *rvu,
 	switch (req->dir) {
 	case CPT_INLINE_INBOUND:
 		ret = cpt_inline_ipsec_cfg_inbound(rvu, blkaddr, cptlf, req);
-	break;
+		break;
 
 	case CPT_INLINE_OUTBOUND:
 		ret = cpt_inline_ipsec_cfg_outbound(rvu, blkaddr, cptlf, req);
-	break;
+		break;
 
 	default:
-
 		return CPT_AF_ERR_PARAM;
 	}
 
@@ -496,8 +495,7 @@ int rvu_mbox_handler_cpt_rd_wr_register(struct rvu *rvu,
 		req->reg_offset &= 0xFF000;
 		req->reg_offset += lf << 3;
 		rsp->reg_offset = req->reg_offset;
-	}
-	if (!(req->hdr.pcifunc & RVU_PFVF_FUNC_MASK)) {
+	} else if (!(req->hdr.pcifunc & RVU_PFVF_FUNC_MASK)) {
 		/* Registers that can be accessed from PF */
 		switch (req->reg_offset & 0xFF000) {
 		case CPT_AF_PF_FUNC:
@@ -505,7 +503,7 @@ int rvu_mbox_handler_cpt_rd_wr_register(struct rvu *rvu,
 		case CPT_AF_CONSTANTS1:
 			if (req->reg_offset & 0xFFF)
 				goto error;
-		break;
+			break;
 
 		case CPT_AF_EXEX_STS(0):
 		case CPT_AF_EXEX_CTL(0):
@@ -514,12 +512,12 @@ int rvu_mbox_handler_cpt_rd_wr_register(struct rvu *rvu,
 			offs = req->reg_offset & 0xFFF;
 			if ((offs % 8) || (offs >> 3) > 127)
 				goto error;
-		break;
-		case CPT_AF_LFX_CTL(0):
-		break;
+			break;
 		default:
 			goto error;
 		}
+	} else {
+		goto error;
 	}
 
 	if (req->is_write)
