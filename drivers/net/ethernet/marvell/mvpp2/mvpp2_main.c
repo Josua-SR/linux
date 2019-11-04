@@ -612,15 +612,36 @@ static void mvpp23_bm_set_8pool_mode(struct mvpp2 *priv)
 	mvpp2_write(priv, MVPP22_BM_POOL_BASE_ADDR_HIGH_REG, val);
 }
 
+/* Cleanup pool before actual initialization in the OS */
+static void mvpp2_bm_pool_cleanup(struct mvpp2 *priv, int pool_id)
+{
+	u32 val;
+	int i;
+
+	/* Drain the BM from all possible residues left by firmware */
+	for (i = 0; i < MVPP2_BM_POOL_SIZE_MAX; i++)
+		mvpp2_read(priv, MVPP2_BM_PHY_ALLOC_REG(pool_id));
+
+	/* Stop the BM pool */
+	val = mvpp2_read(priv, MVPP2_BM_POOL_CTRL_REG(pool_id));
+	val |= MVPP2_BM_STOP_MASK;
+	mvpp2_write(priv, MVPP2_BM_POOL_CTRL_REG(pool_id), val);
+
+	/* Mask BM all interrupts */
+	mvpp2_write(priv, MVPP2_BM_INTR_MASK_REG(pool_id), 0);
+	/* Clear BM cause register */
+	mvpp2_write(priv, MVPP2_BM_INTR_CAUSE_REG(pool_id), 0);
+}
+
 static int mvpp2_bm_init(struct platform_device *pdev, struct mvpp2 *priv)
 {
 	int i, err;
 
 	for (i = 0; i < MVPP2_BM_POOLS_NUM; i++) {
-		/* Mask BM all interrupts */
-		mvpp2_write(priv, MVPP2_BM_INTR_MASK_REG(i), 0);
-		/* Clear BM cause register */
-		mvpp2_write(priv, MVPP2_BM_INTR_CAUSE_REG(i), 0);
+		/* Make sure about the pool state in case it was
+		 * used by firmware.
+		 */
+		mvpp2_bm_pool_cleanup(priv, i);
 	}
 
 	/* Allocate and initialize BM pools */
