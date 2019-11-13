@@ -684,7 +684,7 @@ struct __attribute__((__packed__)) mbox_tim_ring_conf {
 #define MBOX_PKI_PORT_CREATE_QOS		11
 /* Modify offset from the qpg_base */
 #define MBOX_PKI_PORT_MODIFY_QOS		12
-/* Delet the complete qpg entries attached to this port */
+/* Delete the complete qpg entries attached to this port */
 #define MBOX_PKI_PORT_DELETE_QOS		13
 #define MBOX_PKI_PORT_PKTDROP_CONFIG		14
 #define MBOX_PKI_PORT_WQE_GEN_CONFIG		15
@@ -870,6 +870,7 @@ struct mbox_pki_qos_entry {
 	u8 grptag_bad;
 	u8 ena_red;
 	u8 ena_drop;
+	u8 tag_type;
 };
 
 /* hardcoded TODO */
@@ -888,7 +889,7 @@ typedef struct mbox_pki_port_create_qos {
 	struct mbox_pki_qos_entry qos_entry[MBOX_PKI_MAX_QOS_ENTRY];
 } mbox_pki_qos_cfg_t;
 
-/* pki flow/style enable qos */
+/* pki flow/style modify qos */
 typedef struct mbox_pki_port_modify_qos_entry {
 	u8 port_type;
 	u16 index;
@@ -900,8 +901,15 @@ typedef struct mbox_pki_port_modify_qos_entry {
 		u8 f_gaura:1;
 		u8 f_grptag_ok:1;
 		u8 f_grptag_bad:1;
+		u8 f_tag_type:1;
 	} mmask;
 	struct mbox_pki_qos_entry qos_entry;
-} mbox_pki_mod_qos_t;
+} mbox_pki_qos_mod_t;
+
+/* pki flow/style delete qos */
+typedef struct mbox_pki_port_delete_qos_entry {
+	u8 port_type;
+	u16 index;
+} mbox_pki_qos_del_t;
 
 #endif
