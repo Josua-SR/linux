@@ -15,6 +15,8 @@
 #define CP110_PCIEx_REG0_BASE(iface)	(CP110_BASE + 0x600000 + (iface) * 0x20000)
 #define CP110_PCIEx_REG1_BASE(iface)	(CP110_PCIEx_CPU_MEM_BASE(iface) + \
 					 CP110_PCIE_MEM_SIZE(iface))
+#define CP110_PCIE_EP_REG_BASE(iface)	(CP110_BASE + 0x600000 + \
+					 (iface) * 0x4000)
 
 #define CP110_EIP197_INDEX		CP110_NUM
 #define CP110_TDM_INDEX			CP110_NUM
@@ -550,6 +552,19 @@
 			compatible = "marvell,uio-sam";
 			eip_access = <&CP110_LABEL(crypto)>;
 		};
+	};
+
+	CP110_LABEL(pcie_ep): pcie-ep@600000 {
+		compatible = "marvell,armada-pcie-ep", "snps,dw-pcie";
+		reg =	<U64_TO_U32_H(CP110_PCIE_EP_REG_BASE(0))
+			 U64_TO_U32_L(CP110_PCIE_EP_REG_BASE(0)) 0 0x4000>,
+			<U64_TO_U32_H(CP110_PCIE_EP_REG_BASE(2))
+			 U64_TO_U32_L(CP110_PCIE_EP_REG_BASE(2)) 0 0x80000>,
+			<U64_TO_U32_H(CP110_PCIE_EP_REG_BASE(1))
+			 U64_TO_U32_L(CP110_PCIE_EP_REG_BASE(1)) 0 0x1000>;
+		reg-names = "core", "lm", "shadow_core";
+		clocks = <&CP110_LABEL(clk) 1 13>;
+		status = "disabled";
 	};
 
 	CP110_LABEL(pcie0): pcie@600000 {
