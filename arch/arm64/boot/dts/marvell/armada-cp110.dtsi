@@ -567,6 +567,16 @@
 		status = "disabled";
 	};
 
+	CP110_LABEL(pci_ep_uio): pci-ep-uio {
+		compatible = "marvell,pci-ep-uio";
+		reg = <0 0 0 0x100000>, <0x80 0x00000000 0x8 0x000000000>;
+		reg-names = "bar0", "host-map";
+		device-id = <0x7080>;
+		class-code = <0x2>;
+		subclass-code = <0x0>;
+		status = "disabled";
+	};
+
 	CP110_LABEL(pcie0): pcie@600000 {
 		compatible = "marvell,armada8k-pcie", "snps,dw-pcie";
 		reg =
