@@ -1054,16 +1054,21 @@ static void arm_smmu_test_smr_masks(struct arm_smmu_device *smmu)
 	smmu->smr_mask_mask = smr >> SMR_MASK_SHIFT;
 }
 
+/* For emmc, the id is 000:01:01.4 => 0x10C */
+#define T83XX_MMC_ID 0x10C
 static int arm_smmu_find_sme(struct arm_smmu_device *smmu, u16 id, u16 mask)
 {
 	struct arm_smmu_smr *smrs = smmu->smrs;
 	int i, free_idx = -ENOSPC;
 
 	/* HACK: Save stream matching registers by not allocating for ECAM0 Bus1
-	 * devices
+	 * devices except mmc
 	 */
-	if (smmu->model == CAVIUM_SMMUV2 && (id >> 8 == 1))
-		return -ENOSPC;
+	if (smmu->model == CAVIUM_SMMUV2 && (id >> 8 == 1) &&
+		!strcmp(dev_name(smmu->dev), "830000000000.smmu0")) {
+		if (id != T83XX_MMC_ID)
+			return -ENOSPC;
+	}
 
 	/* Stream indexing is blissfully easy */
 	if (!smrs)
