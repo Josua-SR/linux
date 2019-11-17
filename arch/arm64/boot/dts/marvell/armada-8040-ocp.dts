@@ -119,7 +119,7 @@
 	status = "okay";
 	/* Network PHY */
 	managed = "in-band-status";
-	phy-mode = "10gbase-kr";
+	phy-mode = "sgmii";
 	/* Generic PHY, providing serdes lanes */
 	phys = <&cp1_comphy4 0>;
 };
