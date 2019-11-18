@@ -64,6 +64,8 @@
 #define PCI_MSI_FLAGS_QSIZE_OFF		4
 #define PCIE_MSI_MSG_DATA(is_64)	(is_64 ? 0xC : 0x8)
 
+#define PCIE_SRIOV_DEVID_OFFSET		0x192
+
 #define MAX_ATU_REGIONS	16
 #define MAX_ATU_SIZE	(4ul * SZ_1G)
 
@@ -278,6 +280,7 @@ void armada_pcie_ep_write_header(void *ep_hdl, int func_id,
 
 	writew_relaxed(hdr->vendor_id, cfg_addr + PCI_VENDOR_ID);
 	writew_relaxed(hdr->device_id, cfg_addr + PCI_DEVICE_ID);
+	writew_relaxed(hdr->vf_device_id, cfg_addr + PCIE_SRIOV_DEVID_OFFSET);
 
 	writeb_relaxed(hdr->rev_id,  cfg_addr + PCI_REVISION_ID);
 	writeb_relaxed(hdr->progif_code,  cfg_addr + PCI_CLASS_PROG);

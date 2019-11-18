@@ -86,6 +86,13 @@ static int uio_pci_ep_probe(struct platform_device *pdev)
 	}
 	hdr.device_id = val;
 
+	ret = of_property_read_u32(node, "vf-device-id", &val);
+	if (ret) {
+		dev_err(dev, "missing vf-device-id from DT node\n");
+		return ret;
+	}
+	hdr.vf_device_id = val;
+
 	ret = of_property_read_u32(node, "class-code", &val);
 	if (ret) {
 		dev_err(dev, "missing class-code from DT node\n");

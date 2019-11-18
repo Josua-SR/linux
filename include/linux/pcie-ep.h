@@ -11,6 +11,7 @@
 struct pci_epf_header {
 	u16	vendor_id;
 	u16	device_id;
+	u16     vf_device_id;
 	u16	subsys_vendor_id;
 	u16	subsys_id;
 	u8	rev_id;
