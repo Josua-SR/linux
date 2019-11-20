@@ -3690,8 +3690,8 @@ static void mvpp2_rx_error(struct mvpp2_port *port,
 	char *err_str = NULL;
 
 	switch (status & MVPP2_RXD_ERR_CODE_MASK) {
-	case MVPP2_RXD_ERR_CRC:
-		err_str = "crc";
+	case MVPP2_RXD_ERR_MAC:
+		err_str = "MAC";
 		break;
 	case MVPP2_RXD_ERR_OVERRUN:
 		err_str = "overrun";
@@ -3701,7 +3701,7 @@ static void mvpp2_rx_error(struct mvpp2_port *port,
 		break;
 	}
 	if (err_str && net_ratelimit())
-		netdev_err(port->dev,
+		netdev_dbg(port->dev,
 			   "bad rx status %08x (%s error), size=%zu\n",
 			   status, err_str, sz);
 }
