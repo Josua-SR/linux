@@ -60,7 +60,6 @@
 			regulator-max-microvolt = <3300000>;
 			gpio = <&gpio2 19 GPIO_ACTIVE_HIGH>;
 			off-on-delay = <20000>;
-			enable-active-high;
 		};
 
 		reg_usb_vbus: usb-vbus {
