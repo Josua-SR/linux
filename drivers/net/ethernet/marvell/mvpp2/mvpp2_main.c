@@ -1851,11 +1851,19 @@ static void mvpp2_hw_get_stats(struct mvpp2_port *port, u64 *pstats)
 	int i, mib_size, queue, cpu;
 	unsigned int reg_offs;
 	u64 *ptmp;
+	u32 val;
 
 	mib_size = mvpp2_ethtool_get_mib_cntr_size();
 
-	for (i = 0; i < mib_size; i++)
+	for (i = 0; i < mib_size; i++) {
+		if (mvpp2_ethtool_regs[i].offset == MVPP2_MIB_COLLISION) {
+			val = mvpp2_read_count(port, &mvpp2_ethtool_regs[i]);
+			port->dev->stats.collisions += val;
+			*pstats++ += val;
+			continue;
+		}
 		*pstats++ += mvpp2_read_count(port, &mvpp2_ethtool_regs[i]);
+	}
 
 	/* Extend HW counters */
 	*pstats++ += mvpp2_read(port->priv, MVPP2_OVERRUN_DROP_REG(port->id));
@@ -5130,6 +5138,7 @@ mvpp2_get_stats64(struct net_device *dev, struct rtnl_link_stats64 *stats)
 	stats->rx_errors	= dev->stats.rx_errors;
 	stats->rx_dropped	= dev->stats.rx_dropped;
 	stats->tx_dropped	= dev->stats.tx_dropped;
+	stats->collisions	= dev->stats.collisions;
 }
 
 static int mvpp2_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
