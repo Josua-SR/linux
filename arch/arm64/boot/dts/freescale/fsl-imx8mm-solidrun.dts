@@ -240,7 +240,6 @@
                                 MX8MM_IOMUXC_SAI2_TXC_SAI2_TX_BCLK      0xd6
                                 MX8MM_IOMUXC_SAI2_MCLK_SAI2_MCLK        0xd6
                                 MX8MM_IOMUXC_SAI2_TXD0_SAI2_TX_DATA0    0xd6
-                                MX8MM_IOMUXC_GPIO1_IO08_GPIO1_IO8       0xd6
                                 MX8MM_IOMUXC_SAI2_RXD0_SAI2_RX_DATA0    0xd6
                         >;
                 };
@@ -594,23 +593,8 @@
         	clocks = <&clk IMX8MM_CLK_SAI2_ROOT>;
         	clock-names = "mclk";
         	reg = <0x1a>;
-       		wlf,mute-gpios = <&gpio1 8 GPIO_ACTIVE_LOW>;
         	status = "okay";
         };
-
-	adv_bridge: adv7535@3d {
-		compatible = "adi,adv7533";
-		reg = <0x3d>;
-		adi,addr-cec = <0x3b>;
-		adi,dsi-lanes = <4>;
-		status = "okay";
-
-		port {
-			adv7535_from_dsim: endpoint {
-				remote-endpoint = <&dsim_to_adv7535>;
-			};
-		};
-	};
 };
 
 &i2c3 {
@@ -630,6 +614,22 @@
                 compatible = "st,24c02", "atmel,24c02";
                 reg = <0x57>;
                 pagesize = <16>;
+        };
+
+	adv_bridge: adv7535@39 {
+                compatible = "adi,adv7533";
+                reg = <0x39>;
+                adi,addr-cec = <0x3c>;
+                adi,dsi-lanes = <4>;
+		adi,addr-edid = <0x3b>;
+		gpio = <&gpio1 8 GPIO_ACTIVE_HIGH>;
+                status = "okay";
+
+                port {
+                        adv7535_from_dsim: endpoint {
+                                remote-endpoint = <&dsim_to_adv7535>;
+                        };
+                };
         };
 };
 
