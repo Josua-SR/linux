@@ -12,6 +12,7 @@ Mandatory properties:
        allocated for the BAR.
 - reg-names: accepts "bar0","bar1",.."bar5" and "host-map"
 - device-id: The device id to configure in the PCI header
+- vf-device-id: The VF SRIOV device id to configure in the PCI SRIOV header
 - class_code: The class code to configure in the PCI header
 - subclass_code: The sub class code to configure in the PCI header
 
