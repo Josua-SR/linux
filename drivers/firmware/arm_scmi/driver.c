@@ -361,11 +361,7 @@ scmi_xfer_poll_done(const struct scmi_chan_info *cinfo, struct scmi_xfer *xfer)
 		SCMI_SHMEM_CHAN_STAT_CHANNEL_FREE);
 }
 
-#ifdef CONFIG_MVL_MHU
-#define SCMI_MAX_POLL_TO_NS	(200000 * NSEC_PER_USEC)
-#else
 #define SCMI_MAX_POLL_TO_NS	(100 * NSEC_PER_USEC)
-#endif
 
 static bool scmi_xfer_done_no_timeout(const struct scmi_chan_info *cinfo,
 				      struct scmi_xfer *xfer, ktime_t stop)
@@ -397,10 +393,6 @@ int scmi_do_xfer(const struct scmi_handle *handle, struct scmi_xfer *xfer)
 	if (unlikely(!cinfo))
 		return -EINVAL;
 
-#ifdef CONFIG_MVL_MHU
-	/* pollng mode */
-	xfer->hdr.poll_completion = true;
-#endif
 	ret = mbox_send_message(cinfo->chan, xfer);
 	if (ret < 0) {
 		dev_dbg(dev, "mbox send fail %d\n", ret);
@@ -485,10 +477,6 @@ int scmi_xfer_get_init(const struct scmi_handle *handle, u8 msg_id, u8 prot_id,
 	xfer->hdr.protocol_id = prot_id;
 	xfer->hdr.poll_completion = false;
 
-#ifdef CONFIG_MVL_MHU
-	/* Enable polling mode */
-	xfer->hdr.poll_completion = true;
-#endif
 	*p = xfer;
 
 	return 0;
