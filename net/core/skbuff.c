@@ -353,7 +353,8 @@ struct sk_buff *build_skb_around(struct sk_buff *skb,
 }
 EXPORT_SYMBOL(build_skb_around);
 
-#define NAPI_SKB_CACHE_SIZE	64
+/* Keep this at 'napi budget + 1' for skb recycling */
+#define NAPI_SKB_CACHE_SIZE	(NAPI_POLL_WEIGHT + 1)
 
 struct napi_alloc_cache {
 	struct page_frag_cache page;
@@ -516,11 +517,22 @@ struct sk_buff *__napi_alloc_skb(struct napi_struct *napi, unsigned int len,
 	if (unlikely(!data))
 		return NULL;
 
-	skb = __build_skb(data, len);
-	if (unlikely(!skb)) {
+	if (!nc->skb_count) {
+		nc->skb_count = kmem_cache_alloc_bulk(skbuff_head_cache,
+						      gfp_mask, 4,
+						      nc->skb_cache);
+	}
+
+	if (likely(nc->skb_count)) {
+		skb = (struct sk_buff *)nc->skb_cache[--nc->skb_count];
+	} else {
+		/* alloc bulk failed */
 		skb_free_frag(data);
 		return NULL;
 	}
+
+	memset(skb, 0, offsetof(struct sk_buff, tail));
+	skb = build_skb_around(skb, data, len);
 
 	/* use OR instead of assignment to avoid clearing of bits in mask */
 	if (nc->page.pfmemalloc)
