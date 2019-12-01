@@ -48,6 +48,12 @@ static int uio_pci_ep_probe(struct platform_device *pdev)
 	u32 val;
 	u32 props;
 
+	ep = armada_pcie_ep_get();
+	if (!ep) {
+		dev_info(dev, "PCI EP probe deferred\n");
+		return -EPROBE_DEFER;
+	}
+
 	info = devm_kzalloc(dev, sizeof(*info), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
@@ -68,11 +74,7 @@ static int uio_pci_ep_probe(struct platform_device *pdev)
 	/* setup the PCI EP topology. This should eventually move to the PCI
 	 *  EP Function driver
 	 */
-	uio_pci->ep = ep = armada_pcie_ep_get();
-	if (!ep) {
-		dev_err(dev, "Failed to find PCI EP driver\n");
-		return -EPROBE_DEFER;
-	}
+	uio_pci->ep = ep;
 
 	/* Configure the EP PCIe header */
 	memset(&hdr, 0, sizeof(hdr));
