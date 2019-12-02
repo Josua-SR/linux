@@ -116,6 +116,8 @@ void armada_pcie_ep_setup_bar(void *ep_hdl, int func_id, u32 bar_num, u32 props,
 	void __iomem *bar_mask = cfg_shadow_func_base(ep, func_id,
 				PCI_BASE_ADDRESS_0 + (bar_num * 4));
 
+	dev_dbg(ep->dev, "func%d: BAR%d size=0x%llx set requested\n",
+		func_id, bar_num, sz);
 	if (space_type == PCI_BASE_ADDRESS_SPACE_IO) {
 		v = props & (~PCI_BASE_ADDRESS_IO_MASK);
 		writel_relaxed(v, bar);
@@ -155,6 +157,7 @@ void armada_pcie_ep_disable_bars(void *ep_hdl, int func_id, u16 mask)
 						      PCI_BASE_ADDRESS_0);
 	int bar;
 
+	dev_dbg(ep->dev, "func%d: disable BARs 0x%x\n", func_id, mask);
 	mask &= PCIE_EP_ALL_BARS;
 	for (bar = 0; mask; mask >>= 1, bar++) {
 		if (mask & 1)
@@ -179,6 +182,8 @@ int armada_pcie_ep_get_msi(void *ep_hdl, int func_id, int vec_id,
 	if (!(flags & PCI_MSI_FLAGS_ENABLE) || (vec_id > vec_cnt))
 		return -EINVAL;
 
+	dev_dbg(ep->dev, "func%d: get msi vector id/counter 0x%x/%d\n",
+		func_id, vec_id, vec_cnt);
 	msg->address_lo = readl(p + PCI_MSI_ADDRESS_LO);
 	if (flags & PCI_MSI_FLAGS_64BIT) {
 		msg->address_hi = readl(p + PCI_MSI_ADDRESS_HI);
@@ -197,6 +202,7 @@ void armada_pcie_ep_cfg_enable(void *ep_hdl, int func_id)
 	struct armada_pcie_ep *ep = (struct armada_pcie_ep *)ep_hdl;
 	u32 v;
 
+	dev_dbg(ep->dev, "func%d: config enable\n", func_id);
 	v = readl_relaxed(ep->lm_regs + PCIE_GLOBAL_CTRL);
 	v &= ~PCIE_GLOBAL_CTRL_CRS_EN;
 	writel_relaxed(v, ep->lm_regs + PCIE_GLOBAL_CTRL);
@@ -219,6 +225,9 @@ int armada_pcie_ep_remap_host(void *ep_hdl, u32 func_id, u64 local_base,
 	/* ATU window size must be power of 2 */
 	if (!is_power_of_2(size))
 		return -EINVAL;
+
+	dev_dbg(ep->dev, "func%d: remap local:host(size) %llx:%llx(%llx)\n",
+		func_id, local_base, host_base, size);
 
 	while (remain_size > 0) {
 		if (region > MAX_ATU_REGIONS) {
@@ -289,6 +298,8 @@ void armada_pcie_ep_bar_map(void *ep_hdl, u32 func_id, int bar,
 	    PCIE_ATU_CR2_BAR_EN |
 	    (bar << PCIE_ATU_CR2_BAR_OFF);
 	writel_relaxed(v, pl_regs + PCIE_ATU_CR2);
+	dev_dbg(ep->dev, "func%d: BAR%d map size@addr %llx@%llx\n",
+		func_id, bar, addr, size);
 }
 EXPORT_SYMBOL(armada_pcie_ep_bar_map);
 
@@ -341,9 +352,10 @@ static int armada_pcie_ep_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	ep->clk = devm_clk_get(dev, NULL);
-	if (PTR_ERR(ep->clk) == -EPROBE_DEFER)
+	if (PTR_ERR(ep->clk) == -EPROBE_DEFER) {
+		dev_info(dev, "PCIE EP probe deferred\n");
 		return -EPROBE_DEFER;
-
+	}
 	if (IS_ERR(ep->clk)) {
 		dev_err(dev, "can't find clock node\n");
 		return -ENODEV;
@@ -366,6 +378,9 @@ static int armada_pcie_ep_probe(struct platform_device *pdev)
 		return PTR_ERR(p);
 	}
 	ep->lm_regs = p;
+	dev_dbg(dev, "reg-%s va:pa(sz) %llx:%llx(%llx)\n",
+		"lm    ", (phys_addr_t)p, base->start,
+		base->end - base->start);
 
 	base = platform_get_resource_byname(pdev, IORESOURCE_MEM, "core");
 	p = devm_ioremap_resource(dev, base);
@@ -375,15 +390,22 @@ static int armada_pcie_ep_probe(struct platform_device *pdev)
 	}
 	ep->regs = p;
 	ep->pl_regs = p;
+	dev_dbg(dev, "reg-%s va:pa(sz) %llx:%llx(%llx)\n",
+		"core  ", (phys_addr_t)p, base->start,
+		base->end - base->start);
 
 	base = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 					    "shadow_core");
 	p = devm_ioremap_resource(dev, base);
 	if (IS_ERR(p)) {
-		dev_err(dev, "couldn't remap shadow regs base %pR\n", base);
+		dev_err(dev, "%s: couldn't remap shadow regs base %pR\n",
+			MODULE_NAME, base);
 		return PTR_ERR(p);
 	}
 	ep->shadow_regs = p;
+	dev_dbg(dev, "reg-%s va:pa(sz) %llx:%llx(%llx)\n",
+		"shadow", (phys_addr_t)p, base->start,
+		base->end - base->start);
 
 	/* Disable Function 0. Set the vendor ID to 0xFFFFFFFF to avoid
 	 * detection until the EP is fully configured
