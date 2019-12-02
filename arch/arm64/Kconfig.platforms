@@ -326,6 +326,7 @@ config ARCH_FSL_IMX8QM
 	select PM
 	select SOC_BUS
 	select GPIO_MXC_PAD_WAKEUP
+	select CLKSRC_MMIO
 	help
 	  This enables support for Freescale i.MX8QM SOC.
 
