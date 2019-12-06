@@ -97,10 +97,10 @@ static const char mv_pp2x_gstrings_stats[][ETH_GSTRING_LEN] = {
 	"tx-guard-trigger",
 };
 
-int mv_pp2x_check_speed_duplex_valid(struct ethtool_cmd *cmd,
+int mv_pp2x_check_speed_duplex_valid(const struct ethtool_link_ksettings *cmd,
 				     struct mv_port_link_status *pstatus)
 {
-	switch (cmd->duplex) {
+	switch (cmd->base.duplex) {
 	case DUPLEX_FULL:
 		pstatus->duplex = MV_PORT_DUPLEX_FULL;
 		break;
@@ -108,7 +108,7 @@ int mv_pp2x_check_speed_duplex_valid(struct ethtool_cmd *cmd,
 		pstatus->duplex = MV_PORT_DUPLEX_HALF;
 		break;
 	case DUPLEX_UNKNOWN:
-		if (cmd->speed == SPEED_1000) {
+		if (cmd->base.speed == SPEED_1000) {
 			pstatus->duplex = MV_PORT_DUPLEX_FULL;
 		} else {
 			pstatus->duplex = MV_PORT_DUPLEX_FULL;
@@ -120,7 +120,7 @@ int mv_pp2x_check_speed_duplex_valid(struct ethtool_cmd *cmd,
 		return -1;
 	}
 
-	switch (cmd->speed) {
+	switch (cmd->base.speed) {
 	case SPEED_100:
 		pstatus->speed = MV_PORT_SPEED_100;
 		return 0;
@@ -129,7 +129,7 @@ int mv_pp2x_check_speed_duplex_valid(struct ethtool_cmd *cmd,
 		return 0;
 	case SPEED_1000:
 		pstatus->speed = MV_PORT_SPEED_1000;
-		if (cmd->duplex)
+		if (cmd->base.duplex)
 			return 0;
 		pr_err("1G port doesn't support half duplex\n");
 		return -1;
@@ -140,20 +140,21 @@ int mv_pp2x_check_speed_duplex_valid(struct ethtool_cmd *cmd,
 }
 
 int mv_pp2x_autoneg_gmac_check_valid(struct mv_mac_data *mac, struct gop_hw *gop,
-				     struct ethtool_cmd *cmd, struct mv_port_link_status *pstatus)
+				     const struct ethtool_link_ksettings *cmd,
+				     struct mv_port_link_status *pstatus)
 {
 	int port_num = mac->gop_index;
 	int err;
 
 	err = mv_gop110_check_port_type(gop, port_num);
 	if (err) {
-		if (cmd->autoneg) {
+		if (cmd->base.autoneg) {
 			pr_err("GOP %d set to 1000Base-X and doesn't support autonegotiation\n", port_num);
 			return -EINVAL;
 		}
 		return 0;
 	}
-	if (!cmd->autoneg) {
+	if (!cmd->base.autoneg) {
 		err = mv_pp2x_check_speed_duplex_valid(cmd, pstatus);
 		if (err)
 			return -EINVAL;
@@ -162,11 +163,12 @@ int mv_pp2x_autoneg_gmac_check_valid(struct mv_mac_data *mac, struct gop_hw *gop
 	return 0;
 }
 
-int mv_pp2x_autoneg_xlg_check_valid(struct mv_mac_data *mac, struct ethtool_cmd *cmd)
+int mv_pp2x_autoneg_xlg_check_valid(struct mv_mac_data *mac,
+				    const struct ethtool_link_ksettings *cmd)
 {
 	int port_num = mac->gop_index;
 
-	if (cmd->autoneg) {
+	if (cmd->base.autoneg) {
 		pr_err("XLG GOP %d doesn't support autonegotiation\n", port_num);
 		return -EINVAL;
 	}
@@ -533,16 +535,19 @@ int mv_pp2x_get_gmii_speed(struct mv_pp2x_port *port)
 
 /* Get settings (phy address, speed) for ethtools */
 static int mv_pp2x_ethtool_get_settings(struct net_device *dev,
-					struct ethtool_cmd *cmd)
+					struct ethtool_link_ksettings *cmd)
 {
 	struct mv_pp2x_port *port = netdev_priv(dev);
 	struct mv_port_link_status	status;
 	phy_interface_t			phy_mode;
+	u32 supported, advertising;
 
 	if (port->priv->pp2_version == PPV21) {
 		if (!port->mac_data.phy_dev)
 			return -ENODEV;
-		return phy_ethtool_gset(port->mac_data.phy_dev, cmd);
+		phy_ethtool_ksettings_get(port->mac_data.phy_dev, cmd);
+
+		return 0;
 	}
 
 	/* No Phy device mngmt */
@@ -557,27 +562,27 @@ static int mv_pp2x_ethtool_get_settings(struct net_device *dev,
 		if (status.linkup) {
 			switch (status.speed) {
 			case MV_PORT_SPEED_10000:
-				cmd->speed = SPEED_10000;
+				cmd->base.speed = SPEED_10000;
 				break;
 			case MV_PORT_SPEED_1000:
-				cmd->speed = mv_pp2x_get_gmii_speed(port);
+				cmd->base.speed = mv_pp2x_get_gmii_speed(port);
 				break;
 			case MV_PORT_SPEED_100:
-				cmd->speed = SPEED_100;
+				cmd->base.speed = SPEED_100;
 				break;
 			case MV_PORT_SPEED_10:
-				cmd->speed = SPEED_10;
+				cmd->base.speed = SPEED_10;
 				break;
 			default:
 				return -EINVAL;
 			}
 			if (status.duplex == MV_PORT_DUPLEX_FULL)
-				cmd->duplex = 1;
+				cmd->base.duplex = 1;
 			else
-				cmd->duplex = 0;
+				cmd->base.duplex = 0;
 		} else {
-			cmd->speed  = SPEED_UNKNOWN;
-			cmd->duplex = SPEED_UNKNOWN;
+			cmd->base.speed  = SPEED_UNKNOWN;
+			cmd->base.duplex = SPEED_UNKNOWN;
 		}
 
 		phy_mode = port->mac_data.phy_mode;
@@ -586,51 +591,59 @@ static int mv_pp2x_ethtool_get_settings(struct net_device *dev,
 		    (phy_mode == PHY_INTERFACE_MODE_10GKR)   ||
 		    (phy_mode == PHY_INTERFACE_MODE_SFI) ||
 		    (phy_mode == PHY_INTERFACE_MODE_XFI)) {
-			cmd->autoneg = AUTONEG_DISABLE;
-			cmd->supported = (SUPPORTED_10000baseT_Full |
+			cmd->base.autoneg = AUTONEG_DISABLE;
+			supported = (SUPPORTED_10000baseT_Full |
 				SUPPORTED_FIBRE);
-			cmd->advertising = (ADVERTISED_10000baseT_Full |
+			advertising = (ADVERTISED_10000baseT_Full |
 				ADVERTISED_FIBRE);
-			cmd->port = PORT_FIBRE;
-			cmd->transceiver = XCVR_EXTERNAL;
+			cmd->base.port = PORT_FIBRE;
+			cmd->base.transceiver = XCVR_EXTERNAL;
 		} else {
-			cmd->supported = (SUPPORTED_10baseT_Half |
+			supported = (SUPPORTED_10baseT_Half |
 				SUPPORTED_10baseT_Full |
 				SUPPORTED_100baseT_Half	|
 				SUPPORTED_100baseT_Full |
 				SUPPORTED_Autoneg | SUPPORTED_TP |
 				SUPPORTED_MII |	SUPPORTED_1000baseT_Full);
-			cmd->advertising = (ADVERTISED_10baseT_Half |
+			advertising = (ADVERTISED_10baseT_Half |
 				ADVERTISED_10baseT_Full |
 				ADVERTISED_100baseT_Half |
 				ADVERTISED_100baseT_Full |
 				ADVERTISED_1000baseT_Full |
 				ADVERTISED_Autoneg | ADVERTISED_TP |
 				ADVERTISED_MII);
-			cmd->transceiver = XCVR_INTERNAL;
-			cmd->port = PORT_MII;
+			cmd->base.transceiver = XCVR_INTERNAL;
+			cmd->base.port = PORT_MII;
 
 			/* check if speed and duplex are AN */
 			if (mv_gop110_port_autoneg_status(&port->priv->hw.gop,
 							  &port->mac_data)) {
-				cmd->autoneg = AUTONEG_ENABLE;
+				cmd->base.autoneg = AUTONEG_ENABLE;
 			} else {
-				cmd->autoneg = AUTONEG_DISABLE;
+				cmd->base.autoneg = AUTONEG_DISABLE;
 			}
 		}
+
+		ethtool_convert_legacy_u32_to_link_mode(cmd->link_modes.supported,
+							supported);
+		ethtool_convert_legacy_u32_to_link_mode(cmd->link_modes.advertising,
+							advertising);
 
 		return 0;
 	}
 
-	return phy_ethtool_gset(port->mac_data.phy_dev, cmd);
+	phy_ethtool_ksettings_get(port->mac_data.phy_dev, cmd);
+
+	return 0;
 }
 
 void mv_pp2x_ethtool_set_gmac_config(struct mv_port_link_status status, struct gop_hw *gop,
-				     int gop_port, struct mv_mac_data *mac, struct ethtool_cmd *cmd)
+				     int gop_port, struct mv_mac_data *mac,
+				     const struct ethtool_link_ksettings *cmd)
 {
 	mv_gop110_force_link_mode_set(gop, mac, false, true);
-	mv_gop110_gmac_set_autoneg(gop, mac, cmd->autoneg);
-	if (cmd->autoneg) {
+	mv_gop110_gmac_set_autoneg(gop, mac, cmd->base.autoneg);
+	if (cmd->base.autoneg) {
 		mv_gop110_autoneg_restart(gop, mac);
 		mv_gop110_gmac_fc_set(gop, gop_port, MV_PORT_FC_AN_SYM);
 	} else {
@@ -642,7 +655,7 @@ void mv_pp2x_ethtool_set_gmac_config(struct mv_port_link_status status, struct g
 
 /* Set settings (phy address, speed) for ethtools */
 static int mv_pp2x_ethtool_set_settings(struct net_device *dev,
-					struct ethtool_cmd *cmd)
+					const struct ethtool_link_ksettings *cmd)
 {
 	struct mv_pp2x_port *port = netdev_priv(dev);
 	int err;
@@ -658,15 +671,17 @@ static int mv_pp2x_ethtool_set_settings(struct net_device *dev,
 		if (!port->mac_data.phy_dev)
 			return -ENODEV;
 		else
-			return phy_ethtool_sset(port->mac_data.phy_dev, cmd);
+			return phy_ethtool_ksettings_set(port->mac_data.phy_dev,
+							 cmd);
 	}
 
 	if (port->comphy) {
 		if (phy_get_mode(port->comphy[0]) != COMPHY_RXAUI0) {
-			err = mv_gop110_update_comphy(port, (u32)cmd->speed);
+			err = mv_gop110_update_comphy(port,
+						      (u32)cmd->base.speed);
 			if (err < 0)
 				return err;
-		} else if (cmd->speed != SPEED_10000) {
+		} else if (cmd->base.speed != SPEED_10000) {
 			pr_err("RXAUI port cannot change speed\n");
 			return -1;
 		}
@@ -683,7 +698,7 @@ static int mv_pp2x_ethtool_set_settings(struct net_device *dev,
 		err = mv_pp2x_autoneg_gmac_check_valid(mac, gop, cmd, &status);
 		if (err < 0)
 			return err;
-		if (cmd->speed != SPEED_2500)
+		if (cmd->base.speed != SPEED_2500)
 			mv_pp2x_ethtool_set_gmac_config(status, gop, gop_port, mac, cmd);
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
@@ -701,7 +716,7 @@ static int mv_pp2x_ethtool_set_settings(struct net_device *dev,
 	}
 
 	if (port->mac_data.phy_dev)
-		return phy_ethtool_sset(port->mac_data.phy_dev, cmd);
+		return phy_ethtool_ksettings_set(port->mac_data.phy_dev, cmd);
 
 	return 0;
 }
@@ -1327,8 +1342,8 @@ static void mv_pp2x_get_channels(struct net_device *netdev,
 
 static const struct ethtool_ops mv_pp2x_eth_tool_ops = {
 	.get_link		= ethtool_op_get_link,
-	.get_settings		= mv_pp2x_ethtool_get_settings,
-	.set_settings		= mv_pp2x_ethtool_set_settings,
+	.get_link_ksettings	= mv_pp2x_ethtool_get_settings,
+	.set_link_ksettings	= mv_pp2x_ethtool_set_settings,
 	.set_coalesce		= mv_pp2x_ethtool_set_coalesce,
 	.get_coalesce		= mv_pp2x_ethtool_get_coalesce,
 	.nway_reset		= mv_pp2x_eth_tool_nway_reset,
