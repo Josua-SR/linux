@@ -318,6 +318,9 @@ int mv_pp2x_eth_tool_nway_reset(struct net_device *dev)
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -330,7 +333,7 @@ int mv_pp2x_eth_tool_nway_reset(struct net_device *dev)
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		pr_err("XLG GOP %d doesn't support autonegotiation\n", mac->gop_index);
@@ -361,6 +364,9 @@ static void mv_pp2x_get_pauseparam(struct net_device *dev,
 
 	switch (phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -370,7 +376,7 @@ static void mv_pp2x_get_pauseparam(struct net_device *dev,
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		mv_gop110_port_link_status(gop,	mac, &status);
@@ -411,6 +417,9 @@ static int mv_pp2x_set_pauseparam(struct net_device *dev,
 
 	switch (phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -464,7 +473,7 @@ static int mv_pp2x_set_pauseparam(struct net_device *dev,
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		if (pause->autoneg) {
@@ -574,7 +583,7 @@ static int mv_pp2x_ethtool_get_settings(struct net_device *dev,
 		phy_mode = port->mac_data.phy_mode;
 		if ((phy_mode == PHY_INTERFACE_MODE_XAUI) ||
 		    (phy_mode == PHY_INTERFACE_MODE_RXAUI) ||
-		    (phy_mode == PHY_INTERFACE_MODE_KR)   ||
+		    (phy_mode == PHY_INTERFACE_MODE_10GKR)   ||
 		    (phy_mode == PHY_INTERFACE_MODE_SFI) ||
 		    (phy_mode == PHY_INTERFACE_MODE_XFI)) {
 			cmd->autoneg = AUTONEG_DISABLE;
@@ -665,6 +674,9 @@ static int mv_pp2x_ethtool_set_settings(struct net_device *dev,
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -676,7 +688,7 @@ static int mv_pp2x_ethtool_set_settings(struct net_device *dev,
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		mv_pp2x_autoneg_xlg_check_valid(mac, cmd);
@@ -1082,13 +1094,16 @@ static int mv_pp2x_ethtool_get_regs_len(struct net_device *dev)
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
 		return MV_PP2_REGS_GMAC_LEN * sizeof(u32);
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		return MV_PP2_REGS_XLG_LEN * sizeof(u32);
@@ -1118,6 +1133,9 @@ static void mv_pp2x_ethtool_get_regs(struct net_device *dev,
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -1126,7 +1144,7 @@ static void mv_pp2x_ethtool_get_regs(struct net_device *dev,
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		memset(p, 0, MV_PP2_REGS_XLG_LEN * sizeof(u32));
@@ -1263,13 +1281,16 @@ static void mv_pp2x_eth_tool_diag_test(struct net_device *netdev,
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		pr_err("10G Phy mode (%d) do not support test\n", mac->phy_mode);

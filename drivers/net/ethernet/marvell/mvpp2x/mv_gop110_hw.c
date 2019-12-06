@@ -420,6 +420,9 @@ int mv_gop110_gmac_mode_cfg(struct gop_hw *gop, struct mv_mac_data *mac)
 			mv_gop110_gmac_1000basex_cfg(gop, mac_num);
 	break;
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 		mv_gop110_gmac_rgmii_cfg(gop, mac_num);
 	break;
 	case PHY_INTERFACE_MODE_QSGMII:
@@ -1003,6 +1006,9 @@ int mv_gop110_port_init(struct gop_hw *gop, struct mv_mac_data *mac)
 	}
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 		mv_gop110_xlg_mac_1G_cfg(gop, mac_num);
 		mv_gop110_force_link_mode_set(gop, mac, false, true);
 		mv_gop110_gmac_reset(gop, mac_num, RESET);
@@ -1090,7 +1096,7 @@ int mv_gop110_port_init(struct gop_hw *gop, struct mv_mac_data *mac)
 		/* mac unreset */
 		mv_gop110_xlg_mac_reset(gop, mac_num, UNRESET);
 	break;
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 
@@ -1140,6 +1146,9 @@ int mv_gop110_port_reset(struct gop_hw *gop, struct mv_mac_data *mac)
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -1161,7 +1170,7 @@ int mv_gop110_port_reset(struct gop_hw *gop, struct mv_mac_data *mac)
 		mv_gop110_xlg_mac_reset(gop, mac_num, RESET);
 	break;
 	/* Stefan: need to check KR case */
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		/* mac unreset */
@@ -1185,6 +1194,9 @@ void mv_gop110_port_enable(struct gop_hw *gop, struct mv_mac_data *mac, struct m
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -1192,7 +1204,7 @@ void mv_gop110_port_enable(struct gop_hw *gop, struct mv_mac_data *mac, struct m
 		mv_gop110_force_link_mode_set(gop, mac, false, false);
 		mv_gop110_gmac_reset(gop, port_num, UNRESET);
 	break;
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		if (port->comphy)
@@ -1223,6 +1235,9 @@ void mv_gop110_port_disable(struct gop_hw *gop, struct mv_mac_data *mac, struct 
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -1230,7 +1245,7 @@ void mv_gop110_port_disable(struct gop_hw *gop, struct mv_mac_data *mac, struct 
 		mv_gop110_force_link_mode_set(gop, mac, false, true);
 		mv_gop110_gmac_reset(gop, port_num, RESET);
 	break;
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		mv_gop110_xlg_mac_port_disable(gop, port_num);
@@ -1263,6 +1278,9 @@ void mv_gop110_port_periodic_xon_set(struct gop_hw *gop,
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -1270,7 +1288,7 @@ void mv_gop110_port_periodic_xon_set(struct gop_hw *gop,
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		mv_gop110_xlg_mac_port_periodic_xon_set(gop, port_num, enable);
@@ -1287,6 +1305,9 @@ bool mv_gop110_port_is_link_up(struct gop_hw *gop, struct mv_mac_data *mac)
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -1294,7 +1315,7 @@ bool mv_gop110_port_is_link_up(struct gop_hw *gop, struct mv_mac_data *mac)
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		return mv_gop110_xlg_mac_link_status_get(gop, port_num);
@@ -1313,6 +1334,9 @@ int mv_gop110_port_link_status(struct gop_hw *gop, struct mv_mac_data *mac,
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -1320,7 +1344,7 @@ int mv_gop110_port_link_status(struct gop_hw *gop, struct mv_mac_data *mac,
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		mv_gop110_xlg_mac_link_status(gop, port_num, pstatus);
@@ -1382,6 +1406,9 @@ int mv_gop110_port_regs(struct gop_hw *gop, struct mv_mac_data *mac)
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -1390,7 +1417,7 @@ int mv_gop110_port_regs(struct gop_hw *gop, struct mv_mac_data *mac)
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		pr_info("\n[gop XLG MAC #%d registers]\n", port_num);
@@ -1409,6 +1436,9 @@ int mv_gop110_port_events_mask(struct gop_hw *gop, struct mv_mac_data *mac)
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -1416,7 +1446,7 @@ int mv_gop110_port_events_mask(struct gop_hw *gop, struct mv_mac_data *mac)
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		mv_gop110_xlg_port_link_event_mask(gop, port_num);
@@ -1434,6 +1464,9 @@ int mv_gop110_port_events_unmask(struct gop_hw *gop, struct mv_mac_data *mac)
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -1445,7 +1478,7 @@ int mv_gop110_port_events_unmask(struct gop_hw *gop, struct mv_mac_data *mac)
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		mv_gop110_xlg_port_external_event_unmask(gop, port_num, 1);
@@ -1463,6 +1496,9 @@ int mv_gop110_port_events_clear(struct gop_hw *gop, struct mv_mac_data *mac)
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -1470,7 +1506,7 @@ int mv_gop110_port_events_clear(struct gop_hw *gop, struct mv_mac_data *mac)
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		mv_gop110_xlg_port_link_event_clear(gop, port_num);
@@ -1498,6 +1534,9 @@ int mv_gop110_status_show(struct gop_hw *gop, struct mv_pp2x *pp2, int port_num)
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 		pr_info("Port mode               : RGMII");
 	break;
 	case PHY_INTERFACE_MODE_SGMII:
@@ -1514,7 +1553,7 @@ int mv_gop110_status_show(struct gop_hw *gop, struct mv_pp2x *pp2, int port_num)
 	case PHY_INTERFACE_MODE_RXAUI:
 		pr_info("Port mode               : RXAUI");
 	break;
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 		pr_info("Port mode               : KR");
 	break;
 	case PHY_INTERFACE_MODE_SFI:
@@ -1592,6 +1631,9 @@ int mv_gop110_speed_duplex_get(struct gop_hw *gop, struct mv_mac_data *mac,
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -1600,7 +1642,7 @@ int mv_gop110_speed_duplex_get(struct gop_hw *gop, struct mv_mac_data *mac,
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		mv_gop110_xlg_mac_speed_duplex_get(gop, port_num, speed,
@@ -1622,6 +1664,9 @@ int mv_gop110_speed_duplex_set(struct gop_hw *gop, struct mv_mac_data *mac,
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -1629,7 +1674,7 @@ int mv_gop110_speed_duplex_set(struct gop_hw *gop, struct mv_mac_data *mac,
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		mv_gop110_xlg_mac_speed_duplex_set(gop, port_num, speed,
@@ -1648,6 +1693,9 @@ int mv_gop110_autoneg_restart(struct gop_hw *gop, struct mv_mac_data *mac)
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_1000BASEX:
 	break;
 	case PHY_INTERFACE_MODE_SGMII:
@@ -1656,7 +1704,7 @@ int mv_gop110_autoneg_restart(struct gop_hw *gop, struct mv_mac_data *mac)
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		pr_err("%s: on supported for port mode (%d)", __func__,
@@ -1675,6 +1723,9 @@ int mv_gop110_fl_cfg(struct gop_hw *gop, struct mv_mac_data *mac)
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -1692,7 +1743,7 @@ int mv_gop110_fl_cfg(struct gop_hw *gop, struct mv_mac_data *mac)
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		return 0;
@@ -1712,6 +1763,9 @@ int mv_gop110_force_link_mode_set(struct gop_hw *gop, struct mv_mac_data *mac,
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -1722,7 +1776,7 @@ int mv_gop110_force_link_mode_set(struct gop_hw *gop, struct mv_mac_data *mac,
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		return 0;
@@ -1742,6 +1796,9 @@ int mv_gop110_force_link_mode_get(struct gop_hw *gop, struct mv_mac_data *mac,
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -1751,7 +1808,7 @@ int mv_gop110_force_link_mode_get(struct gop_hw *gop, struct mv_mac_data *mac,
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		return 0;
@@ -1771,6 +1828,9 @@ int mv_gop110_loopback_set(struct gop_hw *gop, struct mv_mac_data *mac,
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -1784,7 +1844,7 @@ int mv_gop110_loopback_set(struct gop_hw *gop, struct mv_mac_data *mac,
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		return 0;
@@ -3461,6 +3521,9 @@ void mv_gop110_max_rx_size_set(struct mv_pp2x_port *port)
 
 	switch (mac->phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -3469,7 +3532,7 @@ void mv_gop110_max_rx_size_set(struct mv_pp2x_port *port)
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 	case PHY_INTERFACE_MODE_XFI:
 		mv_gop110_xlg_mac_max_rx_size_set(gop,

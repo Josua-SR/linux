@@ -4385,6 +4385,9 @@ static void mv_serdes_port_init(struct mv_pp2x_port *port)
 
 	switch (port->mac_data.phy_mode) {
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 		break;
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
@@ -4405,7 +4408,7 @@ static void mv_serdes_port_init(struct mv_pp2x_port *port)
 			phy_set_mode(port->comphy[i], mode);
 		}
 	break;
-	case PHY_INTERFACE_MODE_KR:
+	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
 		if (port->mac_data.flags & MV_EMAC_F_5G)
 			mode = COMPHY_DEF(COMPHY_SFI_MODE, port->id,
@@ -4489,6 +4492,9 @@ void mv_pp2x_start_dev(struct mv_pp2x_port *port)
 	} else {
 		switch (mac->phy_mode) {
 		case PHY_INTERFACE_MODE_RGMII:
+		case PHY_INTERFACE_MODE_RGMII_ID:
+		case PHY_INTERFACE_MODE_RGMII_RXID:
+		case PHY_INTERFACE_MODE_RGMII_TXID:
 		case PHY_INTERFACE_MODE_SGMII:
 		case PHY_INTERFACE_MODE_QSGMII:
 		case PHY_INTERFACE_MODE_1000BASEX:
@@ -4497,7 +4503,7 @@ void mv_pp2x_start_dev(struct mv_pp2x_port *port)
 		break;
 		case PHY_INTERFACE_MODE_XAUI:
 		case PHY_INTERFACE_MODE_RXAUI:
-		case PHY_INTERFACE_MODE_KR:
+		case PHY_INTERFACE_MODE_10GKR:
 		case PHY_INTERFACE_MODE_SFI:
 		case PHY_INTERFACE_MODE_XFI:
 			mv_gop110_xlg_mac_max_rx_size_set(gop,
@@ -5940,8 +5946,11 @@ static int mv_pp2_init_emac_data(struct mv_pp2x_port *port,
 		case PHY_INTERFACE_MODE_QSGMII:
 			break;
 		case PHY_INTERFACE_MODE_RGMII:
+		case PHY_INTERFACE_MODE_RGMII_ID:
+		case PHY_INTERFACE_MODE_RGMII_RXID:
+		case PHY_INTERFACE_MODE_RGMII_TXID:
 			break;
-		case PHY_INTERFACE_MODE_KR:
+		case PHY_INTERFACE_MODE_10GKR:
 		case PHY_INTERFACE_MODE_SFI:
 		case PHY_INTERFACE_MODE_XFI:
 			speed = 0;
@@ -6009,14 +6018,14 @@ u32 mvp_pp2x_gop110_netc_cfg_create(struct mv_pp2x *priv)
 			if (mac->phy_mode == PHY_INTERFACE_MODE_SGMII ||
 			    mac->phy_mode == PHY_INTERFACE_MODE_1000BASEX)
 				val |= MV_NETC_GE_MAC2_SGMII;
-			else if (mac->phy_mode == PHY_INTERFACE_MODE_RGMII)
+			else if (phy_interface_mode_is_rgmii(mac->phy_mode))
 				val |= MV_NETC_GE_MAC2_RGMII;
 		}
 		if (mac->gop_index == 3) {
 			if (mac->phy_mode == PHY_INTERFACE_MODE_SGMII ||
 			    mac->phy_mode == PHY_INTERFACE_MODE_1000BASEX)
 				val |= MV_NETC_GE_MAC3_SGMII;
-			else if (mac->phy_mode == PHY_INTERFACE_MODE_RGMII)
+			else if (phy_interface_mode_is_rgmii(mac->phy_mode))
 				val |= MV_NETC_GE_MAC3_RGMII;
 		}
 	}
@@ -6042,7 +6051,7 @@ static void mv_pp2x_get_port_stats(struct mv_pp2x_port *port)
 			/* Check if MII underrun run fix should be triggered */
 			if ((mac->phy_mode == PHY_INTERFACE_MODE_SGMII) ||
 			    (mac->phy_mode == PHY_INTERFACE_MODE_1000BASEX) ||
-			    (mac->phy_mode == PHY_INTERFACE_MODE_RGMII))
+			    phy_interface_mode_is_rgmii(mac->phy_mode))
 				goto underrun_fix;
 		}
 	}
@@ -7329,7 +7338,7 @@ static void mv_pp22_tx_fifo_init(struct mv_pp2x *priv)
 
 			if ((phy_mode == PHY_INTERFACE_MODE_XAUI) ||
 			    (phy_mode == PHY_INTERFACE_MODE_RXAUI) ||
-			    (phy_mode == PHY_INTERFACE_MODE_KR) ||
+			    (phy_mode == PHY_INTERFACE_MODE_10GKR) ||
 			    (phy_mode == PHY_INTERFACE_MODE_SFI) ||
 			    (phy_mode == PHY_INTERFACE_MODE_XFI)) {
 				/* Record l4_chksum_jumbo_port */

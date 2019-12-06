@@ -4006,6 +4006,9 @@ void mv_pp21_port_mii_set(struct mv_pp2x_port *port)
 		val |= MVPP2_GMAC_INBAND_AN_MASK;
 		break;
 	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
 		val |= MVPP2_GMAC_PORT_RGMII_MASK;
 	default:
 		val &= ~MVPP2_GMAC_PCS_ENABLE_MASK;
