@@ -88,6 +88,9 @@ u8 mv_pp2x_num_cos_queues = 4;
 
 u8 mv_pp2x_rx_count = MVPP2_DEFAULT_RX_COUNT;
 
+static enum cpuhp_state cp_online_hpstate;
+static enum cpuhp_state port_online_hpstate[MVPP2_MAX_PORTS];
+
 static u8 mv_pp2x_queue_mode = MVPP2_QDIST_MULTI_MODE;
 static u8 mv_bm_underrun_protect = MVPP23_BM_UNPR_EN;
 static u8 mv_pp2x_used_addr_spaces;
@@ -4978,7 +4981,11 @@ int mv_pp2x_open(struct net_device *dev)
 
 	/* Only Mvpp22&23 support hot plug feature */
 	if (port->priv->pp2_version != PPV21  && !(port->flags & (MVPP2_F_IF_MUSDK | MVPP2_F_LOOPBACK))) {
-		register_hotcpu_notifier(&port->port_hotplug_nb);
+		err = cpuhp_state_add_instance_nocalls(port_online_hpstate[port->id],
+						       &port->node_online);
+		if (err < 0)
+			goto err_free_all;
+
 		port->port_hotplugged = true;
 	}
 
@@ -5008,11 +5015,14 @@ int mv_pp2x_open(struct net_device *dev)
 	if (!(port->flags & MVPP2_F_IF_MUSDK)) {
 		err = mv_pp2x_open_cls(dev);
 		if (err)
-			goto err_free_all;
+			goto err_port_cpuhp;
 	}
 
 	return 0;
 
+err_port_cpuhp:
+	cpuhp_state_remove_instance_nocalls(port_online_hpstate[port->id],
+					    &port->node_online);
 err_free_all:
 	mv_pp2x_cleanup_irqs(port);
 	if (port->flags & MVPP2_F_IF_MUSDK)
@@ -5044,7 +5054,8 @@ int mv_pp2x_stop(struct net_device *dev)
 		mv_pp22_cleanup_uio_irqs(port);
 
 	if (port->port_hotplugged)
-		unregister_hotcpu_notifier(&port->port_hotplug_nb);
+		cpuhp_state_remove_instance_nocalls(port_online_hpstate[port->id],
+						    &port->node_online);
 
 	mv_pp2x_tx_done_init_on_open(port, false);
 
@@ -6163,46 +6174,49 @@ static void mv_pp2x_port_init_config(struct mv_pp2x_port *port)
 /* Routine called by port CPU hot plug notifier. If port up callback set irq affinity for private interrupts,
 *  unmask private interrupt, set packet coalescing and clear counters.
 */
-static int mv_pp2x_port_cpu_callback(struct notifier_block *nfb,
-				     unsigned long action, void *hcpu)
+static int mv_pp2x_port_cpu_online(unsigned int cpu, struct hlist_node *node)
 {
-	unsigned int cpu = (unsigned long)hcpu;
 	int qvec_id;
 	struct queue_vector *qvec;
-	struct mv_pp2x_port *port = container_of(nfb, struct mv_pp2x_port, port_hotplug_nb);
+	struct mv_pp2x_port *port = hlist_entry_safe(node,
+						     struct mv_pp2x_port,
+						     node_online);
+
+	for (qvec_id = 0; qvec_id < port->num_qvector; qvec_id++) {
+		qvec = &port->q_vector[qvec_id];
+		if (!qvec->irq)
+			continue;
+		if (qvec->qv_type == MVPP2_PRIVATE &&
+		    (QV_THR_2_MASTER_AP_CPU(qvec->ap_id, qvec->sw_thread_id) == cpu)) {
+			irq_set_affinity_hint(qvec->irq, cpumask_of(cpu));
+			mv_pp22_private_interrupt_unmask(port, cpu);
+			if (port->priv->pp2_cfg.queue_mode == MVPP2_QDIST_MULTI_MODE)
+				irq_set_status_flags(qvec->irq, IRQ_NO_BALANCING);
+		}
+	}
+	if (port->interrupt_tx_done)
+		mv_pp2x_tx_done_pkts_coal_set(port, cpu);
+
+	return 0;
+}
+
+static int mv_pp2x_port_cpu_down(unsigned int cpu, struct hlist_node *node)
+{
+	struct mv_pp2x_port *port = hlist_entry_safe(node,
+						     struct mv_pp2x_port,
+						     node_online);
 	struct mv_pp2x_aggr_tx_queue *aggr_txq;
 	struct mv_pp2x_cp_pcpu *cp_pcpu;
 
-	switch (action) {
-	case CPU_ONLINE:
-	case CPU_ONLINE_FROZEN:
-		for (qvec_id = 0; qvec_id < port->num_qvector; qvec_id++) {
-			qvec = &port->q_vector[qvec_id];
-			if (!qvec->irq)
-				continue;
-			if (qvec->qv_type == MVPP2_PRIVATE &&
-			    (QV_THR_2_MASTER_AP_CPU(qvec->ap_id, qvec->sw_thread_id) == cpu)) {
-				irq_set_affinity_hint(qvec->irq, cpumask_of(cpu));
-				mv_pp22_private_interrupt_unmask(port, cpu);
-				if (port->priv->pp2_cfg.queue_mode == MVPP2_QDIST_MULTI_MODE)
-					irq_set_status_flags(qvec->irq, IRQ_NO_BALANCING);
-				/* FIXME: A810 support*/
-			}
-		}
-		if (port->interrupt_tx_done)
-			mv_pp2x_tx_done_pkts_coal_set(port, cpu);
-		break;
-	case CPU_DEAD:
-	case CPU_DEAD_FROZEN:
-		cp_pcpu = port->priv->pcpu[cpu];
-		aggr_txq = &port->priv->aggr_txqs[cpu];
-		mv_pp2x_tx_timer_kill(cp_pcpu);
-		aggr_txq->hw_count += aggr_txq->sw_count;
-		mv_pp22_thread_write(&port->priv->hw, cpu, MVPP2_AGGR_TXQ_UPDATE_REG, aggr_txq->sw_count);
-		aggr_txq->sw_count = 0;
-	}
+	cp_pcpu = port->priv->pcpu[cpu];
+	aggr_txq = &port->priv->aggr_txqs[cpu];
+	mv_pp2x_tx_timer_kill(cp_pcpu);
+	aggr_txq->hw_count += aggr_txq->sw_count;
+	mv_pp22_thread_write(&port->priv->hw, cpu, MVPP2_AGGR_TXQ_UPDATE_REG,
+			     aggr_txq->sw_count);
+	aggr_txq->sw_count = 0;
 
-	return NOTIFY_OK;
+	return 0;
 }
 
 static int mv_pp22_uio_mem_map(struct mv_pp2x_uio *pp2x_uio, struct resource *res)
@@ -6638,8 +6652,16 @@ static int mv_pp2x_port_probe(struct platform_device *pdev,
 
 	mv_pp2x_port_irq_names_update(port);
 
-	if (priv->pp2_version != PPV21)
-		port->port_hotplug_nb.notifier_call = mv_pp2x_port_cpu_callback;
+	if (priv->pp2_version != PPV21) {
+		err = cpuhp_setup_state_multi(CPUHP_AP_ONLINE_DYN,
+					      "net/mvpp2_port:online",
+					      mv_pp2x_port_cpu_online,
+					      mv_pp2x_port_cpu_down);
+		if (err < 0)
+			goto err_unreg_netdev;
+
+		port_online_hpstate[port->id] = err;
+	}
 
 	/* Init statistic lock */
 	spin_lock_init(&port->mac_data.stats_spinlock);
@@ -6687,6 +6709,9 @@ static void mv_pp2x_port_remove(struct mv_pp2x_port *port)
 		uio_unregister_device(&port->uio.u_info);
 		kfree(port->uio.u_info.name);
 	}
+
+	if (port->priv->pp2_version != PPV21)
+		cpuhp_remove_multi_state(port_online_hpstate[port->id]);
 
 	mv_pp2x_port_napi_remove(port);
 	unregister_netdev(port->dev);
@@ -7395,33 +7420,27 @@ void mv_pp22_set_net_comp(struct mv_pp2x *priv)
 }
 
 /* Routine called by CP CPU hot plug notifier. Callback reconfigure RSS RX flow hash indir'n table */
-static int mv_pp2x_cp_cpu_callback(struct notifier_block *nfb,
-				   unsigned long action, void *hcpu)
+static int mv_pp2x_cp_cpu_down(unsigned int cpu, struct hlist_node *node)
 {
-	struct mv_pp2x *priv = container_of(nfb, struct mv_pp2x, cp_hotplug_nb);
-	unsigned int cpu = (unsigned long)hcpu;
-	int i;
+	struct mv_pp2x *priv = hlist_entry_safe(node, struct mv_pp2x, node_online);
 	struct mv_pp2x_port *port;
+	int i;
 
 	/* RSS rebalanced to equal */
 	mv_pp22_init_rxfhindir(priv);
 
-	switch (action) {
-	case CPU_DEAD:
-	case CPU_DEAD_FROZEN:
-		/* If default CPU is down, CPU0 will be default CPU */
-		for (i = 0; i < priv->num_ports; i++) {
-			port = priv->port_list[i];
-			if (port && (cpu == port->rss_cfg.dflt_cpu)) {
-				port->rss_cfg.dflt_cpu = 0;
-				if (port->rss_cfg.rss_en && netif_running(port->dev))
-					mv_pp22_rss_default_cpu_set(port,
-								    port->rss_cfg.dflt_cpu);
-			}
+	/* If default CPU is down, CPU0 will be default CPU */
+	for (i = 0; i < priv->num_ports; i++) {
+		port = priv->port_list[i];
+		if (port && (cpu == port->rss_cfg.dflt_cpu)) {
+			port->rss_cfg.dflt_cpu = 0;
+			if (port->rss_cfg.rss_en && netif_running(port->dev))
+				mv_pp22_rss_default_cpu_set(port,
+							    port->rss_cfg.dflt_cpu);
 		}
 	}
 
-	return NOTIFY_OK;
+	return 0;
 }
 
 static int mv_pp2x_probe(struct platform_device *pdev)
@@ -7621,8 +7640,19 @@ static int mv_pp2x_probe(struct platform_device *pdev)
 
 	/* Only Mvpp22&23 support hot plug feature */
 	if (priv->pp2_version != PPV21 && mv_pp2x_queue_mode == MVPP2_QDIST_MULTI_MODE) {
-		priv->cp_hotplug_nb.notifier_call = mv_pp2x_cp_cpu_callback;
-		register_hotcpu_notifier(&priv->cp_hotplug_nb);
+		err = cpuhp_setup_state_multi(CPUHP_AP_ONLINE_DYN,
+					      "net/mvpp2:online",
+					      NULL,
+					      mv_pp2x_cp_cpu_down);
+		if (err < 0)
+			goto err_uio;
+
+		cp_online_hpstate = err;
+
+		err = cpuhp_state_add_instance_nocalls(cp_online_hpstate,
+						       &priv->node_online);
+		if (err)
+			goto err_cpuhp;
 	}
 	INIT_DELAYED_WORK(&priv->stats_task, mv_pp2x_get_device_stats);
 
@@ -7641,6 +7671,9 @@ static int mv_pp2x_probe(struct platform_device *pdev)
 
 	pr_debug("Platform Device Name : %s\n", kobject_name(&pdev->dev.kobj));
 	return 0;
+
+err_cpuhp:
+	cpuhp_remove_multi_state(cp_online_hpstate);
 err_uio:
 	if (priv->pp2_version != PPV21)
 		uio_unregister_device(&priv->uio.u_info);
@@ -7665,8 +7698,12 @@ static int mv_pp2x_remove(struct platform_device *pdev)
 	int i, num_of_ports, num_of_pools;
 	struct mv_pp2x_cp_pcpu *cp_pcpu;
 
-	if (priv->pp2_version != PPV21 && mv_pp2x_queue_mode == MVPP2_QDIST_MULTI_MODE)
-		unregister_hotcpu_notifier(&priv->cp_hotplug_nb);
+	if (priv->pp2_version != PPV21 &&
+	    mv_pp2x_queue_mode == MVPP2_QDIST_MULTI_MODE) {
+		cpuhp_state_remove_instance_nocalls(cp_online_hpstate,
+						    &priv->node_online);
+		cpuhp_remove_multi_state(cp_online_hpstate);
+	}
 
 	if (priv->pp2_version != PPV21) {
 		uio_unregister_device(&priv->uio.u_info);
