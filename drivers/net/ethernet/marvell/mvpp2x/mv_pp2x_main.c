@@ -2080,7 +2080,9 @@ static irqreturn_t mv_pp2x_isr(int irq, void *dev_id)
 			if (q_vec->sub_vec[i]->cpu_id == smp_processor_id()) {
 				napi_schedule(&q_vec->sub_vec[i]->napi);
 			} else {
-				struct call_single_data *csd = &q_vec->sub_vec[i]->csd;
+				call_single_data_t *csd;
+
+				csd = &q_vec->sub_vec[i]->csd;
 
 				csd->func = napi_schedule_wrapper;
 				csd->info = &q_vec->sub_vec[i]->napi;
@@ -2603,7 +2605,7 @@ static void mv_pp2x_tx_send_proc_cb(unsigned long data)
 	struct mv_pp2x_aggr_tx_queue *aggr_txq;
 	struct mv_pp2x_cp_pcpu *cp_pcpu;
 	int cpu = smp_processor_id();
-	unsigned long flags;
+	unsigned long flags = 0;
 	u8 address_space;
 	bool cold_cpu = false;
 
@@ -3258,7 +3260,7 @@ static void mv_pp2x_build_skb(struct sk_buff *skb, unsigned char *data,
 
 	memset(skb, 0, offsetof(struct sk_buff, tail));
 	skb->truesize = SKB_TRUESIZE(size);
-	atomic_set(&skb->users, 1);
+	refcount_set(&skb->users, 1);
 	skb->head = data;
 	skb->data = data;
 	skb_reset_tail_pointer(skb);
@@ -3270,7 +3272,6 @@ static void mv_pp2x_build_skb(struct sk_buff *skb, unsigned char *data,
 	shinfo = skb_shinfo(skb);
 	memset(shinfo, 0, offsetof(struct skb_shared_info, dataref));
 	atomic_set(&shinfo->dataref, 1);
-	kmemcheck_annotate_variable(shinfo->destructor_arg);
 
 	if (skb && frag_size) {
 		skb->head_frag = 1;
@@ -3981,7 +3982,7 @@ static int mv_pp2x_tx(struct sk_buff *skb, struct net_device *dev)
 	int address_space;
 	struct mv_pp2x_cp_pcpu *cp_pcpu;
 	u8 recycling;
-	unsigned long flags;
+	unsigned long flags = 0;
 	bool cold_cpu = false;
 
 	address_space = mv_pp2x_check_address_space(port->priv, cpu, &cold_cpu);
@@ -5208,7 +5209,7 @@ static int mv_pp2x_set_mac_address(struct net_device *dev, void *p)
 	struct mv_pp2x_port *port = netdev_priv(dev);
 	const struct sockaddr *addr = p;
 	int err = 0;
-	unsigned long flags;
+	unsigned long flags = 0;
 
 	if (!is_valid_ether_addr(addr->sa_data)) {
 		err = -EADDRNOTAVAIL;
@@ -5304,7 +5305,7 @@ static int mv_pp2x_rx_kill_vid(struct net_device *dev, u16 proto, u16 vid)
 	return err;
 }
 
-static struct rtnl_link_stats64 *
+static void
 mv_pp2x_get_stats64(struct net_device *dev, struct rtnl_link_stats64 *stats)
 {
 	struct mv_pp2x_port *port = netdev_priv(dev);
@@ -5336,8 +5337,6 @@ mv_pp2x_get_stats64(struct net_device *dev, struct rtnl_link_stats64 *stats)
 	stats->rx_errors	= dev->stats.rx_errors;
 	stats->rx_dropped	= dev->stats.rx_dropped;
 	stats->tx_dropped	= dev->stats.tx_dropped;
-
-	return stats;
 }
 
 static int mv_pp2x_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)

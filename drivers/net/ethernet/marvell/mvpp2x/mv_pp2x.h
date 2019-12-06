@@ -22,12 +22,14 @@
 #include <linux/netdevice.h>
 #include <linux/string.h>
 #include <linux/log2.h>
+#include <linux/phy.h>
+#include <linux/smp.h>
 #include <linux/uio_driver.h>
 
 #include "mv_pp2x_hw_type.h"
 #include "mv_gop110_hw_type.h"
 
-#define MVPP2_DRIVER_NAME "mvpp2"
+#define MVPP2_DRIVER_NAME "mvpp2x"
 #define MVPP2_DRIVER_VERSION "1.0"
 
 /* SKB magic, used for skb recycle, generated as:
@@ -685,7 +687,7 @@ struct mv_pp2x_cp_pcpu {
 
 struct sub_queue_vector {
 	struct napi_struct napi;
-	struct call_single_data csd;
+	call_single_data_t csd;
 	u32 queue_mask;
 	u8 cpu_id;
 	struct queue_vector *parent;
