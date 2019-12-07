@@ -5536,6 +5536,7 @@ static struct sub_queue_vector *mv_pp22_allocate_sub_vector(struct mv_pp2x_port 
 	return sub_q_vec;
 }
 
+#if 0
 static void mv_pp22_uio_queue_vectors_init(struct mv_pp2x_port *port)
 {
 	struct net_device  *net_dev = port->dev;
@@ -5579,6 +5580,7 @@ static void mv_pp22_uio_queue_vectors_init(struct mv_pp2x_port *port)
 		port->uio.num_qvector++;
 	}
 }
+#endif
 
 /* Routine calculate number of used sub_vector */
 static int mv_pp22_calculate_num_sub_vector(struct mv_pp2x_port *port)
@@ -5844,6 +5846,7 @@ static void mv_pp22_port_isr_rx_group_cfg(struct mv_pp2x_port *port)
 			mv_pp22_isr_rx_group_write(hw, port->id, i, 0, 0);
 }
 
+#if 0
 static void mv_pp22_port_uio_isr_rx_group_cfg(struct mv_pp2x_port *port)
 {
 	int i;
@@ -5864,6 +5867,7 @@ static void mv_pp22_port_uio_isr_rx_group_cfg(struct mv_pp2x_port *port)
 		if ((sw_thr_mask & BIT(i)) == 0)
 			mv_pp22_isr_rx_group_write(hw, port->id, i, 0, 0);
 }
+#endif
 
 static int mv_pp2_init_emac_data(struct mv_pp2x_port *port,
 				 struct device_node *emac_node)
@@ -6219,6 +6223,7 @@ static int mv_pp2x_port_cpu_down(unsigned int cpu, struct hlist_node *node)
 	return 0;
 }
 
+#if 0
 static int mv_pp22_uio_mem_map(struct mv_pp2x_uio *pp2x_uio, struct resource *res)
 {
 	struct uio_mem	*uio_mem = &pp2x_uio->u_info.mem[pp2x_uio->num_maps];
@@ -6334,6 +6339,7 @@ static int mv_pp22_uio_release(struct uio_info *info, struct inode *inode)
 	err = mv_pp2x_port_musdk_clear(port);
 	return err;
 }
+#endif
 
 /* Ports initialization */
 static int mv_pp2x_port_probe(struct platform_device *pdev,
@@ -6627,6 +6633,7 @@ static int mv_pp2x_port_probe(struct platform_device *pdev,
 		goto err_free_stats;
 	}
 
+#if 0
 	/* Register uio_device */
 	if (priv->pp2_version != PPV21) {
 		port->uio.u_info.name = kasprintf(GFP_KERNEL, UIO_PORT_STRING, priv->pp2_cfg.cell_index, port->id);
@@ -6645,6 +6652,7 @@ static int mv_pp2x_port_probe(struct platform_device *pdev,
 			goto err_unreg_netdev;
 		}
 	}
+#endif
 
 	/* Clear MIB and mvpp2 counters statistic */
 	mv_gop110_mib_counters_clear(&port->priv->hw.gop, port->mac_data.gop_index);
@@ -6705,10 +6713,12 @@ static void mv_pp2x_port_remove(struct mv_pp2x_port *port)
 	netmap_detach(port->dev);
 #endif /* DEV_NETMAP */
 
+#if 0
 	if (port->priv->pp2_version != PPV21) {
 		uio_unregister_device(&port->uio.u_info);
 		kfree(port->uio.u_info.name);
 	}
+#endif
 
 	if (port->priv->pp2_version != PPV21)
 		cpuhp_remove_multi_state(port_online_hpstate[port->id]);
@@ -7021,7 +7031,9 @@ static int mv_pp2x_platform_data_get(struct platform_device *pdev,
 				     struct mv_pp2x *priv,	u32 *cell_index, int *port_count)
 {
 	struct mv_pp2x_hw *hw = &priv->hw;
+#if 0
 	struct mv_pp2x_uio *uio = &priv->uio;
+#endif
 	static bool cell_index_dts_flag;
 	const struct of_device_id *match;
 	struct device_node *dn = pdev->dev.of_node;
@@ -7065,10 +7077,12 @@ static int mv_pp2x_platform_data_get(struct platform_device *pdev,
 		hw->base = devm_ioremap_resource(&pdev->dev, res);
 		if (IS_ERR(hw->base))
 			return PTR_ERR(hw->base);
+#if 0
 		/* Map "pp" to uio */
 		err = mv_pp22_uio_mem_map(uio, res);
 		if (err)
 			return err;
+#endif
 
 		/* xmib */
 		res = platform_get_resource_byname(pdev,
@@ -7104,10 +7118,12 @@ static int mv_pp2x_platform_data_get(struct platform_device *pdev,
 		if (IS_ERR(hw->gop.gop_110.cm3_base))
 			return PTR_ERR(hw->gop.gop_110.cm3_base);
 
+#if 0
 		/* Map "cm3" to uio */
 		err = mv_pp22_uio_mem_map(uio, res);
 		if (err)
 			return err;
+#endif
 
 		/* skipped tai */
 
@@ -7130,10 +7146,12 @@ static int mv_pp2x_platform_data_get(struct platform_device *pdev,
 		mspg_base = res->start;
 		mspg_end  = res->end;
 
+#if 0
 		/* Map "mspg" to uio */
 		err = mv_pp22_uio_mem_map(uio, res);
 		if (err)
 			return err;
+#endif
 
 		/* xpcs */
 		res = platform_get_resource_byname(pdev,
@@ -7584,6 +7602,7 @@ static int mv_pp2x_probe(struct platform_device *pdev)
 			priv->num_rss_tables = 0;
 	}
 
+#if 0
 	if (priv->pp2_version != PPV21) {
 		priv->uio.u_info.name = kasprintf(GFP_KERNEL, UIO_PP2_STRING, cell_index);
 		pr_debug("mv_pp2x_probe : %s\n", priv->uio.u_info.name);
@@ -7594,6 +7613,7 @@ static int mv_pp2x_probe(struct platform_device *pdev)
 			goto err_clk;
 		}
 	}
+#endif
 
 	/* Initialize ports */
 	for_each_available_child_of_node(dn, port_node) {
@@ -7705,10 +7725,13 @@ static int mv_pp2x_remove(struct platform_device *pdev)
 		cpuhp_remove_multi_state(cp_online_hpstate);
 	}
 
+#if 0
 	if (priv->pp2_version != PPV21) {
 		uio_unregister_device(&priv->uio.u_info);
 		kfree(priv->uio.u_info.name);
 	}
+#endif
+
 	cancel_delayed_work(&priv->stats_task);
 	flush_workqueue(priv->workqueue);
 	destroy_workqueue(priv->workqueue);
