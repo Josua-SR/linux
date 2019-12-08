@@ -228,64 +228,71 @@ static int mvebu_is_comphy_mode_valid(struct mvebu_comphy_lane *lane,
 	return 0;
 }
 
-static int mvebu_comphy_eth_power_on(struct phy *phy)
+static int mvebu_comphy_eth_get_mode(struct mvebu_comphy_lane *lane,
+				     unsigned long *comphy_mode)
 {
-	struct mvebu_comphy_lane *lane = phy_get_drvdata(phy);
 	struct mvebu_comphy_priv *priv = lane->priv;
-	const struct mvebu_comphy_data *data = priv->data;
-	int ret;
 
 	switch (lane->submode) {
 	case PHY_INTERFACE_MODE_SGMII:
-		ret = data->comphy_smc(MV_SIP_COMPHY_POWER_ON, priv->phys,
-				 lane->id,
-				 COMPHY_FW_NET_FORMAT(COMPHY_SGMII_MODE,
-						      lane->port,
-						      COMPHY_SPEED_1_25G));
+		*comphy_mode = COMPHY_FW_NET_FORMAT(COMPHY_SGMII_MODE,
+						    lane->port,
+						    COMPHY_SPEED_1_25G);
 		break;
 	case PHY_INTERFACE_MODE_2500BASEX:
 	case PHY_INTERFACE_MODE_2500BASET:
-		ret = data->comphy_smc(MV_SIP_COMPHY_POWER_ON, priv->phys,
-				 lane->id,
-				 COMPHY_FW_NET_FORMAT(COMPHY_HS_SGMII_MODE,
-						      lane->port,
-						      COMPHY_SPEED_3_125G));
+		*comphy_mode = COMPHY_FW_NET_FORMAT(COMPHY_HS_SGMII_MODE,
+						    lane->port,
+						    COMPHY_SPEED_3_125G);
 		break;
 	case PHY_INTERFACE_MODE_5GKR:
-		ret = data->comphy_smc(MV_SIP_COMPHY_POWER_ON, priv->phys,
-				 lane->id,
-				 COMPHY_FW_NET_FORMAT(COMPHY_XFI_MODE,
-						      lane->port,
-						      COMPHY_SPEED_5_15625G));
+		*comphy_mode = COMPHY_FW_NET_FORMAT(COMPHY_XFI_MODE,
+						    lane->port,
+						    COMPHY_SPEED_5_15625G);
 		break;
 	case PHY_INTERFACE_MODE_10GKR:
-		ret = data->comphy_smc(MV_SIP_COMPHY_POWER_ON, priv->phys,
-				 lane->id,
-				 COMPHY_FW_NET_FORMAT(COMPHY_XFI_MODE,
-						      lane->port,
-						      COMPHY_SPEED_10_3125G));
+		*comphy_mode = COMPHY_FW_NET_FORMAT(COMPHY_XFI_MODE,
+						    lane->port,
+						    COMPHY_SPEED_10_3125G);
 		break;
 	case PHY_INTERFACE_MODE_INTERNAL:
-		ret = data->comphy_smc(MV_SIP_COMPHY_POWER_ON, priv->phys,
-				 lane->id,
-				 COMPHY_FW_NET_FORMAT(COMPHY_AP_MODE,
-						      lane->port,
-						      COMPHY_SPEED_10_3125G));
+		*comphy_mode = COMPHY_FW_NET_FORMAT(COMPHY_AP_MODE,
+						    lane->port,
+						    COMPHY_SPEED_10_3125G);
 		break;
 	case PHY_INTERFACE_MODE_RXAUI:
-		ret = data->comphy_smc(MV_SIP_COMPHY_POWER_ON, priv->phys,
-				 lane->id,
-				 COMPHY_FW_MODE_FORMAT(COMPHY_RXAUI_MODE));
-
-		ret = data->comphy_smc(MV_SIP_COMPHY_POWER_ON, priv->phys,
-				 lane->id + 1,
-				 COMPHY_FW_MODE_FORMAT(COMPHY_RXAUI_MODE));
+		*comphy_mode = COMPHY_FW_MODE_FORMAT(COMPHY_RXAUI_MODE);
 		break;
 	default:
 		dev_err(priv->dev, "unsupported PHY submode (%d)\n",
 			lane->submode);
 		return -ENOTSUPP;
 	}
+
+	return 0;
+}
+
+static int mvebu_comphy_eth_power_on(struct phy *phy)
+{
+	struct mvebu_comphy_lane *lane = phy_get_drvdata(phy);
+	struct mvebu_comphy_priv *priv = lane->priv;
+	const struct mvebu_comphy_data *data = priv->data;
+	unsigned long comphy_mode;
+	int ret;
+
+	/* Map interface type to the ComPhy mode */
+	ret = mvebu_comphy_eth_get_mode(lane, &comphy_mode);
+	if (ret < 0)
+		return ret;
+
+	/* Power on the SerDes lane */
+	ret = data->comphy_smc(MV_SIP_COMPHY_POWER_ON, priv->phys,
+			       lane->id, comphy_mode);
+
+	/* In case of RXAUI enable also the second lane */
+	if (lane->submode == PHY_INTERFACE_MODE_RXAUI)
+		ret |= data->comphy_smc(MV_SIP_COMPHY_POWER_ON, priv->phys,
+					lane->id + 1, comphy_mode);
 
 	return ret;
 }
