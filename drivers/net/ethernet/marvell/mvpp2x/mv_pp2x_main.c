@@ -4382,52 +4382,17 @@ static void mv_pp2x_port_irqs_dispose_mapping(struct mv_pp2x_port *port)
 
 static void mv_serdes_port_init(struct mv_pp2x_port *port)
 {
-	int mode, i;
-
 	switch (port->mac_data.phy_mode) {
-	case PHY_INTERFACE_MODE_RGMII:
-	case PHY_INTERFACE_MODE_RGMII_ID:
-	case PHY_INTERFACE_MODE_RGMII_RXID:
-	case PHY_INTERFACE_MODE_RGMII_TXID:
-		break;
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
-		if (port->mac_data.flags & MV_EMAC_F_SGMII2_5)
-			mode = COMPHY_DEF(COMPHY_HS_SGMII_MODE, port->id,
-					  COMPHY_SPEED_3_125G, COMPHY_POLARITY_NO_INVERT);
-		else
-			mode = COMPHY_DEF(COMPHY_SGMII_MODE, port->id,
-					  COMPHY_SPEED_1_25G, COMPHY_POLARITY_NO_INVERT);
-		phy_set_mode(port->comphy[0], mode);
-	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
-		for (i = 0; i < port->num_serdes_lanes; i++) {
-			mode = COMPHY_DEF(COMPHY_RXAUI_MODE, i,
-					  COMPHY_SPEED_10_3125G, COMPHY_POLARITY_NO_INVERT);
-			phy_set_mode(port->comphy[i], mode);
-		}
-	break;
 	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_SFI:
-		if (port->mac_data.flags & MV_EMAC_F_5G)
-			mode = COMPHY_DEF(COMPHY_SFI_MODE, port->id,
-					  COMPHY_SPEED_5_15625G, COMPHY_POLARITY_NO_INVERT);
-		else
-			mode = COMPHY_DEF(COMPHY_SFI_MODE, port->id,
-					  COMPHY_SPEED_10_3125G, COMPHY_POLARITY_NO_INVERT);
-		phy_set_mode(port->comphy[0], mode);
-	break;
 	case PHY_INTERFACE_MODE_XFI:
-		if (port->mac_data.flags & MV_EMAC_F_5G)
-			mode = COMPHY_DEF(COMPHY_XFI_MODE, port->id,
-					  COMPHY_SPEED_5_15625G, COMPHY_POLARITY_NO_INVERT);
-		else
-			mode = COMPHY_DEF(COMPHY_XFI_MODE, port->id,
-					  COMPHY_SPEED_10_3125G, COMPHY_POLARITY_NO_INVERT);
-
-		phy_set_mode(port->comphy[0], mode);
+		phy_set_mode_ext(port->comphy[0], PHY_MODE_ETHERNET,
+				 port->mac_data.phy_mode);
 	break;
 	default:
 		pr_err("%s: Wrong port mode (%d)", __func__, port->mac_data.phy_mode);
@@ -4473,7 +4438,6 @@ void mv_pp2x_start_dev(struct mv_pp2x_port *port)
 	struct gop_hw *gop = &port->priv->hw.gop;
 	struct mv_mac_data *mac = &port->mac_data;
 	int mac_num = port->mac_data.gop_index;
-	int i;
 #ifdef DEV_NETMAP
 	if (port->flags & MVPP2_F_IFCAP_NETMAP) {
 		if (mv_pp2x_netmap_rxq_init_buffers(port))
@@ -4525,9 +4489,8 @@ void mv_pp2x_start_dev(struct mv_pp2x_port *port)
 
 	if (port->comphy) {
 		mv_gop110_port_disable(gop, mac, port);
-		for (i = 0; i < port->num_serdes_lanes; i++)
-			phy_power_on(port->comphy[i]);
-		}
+		phy_power_on(port->comphy[0]);
+	}
 
 	if (port->priv->pp2_version == PPV21) {
 		mv_pp21_port_enable(port);
@@ -4628,7 +4591,6 @@ void mv_pp2x_stop_dev(struct mv_pp2x_port *port)
 {
 	struct gop_hw *gop = &port->priv->hw.gop;
 	struct mv_mac_data *mac = &port->mac_data;
-	int i;
 
 	/* Stop new packets arriving from RX-interrupts and Linux-TX */
 	mv_pp2x_ingress_disable(port);
@@ -4648,8 +4610,7 @@ void mv_pp2x_stop_dev(struct mv_pp2x_port *port)
 	mv_pp2x_egress_disable(port);
 
 	if (port->comphy)
-		for (i = 0; i < port->num_serdes_lanes; i++)
-			phy_power_off(port->comphy[i]);
+		phy_power_off(port->comphy[0]);
 
 	if (port->priv->pp2_version == PPV21) {
 		mv_pp21_port_disable(port);
@@ -6471,8 +6432,11 @@ static int mv_pp2x_port_probe(struct platform_device *pdev,
 						serdes_error = true;
 				}
 
-				if (!serdes_error)
+				if (!serdes_error) {
 					port->comphy = comphy;
+					mv_serdes_port_init(port);
+				}
+
 			}
 
 			port->num_serdes_lanes = serdes_lanes_count;
