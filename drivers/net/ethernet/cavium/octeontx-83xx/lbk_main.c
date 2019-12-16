@@ -458,7 +458,13 @@ static int lbk_create_domain(u32 id, u16 domain_id,
 					ret = -EINVAL;
 					goto err_unlock;
 				}
+				break;
 			}
+			if (j == LBK_PORT_PP_LOOP_BASE_IDX) {
+				ret = -EINVAL;
+				goto err_unlock;
+			}
+
 		}
 		/* Sync up global and domain ports. */
 		port->node = gport->node;
