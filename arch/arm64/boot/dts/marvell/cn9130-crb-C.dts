@@ -47,3 +47,11 @@
 	usb-phy = <&cp0_usb3_0_phy1>;
 	phy-names = "usb";
 };
+
+&cp0_mdio_uio { /* uses cp0_mdio */
+	status = "okay";
+};
+
+&cp0_xmdio_uio { /* uses cp0_xmdio */
+	status = "okay";
+};
