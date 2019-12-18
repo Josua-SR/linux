@@ -29,6 +29,10 @@ static int bgx_port_stats_clr(struct octtx_bgx_port *port);
 static int bgx_port_link_status(struct octtx_bgx_port *port, u8 *up);
 static int bgx_port_promisc_set(struct octtx_bgx_port *port, u8 on);
 static int bgx_port_macaddr_set(struct octtx_bgx_port *port, u8 macaddr[]);
+static int bgx_port_macaddr_add(struct octtx_bgx_port *port, u8 macaddr[]);
+static int bgx_port_macaddr_del(struct octtx_bgx_port *port, int index);
+static int bgx_port_macaddr_max_entries_get(struct octtx_bgx_port *port,
+					    int *resp);
 static int bgx_port_bp_set(struct octtx_bgx_port *port, u8 on);
 static int bgx_port_bcast_set(struct octtx_bgx_port *port, u8 on);
 static int bgx_port_mcast_set(struct octtx_bgx_port *port, u8 on);
@@ -53,12 +57,23 @@ static int bgx_port_mtu_set(struct octtx_bgx_port *port, u16 mtu);
 #define BGX_CMR_RX_BP_OFF		0xD8
 #define BGX_CMR_RX_BP_STATUS		0xF0
 #define BGX_CMR_RX_DMAC_CAM(__dmac)	(0x200 + ((__dmac) * 0x8))
+#define BGX_CMR_RX_DMAC_CAM_ACCEPT	BIT_ULL(3)
+#define BGX_CMR_RX_DMAC_MCAST_ENABLE	BIT_ULL(1)
+#define BGX_CMR_RX_DMAC_BCAST_ENABLE	BIT_ULL(0)
+#define BGX_CMR_RX_DMAC_CAM_ENABLE	BIT_ULL(48)
+#define BGX_CMR_RX_DMAC_CAM_LMACID(x)	((u64)(x) << 49)
 #define BGX_CMR_RX_OVR_BP		0x470
 #define BGX_CMR_TX_CHANNEL		0x500
 #define BGX_CMR_PRT_CBFC_CTL		0x508
 #define BGX_CMR_TX_OVR_BP		0x520
 
 #define BGX_SMU_HG2_CONTROL		0x20210
+
+struct lmac_dmac_cfg {
+	unsigned long	index_map;
+	int		max_dmac;
+	int		dmac;
+};
 
 /* BGX device Configuration and Control Block */
 struct bgxpf {
@@ -67,6 +82,7 @@ struct bgxpf {
 	int node; /* CPU node */
 	int bgx_idx; /* CPU-local BGX device index.*/
 	int lmac_count;
+	struct  lmac_dmac_cfg dmac_cfg[MAX_LMAC_PER_BGX];
 };
 
 struct lmac_cfg {
@@ -134,6 +150,196 @@ static u64 bgx_reg_read(struct bgxpf *bgx, u64 lmac, u64 offset)
 
 /* BGX Interface functions.
  */
+static u64 mac2u64(const u8 *mac_addr)
+{
+	u64 mac = 0;
+	int index;
+
+	for (index = ETH_ALEN - 1; index >= 0; index--)
+		mac |= ((u64)*mac_addr++) << (8 * index);
+
+	return mac;
+}
+
+static int alloc_index(unsigned long *bmap, u8 max)
+{
+	int id;
+
+	if (!bmap)
+		return -EINVAL;
+
+	id = find_first_zero_bit(bmap, max);
+	if (id >= max)
+		return -ENOSPC;
+
+	__set_bit(id, bmap);
+
+	return id;
+}
+
+static void free_index(unsigned long *bmap, int id)
+{
+	if (!bmap)
+		return;
+
+	__clear_bit(id, bmap);
+}
+
+static void bgx_cam_flush_mac_addrs(int node, int bgx_idx, int lmac_id)
+{
+	struct bgxpf *bgx = get_bgx_dev(node, bgx_idx);
+	struct lmac_dmac_cfg *lmac;
+	u64 offset;
+
+	if (!bgx)
+		return;
+
+	lmac = &bgx->dmac_cfg[lmac_id];
+	while (lmac->dmac >= 0) {
+		offset = (lmac->dmac * sizeof(u64)) +
+			(lmac_id * lmac->max_dmac * sizeof(u64));
+		bgx_reg_write(bgx, 0, BGX_CMR_RX_DMACX_CAM + offset, 0);
+		lmac->dmac--;
+	}
+	lmac->index_map = 0;
+	lmac->dmac = 0;
+}
+
+static int bgx_cam_get_mac_max_entries(int node, int bgx_idx, int lmacid)
+{
+	struct lmac_dmac_cfg *lmac;
+	struct bgxpf *bgx;
+
+	bgx = get_bgx_dev(node, bgx_idx);
+	if (!bgx)
+		return -EINVAL;
+
+	lmac = &bgx->dmac_cfg[lmacid];
+	if (lmac)
+		return lmac->max_dmac;
+
+	return 0;
+}
+
+static void bgx_cam_insert_entry(struct bgxpf *bgx, int lmacid,
+				 int index, const u8 *mac)
+{
+	u64 cfg = 0;
+
+	/* Prepare entry */
+	cfg = mac2u64(mac);
+	cfg |= BGX_CMR_RX_DMAC_CAM_ENABLE;
+	cfg |= BGX_CMR_RX_DMAC_CAM_LMACID(lmacid);
+
+	/* Insert entry at given index */
+	bgx_reg_write(bgx, 0, (BGX_CMR_RX_DMACX_CAM + (index * 8)), cfg);
+
+	/* Enable CAM table */
+	cfg = 0; /* Reset */
+	cfg |= (BGX_CMR_RX_DMAC_BCAST_ENABLE | BGX_CMR_RX_DMAC_MCAST_ENABLE |
+		BGX_CMR_RX_DMAC_CAM_ACCEPT);
+	bgx_reg_write(bgx, lmacid, BGX_CMRX_RX_DMAC_CTL, cfg);
+}
+
+static void bgx_cam_set_def_mac_addr(int node, int bgx_idx,
+				     int lmacid, const u8 *mac)
+{
+	struct bgxpf *bgx = get_bgx_dev(node, bgx_idx);
+	struct lmac_dmac_cfg *lmac = NULL;
+	int index;
+
+	if (!bgx)
+		return;
+
+	lmac = &bgx->dmac_cfg[lmacid];
+
+	/* Calculate real index of BGX DMAC table */
+	index = lmacid * lmac->max_dmac;
+
+	/* Configure the same MAC into CAM table */
+	bgx_cam_insert_entry(bgx, lmacid, index, mac);
+
+	/* Set index 0 for default MAC address */
+	__set_bit(0, &lmac->index_map);
+}
+
+static int bgx_cam_add_mac_addr(int node, int bgx_idx, int lmacid,
+				const u8 *mac)
+{
+	struct lmac_dmac_cfg *lmac;
+	struct bgxpf *bgx;
+	int index, idx;
+
+	bgx = get_bgx_dev(node, bgx_idx);
+	if (!bgx)
+		return -EINVAL;
+
+	lmac = &bgx->dmac_cfg[lmacid];
+
+	/* Get available index where entry is to be installed */
+	idx = alloc_index(&lmac->index_map, lmac->max_dmac);
+	if (idx < 0)
+		return idx;
+
+	/* Calculate real index of BGX DMAC table */
+	index = lmacid * lmac->max_dmac + idx;
+
+	/* Configure the same MAC into CAM table */
+	bgx_cam_insert_entry(bgx, lmacid, index, mac);
+
+	lmac->dmac++;
+	return idx;
+}
+
+static int bgx_cam_del_mac_addr(int node, int bgx_idx, int lmacid, int index)
+{
+	struct lmac_dmac_cfg *lmac;
+	struct bgxpf *bgx;
+
+	bgx = get_bgx_dev(node, bgx_idx);
+	if (!bgx)
+		return -EINVAL;
+
+	lmac = &bgx->dmac_cfg[lmacid];
+
+	/* Validate the index */
+	if (index < 0 || index >= lmac->max_dmac)
+		return -EINVAL;
+
+	/* Skip deletion for reserved index i.e. index 0 */
+	if (index == 0)
+		return 0;
+
+	free_index(&lmac->index_map, index);
+
+	index = lmacid * lmac->max_dmac + index;
+	bgx_reg_write(bgx, 0, (BGX_CMR_RX_DMACX_CAM + (index * 8)), 0);
+
+	lmac->dmac--;
+	return 0;
+}
+
+static int bgx_cam_enable_mac_addrs_table(int node, int bgx_idx,
+					  int lmacid, bool enable)
+{
+	struct bgxpf *bgx;
+	u64 cfg = 0;
+
+	bgx = get_bgx_dev(node, bgx_idx);
+	if (!bgx)
+		return -EINVAL;
+
+	if (enable)
+		cfg |= BGX_CMR_RX_DMAC_CAM_ACCEPT;
+	else
+		cfg &= ~BGX_CMR_RX_DMAC_CAM_ACCEPT;
+
+	cfg |= (BGX_CMR_RX_DMAC_BCAST_ENABLE | BGX_CMR_RX_DMAC_MCAST_ENABLE);
+	bgx_reg_write(bgx, lmacid, BGX_CMRX_RX_DMAC_CTL, cfg);
+
+	return 0;
+}
+
 static int bgx_get_num_ports(int node)
 {
 	struct octtx_bgx_port *port;
@@ -291,6 +497,9 @@ static int bgx_port_save_config(struct octtx_bgx_port *port)
 	/* Save mac address */
 	mac_addr = thbgx->get_mac_addr(port->node, port->bgx, port->lmac);
 	memcpy(cfg->mac, mac_addr, ETH_ALEN);
+
+	/* Configure the same mac address to BGX CAM table */
+	bgx_cam_set_def_mac_addr(port->node, port->bgx, port->lmac, cfg->mac);
 	return 0;
 }
 
@@ -337,8 +546,14 @@ static int bgx_port_restore_config(struct octtx_bgx_port *port)
 	bgx_reg_write(bgx, lmac_idx, BGX_CMRX_RX_DMAC_CTL,
 		      cfg->bgx_cmrx_rx_dmac_ctl);
 
+	/* Reset BGX CAM table */
+	bgx_cam_flush_mac_addrs(port->node, port->bgx, port->lmac);
+
 	/* Restore mac address */
 	thbgx->set_mac_addr(port->node, port->bgx, port->lmac, cfg->mac);
+
+	/* Restore the same mac address to BGX CAM table */
+	bgx_cam_set_def_mac_addr(port->node, port->bgx, port->lmac, cfg->mac);
 
 	bgx_port_stats_clr(port);
 	return 0;
@@ -408,6 +623,18 @@ static int bgx_receive_message(u32 id, u16 domain_id, struct mbox_hdr *hdr,
 		ret = bgx_port_macaddr_set(port, mdata);
 		resp->data = 0;
 		break;
+	case MBOX_BGX_PORT_ADD_MACADDR:
+		ret = bgx_port_macaddr_add(port, mdata);
+		resp->data = sizeof(int);
+		break;
+	case MBOX_BGX_PORT_DEL_MACADDR:
+		ret = bgx_port_macaddr_del(port, *(int *)mdata);
+		resp->data = 0;
+		break;
+	case MBOX_BGX_PORT_GET_MACADDR_ENTRIES:
+		ret = bgx_port_macaddr_max_entries_get(port, (int *)mdata);
+		resp->data = sizeof(int);
+		break;
 	case MBOX_BGX_PORT_SET_BP:
 		ret = bgx_port_bp_set(port, *(u8 *)mdata);
 		resp->data = 0;
@@ -466,12 +693,20 @@ int bgx_port_close(struct octtx_bgx_port *port)
 int bgx_port_start(struct octtx_bgx_port *port)
 {
 	thbgx->enable(port->node, port->bgx, port->lmac);
+
+	/* Enable BGX CAM table */
+	bgx_cam_enable_mac_addrs_table(port->node, port->bgx, port->lmac, 1);
+
 	return 0;
 }
 
 int bgx_port_stop(struct octtx_bgx_port *port)
 {
 	thbgx->disable(port->node, port->bgx, port->lmac);
+
+	/* Disable BGX CAM table */
+	bgx_cam_enable_mac_addrs_table(port->node, port->bgx, port->lmac, 0);
+
 	return 0;
 }
 
@@ -691,7 +926,41 @@ int bgx_port_promisc_set(struct octtx_bgx_port *port, u8 on)
 int bgx_port_macaddr_set(struct octtx_bgx_port *port, u8 macaddr[])
 {
 	thbgx->set_mac_addr(port->node, port->bgx, port->lmac, macaddr);
+
+	/* Configure the same mac address to BGX CAM table too */
+	bgx_cam_set_def_mac_addr(port->node, port->bgx, port->lmac, macaddr);
+
 	return 0;
+}
+
+int bgx_port_macaddr_max_entries_get(struct octtx_bgx_port *port, int *resp)
+{
+	int rc = 0;
+
+	rc = bgx_cam_get_mac_max_entries(port->node, port->bgx, port->lmac);
+	if (rc < 0)
+		return rc;
+
+	*resp = rc;
+	return 0;
+}
+
+int bgx_port_macaddr_add(struct octtx_bgx_port *port, u8 *macaddr)
+{
+	int *resp = (int *)macaddr;
+	int rc = 0;
+
+	rc = bgx_cam_add_mac_addr(port->node, port->bgx, port->lmac, macaddr);
+	if (rc < 0)
+		return rc;
+
+	*resp = rc;
+	return 0;
+}
+
+int bgx_port_macaddr_del(struct octtx_bgx_port *port, int index)
+{
+	return bgx_cam_del_mac_addr(port->node, port->bgx, port->lmac, index);
 }
 
 int bgx_port_bp_set(struct octtx_bgx_port *port, u8 on)
@@ -886,8 +1155,10 @@ static int bgx_reset_domain(u32 id, u16 domain_id)
 
 	mutex_lock(&octeontx_bgx_lock);
 	list_for_each_entry(port, &octeontx_bgx_ports, list) {
-		if (port->node == id && port->domain_id == domain_id)
+		if (port->node == id && port->domain_id == domain_id) {
 			bgx_port_stop(port);
+			bgx_port_restore_config(port);
+		}
 	}
 	mutex_unlock(&octeontx_bgx_lock);
 	return 0;
@@ -927,6 +1198,7 @@ EXPORT_SYMBOL(bgx_com);
  */
 struct bgx_com_s *bgx_octeontx_init(void)
 {
+	struct lmac_dmac_cfg *lmac = NULL;
 	struct octtx_bgx_port *port;
 	struct bgxpf *bgx = NULL;
 	u64 bgx_map;
@@ -962,6 +1234,15 @@ struct bgx_com_s *bgx_octeontx_init(void)
 		bgx->lmac_count = thbgx->get_lmac_count(node, bgx_idx);
 		bgx->node = node;
 		bgx->bgx_idx = bgx_idx;
+
+		/* Update maximum DMAC filters per lmac */
+		for (lmac_idx = 0; lmac_idx < bgx->lmac_count; lmac_idx++) {
+			lmac = &bgx->dmac_cfg[lmac_idx];
+			lmac->max_dmac = RX_DMAC_COUNT / bgx->lmac_count;
+			lmac->index_map = 0;
+			lmac->dmac = 0;
+		}
+
 		INIT_LIST_HEAD(&bgx->list);
 		list_add(&bgx->list, &octeontx_bgx_devices);
 

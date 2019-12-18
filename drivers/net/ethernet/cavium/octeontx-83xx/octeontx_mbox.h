@@ -313,6 +313,9 @@ enum {
 #define MBOX_BGX_PORT_SET_BCAST 12
 #define MBOX_BGX_PORT_SET_MCAST 13
 #define MBOX_BGX_PORT_SET_MTU 14
+#define MBOX_BGX_PORT_ADD_MACADDR 15
+#define MBOX_BGX_PORT_DEL_MACADDR 16
+#define MBOX_BGX_PORT_GET_MACADDR_ENTRIES 17
 
 /* BGX port configuration parameters: */
 typedef struct mbox_bgx_port_conf {
