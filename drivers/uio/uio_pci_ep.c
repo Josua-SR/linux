@@ -148,10 +148,10 @@ static int uio_pci_ep_probe(struct platform_device *pdev)
 			mem->addr = virt_to_phys(mem->internal_addr);
 		} else {
 			mem->internal_addr = devm_ioremap_resource(dev, res);
-			if (!mem->internal_addr) {
+			if (IS_ERR(mem->internal_addr)) {
 				dev_err(dev, "Failed to map resource %pR\n",
 					res);
-				return -ENODEV;
+				return PTR_ERR(mem->internal_addr);
 			}
 			mem->addr = res->start;
 		}
