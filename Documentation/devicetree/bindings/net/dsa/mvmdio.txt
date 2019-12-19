@@ -18,7 +18,7 @@ DTS Configuration Example
 This is an example configuration for a Marvell board.
 The customer should remove one the "mii-bus" or "xmii-bus" parameters as needed.
 {
-	cpn-110-master {
+	cp0 {
 		config-space {
 			mdio: mdio@12a200 {
 				#address-cells = <1>;
@@ -67,3 +67,31 @@ reg - Register address
 val - Value
 
 
+User-Space application (UMSD-CLI) driver
+----------------------------------------
+An alternative module "mvmdio_uio" is used for the User-Space application UMSD-CLI
+Depending on board the phy-address is either 1 or 6
+
+Node mvmdio_uio DTS Configuration Example:
+{
+	cp0 {
+		config-space {
+			mdio: mdio@12a200 {
+				#address-cells = <1>;
+				#size-cells = <0>;
+			};
+			xmdio: mdio@15b000 {
+				#address-cells = <1>;
+				#size-cells = <0>;
+			};
+			mdio_uio {
+				compatible = "marvell,mvmdio-uio";
+				mii-bus = <&mdio>;
+			};
+			xmdio_uio {
+				compatible = "marvell,mvmdio-uio";
+				mii-bus = <&xmdio>;
+			};
+		};
+	};
+}
