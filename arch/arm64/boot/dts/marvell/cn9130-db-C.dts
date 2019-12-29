@@ -7,14 +7,31 @@
 	compatible = "marvell,cn9130-db-C", "marvell,cn9130-db-A",
 		     "marvell,armada-ap807-quad", "marvell,armada-ap807";
 
-	cp0 {
-		config-space {
-			/delete-node/cp0_pcie0;
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/* The PCI console memory must be reserved */
+		console_reserved: pci-console-nexus@7f000000 {
+			compatible = "marvell,pci-console-nexus-memory";
+			reg = <0 0x7f000000 0 0x20000>;
+			no-map;
 		};
+	};
+
+	cp0 {
+		/delete-node/ pcie@600000;
+		/delete-node/ pcie@620000;
+		/delete-node/ pcie@640000;
 	};
 };
 
 &cp0_pci_ep_uio {
+	reg = <0 0 0 0x100000>,
+	      <0 0x7f000000 0 0x100000>,
+	      <0x80 0x00000000 0x8 0x000000000>;
+	reg-names = "bar0", "bar2", "host-map";
 	status = "okay";
 };
 
