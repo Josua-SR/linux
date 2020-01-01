@@ -66,6 +66,14 @@
 
 #define PCIE_SRIOV_DEVID_OFFSET		0x192
 
+#define PCIE_RESBAR_EXT_CAP_HDR_REG	0x25c
+#define PCIE_RESBAR_EXT_CAP_REG(bar)	(PCIE_RESBAR_EXT_CAP_HDR_REG + 4 + \
+					(((bar) / 2 + (bar) % 2) & 0x3) * 8)
+#define PCIE_RESBAR_EXT_CAP_REG_MASK	0x000fffff
+#define PCIE_RESBAR_EXT_CAP_REG_SHIFT	4
+
+#define PCIE_BAR_IS_RESIZABLE(bar)	((bar) == 5 || (bar) == 4 || \
+					 (bar) == 2 || (bar) == 0)
 #define MAX_ATU_REGIONS	16
 #define MAX_ATU_SIZE	(4ul * SZ_1G)
 
@@ -102,6 +110,7 @@ void armada_pcie_ep_setup_bar(void *ep_hdl, int func_id, u32 bar_num, u32 props,
 	u32 space_type = props & PCI_BASE_ADDRESS_SPACE;
 	u32 sz_type	= (props & PCI_BASE_ADDRESS_MEM_TYPE_MASK);
 	u32 v = 0;
+	void __iomem *resbar = ep->pl_regs + PCIE_RESBAR_EXT_CAP_REG(bar_num);
 	void __iomem *bar = cfg_func_base(ep, func_id,
 				PCI_BASE_ADDRESS_0 + (bar_num * 4));
 	void __iomem *bar_mask = cfg_shadow_func_base(ep, func_id,
@@ -112,17 +121,30 @@ void armada_pcie_ep_setup_bar(void *ep_hdl, int func_id, u32 bar_num, u32 props,
 		writel_relaxed(v, bar);
 	} else {
 		/* clear the top 32 bits of the size */
-		if (sz_type == PCI_BASE_ADDRESS_MEM_TYPE_64) {
-			writel_relaxed((sz - 1) >> 32, bar_mask + 4);
+		if (sz_type == PCI_BASE_ADDRESS_MEM_TYPE_64)
 			writel_relaxed(0, bar + 4);
-		}
+
 		v = props & (~PCI_BASE_ADDRESS_MEM_MASK);
 		writel_relaxed(v, bar);
 	}
 
-	/* Set size and enable bar */
-	v = ((sz - 1) & U32_MAX) | BAR_ENABLE_MASK;
-	writel_relaxed(v, bar_mask);
+	/*
+	 * Set the BAR using resizable BAR capability registers
+	 * The minimum (and the default) BAR size is 1MB
+	 * Once the Resizable BAR capability register is set
+	 * the resizable BAR control register at next offset gets
+	 * updated automatically.
+	 */
+	if (sz > SZ_1M && PCIE_BAR_IS_RESIZABLE(bar_num)) {
+		/* BAR size should be power of 2 already */
+		v = ((sz >> 20) & PCIE_RESBAR_EXT_CAP_REG_MASK);
+		v <<= PCIE_RESBAR_EXT_CAP_REG_SHIFT;
+		writel_relaxed(v, resbar);
+	}
+
+	/* Enable bar */
+	writel_relaxed(BAR_ENABLE_MASK, bar_mask);
+
 }
 EXPORT_SYMBOL(armada_pcie_ep_setup_bar);
 
