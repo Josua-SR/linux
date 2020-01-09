@@ -32,6 +32,30 @@
 
 };
 
+&dma_xor0 {
+	status = "okay";
+};
+
+&dma_xor1 {
+	status = "okay";
+};
+
+&xor0 {
+	status = "disabled";
+};
+
+&xor1 {
+	status = "disabled";
+};
+
+&uio_xor0 {
+	status = "disabled";
+};
+
+&uio_xor1 {
+	status = "disabled";
+};
+
 &cp0_pci_ep_uio {
 	reg = <0 0 0 0x100000>,
 	      <0x80 0x00000000 0x8 0x000000000>;

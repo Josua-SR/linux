@@ -85,6 +85,30 @@
 	vqmmc-supply = <&v_3_3>;
 };
 
+&dma_xor0 {
+	status = "okay";
+};
+
+&dma_xor1 {
+	status = "okay";
+};
+
+&xor0 {
+	status = "disabled";
+};
+
+&xor1 {
+	status = "disabled";
+};
+
+&uio_xor0 {
+	status = "disabled";
+};
+
+&uio_xor1 {
+	status = "disabled";
+};
+
 &cp0_i2c0 {
 	clock-frequency = <100000>;
 	pinctrl-names = "default";
