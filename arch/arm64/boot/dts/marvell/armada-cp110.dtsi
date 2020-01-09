@@ -657,6 +657,12 @@
 		};
 	};
 
+	CP110_LABEL(pcinet_target):pcinet-target {
+		compatible = "marvell,pcinet-target";
+		msi-parent = <&gic_v2m0>;
+		status = "disabled";
+	};
+
 	CP110_LABEL(pcie_ep): pcie-ep@600000 {
 		compatible = "marvell,armada-pcie-ep", "snps,dw-pcie";
 		reg =	<U64_TO_U32_H(CP110_PCIE_EP_REG_BASE(0))

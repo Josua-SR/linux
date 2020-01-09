@@ -67,6 +67,10 @@
 	status = "okay";
 };
 
+&cp0_pcinet_target {
+	status = "okay";
+};
+
 &cp0_usb3_0 {
 	status = "okay";
 	usb-phy = <&cp0_usb3_0_phy0>;
