@@ -31,6 +31,10 @@ struct uio_pci {
 /* make sure we have at least one mem regions to map the host ram */
 #define MAX_BAR_MAP	(MAX_UIO_MAPS > 6 ? 6 : MAX_UIO_MAPS - 1)
 
+/* temporary hack to export the BAR0 address for pcinet */
+void __iomem *bar0_internal_addr;
+EXPORT_SYMBOL(bar0_internal_addr);
+
 static int uio_pci_ep_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -147,6 +151,7 @@ static int uio_pci_ep_probe(struct platform_device *pdev)
 				return -ENOMEM;
 			}
 			mem->internal_addr = page_address(pg);
+			bar0_internal_addr = mem->internal_addr;
 			mem->addr = virt_to_phys(mem->internal_addr);
 		} else {
 			mem->internal_addr = devm_ioremap_resource(dev, res);
