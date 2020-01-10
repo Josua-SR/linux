@@ -699,6 +699,8 @@ struct __attribute__((__packed__)) mbox_tim_ring_conf {
 #define MBOX_PKI_PORT_ALLOC_QPG			21
 #define MBOX_PKI_PORT_FREE_QPG			22
 #define MBOX_PKI_SET_PORT_CONFIG		23
+#define MBOX_PKI_PORT_VLAN_FILTER_CONFIG        24
+#define MBOX_PKI_PORT_VLAN_FILTER_ENTRY_CONFIG  25
 
 /* pki pkind parse mode */
 enum  {
@@ -914,5 +916,19 @@ typedef struct mbox_pki_port_delete_qos_entry {
 	u8 port_type;
 	u16 index;
 } mbox_pki_qos_del_t;
+
+/* pki port VLAN filter config */
+struct pki_port_vlan_filter_config {
+	u8 port_type;
+	u8 fltr_conf; /* '1' to enable & '0' to disable */
+};
+
+/* pki port VLAN filter entry config */
+struct pki_port_vlan_filter_entry_config {
+	u8 port_type;
+	u8 entry_conf; /* '1' to add & '0' to remove */
+	u16 vlan_tpid; /* in host byte-order */
+	u16 vlan_id;   /* in host byte-order */
+};
 
 #endif

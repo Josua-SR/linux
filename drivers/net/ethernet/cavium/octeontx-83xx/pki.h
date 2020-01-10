@@ -421,6 +421,9 @@ enum PKI_PCAM_TERM_E {
 #define MAX_PKI_PORTS	64
 #define NUM_FRAME_LEN_REG	2
 
+/* Reserved pcam entries per port for VLAN traffic */
+#define RSVD_PCAM_ENTRIES	3
+
 struct pki_port {
 	bool	valid;
 	bool	has_fcs;
@@ -432,6 +435,7 @@ struct pki_port {
 	u64	shared_mask;
 	u16 max_frame_len;
 	u16 min_frame_len;
+	u16	pcam_ent_base;
 };
 
 struct pkipf_vf {
@@ -463,6 +467,25 @@ struct pkipf_vf {
 	int	dstats_base;
 	int	qpg_base;
 	int	pcam_ent_base;
+};
+
+struct rsrc_bmap {
+	unsigned long *bmap;	/* Pointer to resource bitmap */
+	u16  max;		/* Max resource count */
+};
+
+union pcam_idx_map {
+	u64	map;
+	struct {
+		u32 style;
+		u32 vlan;
+	} s;
+};
+
+struct pcam {
+	struct mutex	 lock;  /* PCAM entries update lock */
+	struct rsrc_bmap rsrc;
+	union pcam_idx_map *idx2style;
 };
 
 #define PKI_MAX_VF			32
@@ -500,6 +523,7 @@ struct pki_t {
 	struct pkipf_vf		vf[PKI_MAX_VF];
 	u16			*qpg_domain;
 	u16			*loop_pkind_domain;
+	struct pcam		pcam;
 };
 
 struct pki_com_s {
@@ -582,5 +606,9 @@ int pki_port_errchk(struct pkipf_vf *vf, u16 vf_id,
 		    mbox_pki_errcheck_cfg_t *cfg);
 int pki_port_hashcfg(struct pkipf_vf *vf, u16 vf_id,
 		     mbox_pki_hash_cfg_t *cfg);
+int pki_port_vlan_fltr_cfg(struct pkipf_vf *vf, u16 vf_id,
+			   struct pki_port_vlan_filter_config *cfg);
+int pki_port_vlan_fltr_entry_cfg(struct pkipf_vf *vf, u16 vf_id,
+				 struct pki_port_vlan_filter_entry_config *cfg);
 
 #endif
