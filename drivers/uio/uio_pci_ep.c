@@ -134,6 +134,7 @@ static int uio_pci_ep_probe(struct platform_device *pdev)
 		mem = &info->mem[mem_id];
 		mem->memtype = UIO_MEM_PHYS;
 		mem->size = resource_size(res);
+		mem->addr = res->start;
 		mem->name = name;
 
 		if (!is_power_of_2(mem->size)) {
@@ -142,7 +143,7 @@ static int uio_pci_ep_probe(struct platform_device *pdev)
 		}
 
 		/* NULL means allocate RAM backup */
-		if (!res->start) {
+		if (!mem->addr) {
 			pg = alloc_pages(GFP_KERNEL | __GFP_ZERO,
 					 get_order(mem->size));
 			if (!pg) {
@@ -153,14 +154,6 @@ static int uio_pci_ep_probe(struct platform_device *pdev)
 			mem->internal_addr = page_address(pg);
 			bar0_internal_addr = mem->internal_addr;
 			mem->addr = virt_to_phys(mem->internal_addr);
-		} else {
-			mem->internal_addr = devm_ioremap_resource(dev, res);
-			if (IS_ERR(mem->internal_addr)) {
-				dev_err(dev, "Failed to map resource %pR\n",
-					res);
-				return PTR_ERR(mem->internal_addr);
-			}
-			mem->addr = res->start;
 		}
 
 		props = PCI_BASE_ADDRESS_SPACE_MEMORY |
