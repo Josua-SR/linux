@@ -28,6 +28,7 @@ static int bgx_port_stats_get(struct octtx_bgx_port *port,
 			      mbox_bgx_port_stats_t *stat);
 static int bgx_port_stats_clr(struct octtx_bgx_port *port);
 static int bgx_port_link_status(struct octtx_bgx_port *port, u8 *up);
+static int bgx_port_set_link_state(struct octtx_bgx_port *port, bool enable);
 static int bgx_port_promisc_set(struct octtx_bgx_port *port, u8 on);
 static int bgx_port_macaddr_set(struct octtx_bgx_port *port, u8 macaddr[]);
 static int bgx_port_macaddr_add(struct octtx_bgx_port *port, u8 macaddr[]);
@@ -694,6 +695,10 @@ static int bgx_receive_message(u32 id, u16 domain_id, struct mbox_hdr *hdr,
 		ret = bgx_port_flow_ctrl_cfg(port, mdata);
 		resp->data = sizeof(struct mbox_bgx_port_fc_cfg);
 		break;
+	case MBOX_BGX_PORT_SET_LINK_STATE:
+		ret = bgx_port_set_link_state(port, *(bool *)mdata);
+		resp->data = 0;
+		break;
 	default:
 		ret = -EINVAL;
 		break;
@@ -1055,6 +1060,11 @@ int bgx_port_stats_clr(struct octtx_bgx_port *port)
 	bgx_reg_write(bgx, port->lmac, BGX_CMRX_TX_STAT16, 0);
 	bgx_reg_write(bgx, port->lmac, BGX_CMRX_TX_STAT17, 0);
 	return 0;
+}
+
+int bgx_port_set_link_state(struct octtx_bgx_port *port, bool enable)
+{
+	return thbgx->set_link_state(port->node, port->bgx, port->lmac, enable);
 }
 
 int bgx_port_link_status(struct octtx_bgx_port *port, u8 *up)

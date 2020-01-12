@@ -235,6 +235,7 @@ int bgx_get_lmac_count(int node, int bgx);
 const u8 *bgx_get_lmac_mac(int node, int bgx_idx, int lmacid);
 void bgx_set_lmac_mac(int node, int bgx_idx, int lmacid, const u8 *mac);
 void bgx_get_lmac_link_state(int node, int bgx_idx, int lmacid, void *status);
+int bgx_set_lmac_link_state(int node, int bgx_idx, int lmacid, bool enable);
 void bgx_lmac_internal_loopback(int node, int bgx_idx,
 				int lmac_idx, bool enable);
 void bgx_config_timestamping(int node, int bgx_idx, int lmacid, bool enable);
@@ -255,6 +256,8 @@ struct thunder_bgx_com_s {
 	u64 (*get_reg_base)(int node, int bgx_idx, u64 *iosize);
 	void (*get_link_status)(int node, int bgx_idx,
 				int lmac_idx, void *status);
+	int (*set_link_state)(int node, int bgx_idx,
+			      int lmac_idx, bool enable);
 	const u8* (*get_mac_addr)(int node, int bgx_idx, int lmac_idx);
 	void (*set_mac_addr)(int node, int bgx_idx,
 			     int lmac_idx, const u8 *mac);

@@ -318,6 +318,7 @@ enum {
 #define MBOX_BGX_PORT_GET_MACADDR_ENTRIES 17
 #define MBOX_BGX_PORT_GET_FIFO_CFG  18
 #define MBOX_BGX_PORT_FLOW_CTRL_CFG 19
+#define MBOX_BGX_PORT_SET_LINK_STATE 20
 
 /* BGX port configuration parameters: */
 typedef struct mbox_bgx_port_conf {
