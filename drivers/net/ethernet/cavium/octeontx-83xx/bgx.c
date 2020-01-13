@@ -6,6 +6,7 @@
  * as published by the Free Software Foundation.
  */
 
+#include <linux/bitfield.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
@@ -37,12 +38,18 @@ static int bgx_port_bp_set(struct octtx_bgx_port *port, u8 on);
 static int bgx_port_bcast_set(struct octtx_bgx_port *port, u8 on);
 static int bgx_port_mcast_set(struct octtx_bgx_port *port, u8 on);
 static int bgx_port_mtu_set(struct octtx_bgx_port *port, u16 mtu);
+static int bgx_port_get_fifo_cfg(struct octtx_bgx_port *port,
+				 struct mbox_bgx_port_fifo_cfg *conf);
+static int bgx_port_flow_ctrl_cfg(struct octtx_bgx_port *port,
+				  struct mbox_bgx_port_fc_cfg *conf);
 
 #define BGX_LMAC_NUM_CHANS 16
 #define BGX_LMAC_BASE_CHAN(__bgx, __lmac) \
 	(0x800 | ((__bgx) << 8) | ((__lmac) << 4)) /* PKI_CHAN_E */
 
 #define BGX_INVALID_ID	(-1)
+
+#define DEFAULT_PAUSE_TIME		0x7FF
 
 /* BGX CSRs (offsets from the PF base address for particular BGX:LMAC).
  * NOTE: Most of the CSR definitions are provided in thunder_bgx.h.
@@ -67,7 +74,15 @@ static int bgx_port_mtu_set(struct octtx_bgx_port *port, u16 mtu);
 #define BGX_CMR_PRT_CBFC_CTL		0x508
 #define BGX_CMR_TX_OVR_BP		0x520
 
+#define BGX_SMU_TX_PAUSE_PKT_TIME	0x20110
+#define BGX_SMU_TX_PAUSE_PKT_INTERVAL	0x20120
 #define BGX_SMU_HG2_CONTROL		0x20210
+
+#define BGX_GMP_GMI_RXX_FRM_CTL		0x38028
+#define BGX_GMP_GMI_TXX_PAUSE_PKT_TIME	0x38238
+#define BGX_GMP_GMI_TXX_PAUSE_PKT_INTERVAL 0x38248
+#define BGX_GMP_GMI_TXX_CTL		0x38270
+#define BGX_CONST			0x40000
 
 struct lmac_dmac_cfg {
 	unsigned long	index_map;
@@ -388,19 +403,39 @@ static int bgx_set_ieee802_fc(struct bgxpf *bgx, int lmac, int lmac_type)
 {
 	u64 reg;
 
+	/* Power-on values for all of the following registers.*/
+	bgx_reg_write(bgx, 0, BGX_CMR_RX_OVR_BP, 0);
+	bgx_reg_write(bgx, lmac, BGX_CMR_TX_OVR_BP, 0);
+	bgx_reg_write(bgx, lmac, BGX_CMR_TX_CHANNEL, 0);
+
 	switch (lmac_type) {
 	case OCTTX_BGX_LMAC_TYPE_XAUI:
 	case OCTTX_BGX_LMAC_TYPE_RXAUI:
 	case OCTTX_BGX_LMAC_TYPE_10GR:
 	case OCTTX_BGX_LMAC_TYPE_40GR:
-		/* Power-on values for all of the following registers.*/
-		bgx_reg_write(bgx, 0, BGX_CMR_RX_OVR_BP, 0);
-		bgx_reg_write(bgx, lmac, BGX_CMR_TX_OVR_BP, 0);
-		bgx_reg_write(bgx, lmac, BGX_CMR_TX_CHANNEL, 0);
 		reg = (0xFFull << 48) | (0xFFull << 32);
 		bgx_reg_write(bgx, lmac, BGX_SMUX_CBFC_CTL, reg);
 		reg = (0x1ull << 16) | 0xFFFFull;
 		bgx_reg_write(bgx, lmac, BGX_SMU_HG2_CONTROL, reg);
+
+		/* Set pause time and interval*/
+		bgx_reg_write(bgx, lmac, BGX_SMU_TX_PAUSE_PKT_TIME,
+			      DEFAULT_PAUSE_TIME);
+		reg = bgx_reg_read(bgx, lmac, BGX_SMU_TX_PAUSE_PKT_INTERVAL);
+		reg &= ~0xFFFFULL;
+		bgx_reg_write(bgx, lmac, BGX_SMU_TX_PAUSE_PKT_INTERVAL,
+			      reg | (DEFAULT_PAUSE_TIME / 2));
+		break;
+	case OCTTX_BGX_LMAC_TYPE_SGMII:
+	case OCTTX_BGX_LMAC_TYPE_QSGMII:
+		/* Set pause time and interval*/
+		bgx_reg_write(bgx, lmac, BGX_GMP_GMI_TXX_PAUSE_PKT_TIME,
+			      DEFAULT_PAUSE_TIME);
+		reg = bgx_reg_read(bgx, lmac,
+				   BGX_GMP_GMI_TXX_PAUSE_PKT_INTERVAL);
+		reg &= ~0xFFFFULL;
+		bgx_reg_write(bgx, lmac, BGX_GMP_GMI_TXX_PAUSE_PKT_INTERVAL,
+			      reg | (DEFAULT_PAUSE_TIME / 2));
 		break;
 	}
 	return 0;
@@ -651,6 +686,14 @@ static int bgx_receive_message(u32 id, u16 domain_id, struct mbox_hdr *hdr,
 		ret = bgx_port_mtu_set(port, *(u16 *)mdata);
 		resp->data = 0;
 		break;
+	case MBOX_BGX_PORT_GET_FIFO_CFG:
+		ret = bgx_port_get_fifo_cfg(port, mdata);
+		resp->data = sizeof(struct mbox_bgx_port_fifo_cfg);
+		break;
+	case MBOX_BGX_PORT_FLOW_CTRL_CFG:
+		ret = bgx_port_flow_ctrl_cfg(port, mdata);
+		resp->data = sizeof(struct mbox_bgx_port_fc_cfg);
+		break;
 	default:
 		ret = -EINVAL;
 		break;
@@ -759,6 +802,141 @@ int bgx_port_config(struct octtx_bgx_port *port, mbox_bgx_port_conf_t *conf)
 		conf->mtu = reg & 0xFFFF;
 		break;
 	}
+	return 0;
+}
+
+static int bgx_port_get_fifo_cfg(struct octtx_bgx_port *port,
+				 struct mbox_bgx_port_fifo_cfg *conf)
+{
+	struct bgxpf *bgx;
+	u64 fifo_size;
+
+	bgx = get_bgx_dev(port->node, port->bgx);
+	if (!bgx)
+		return -EINVAL;
+
+	fifo_size = bgx_reg_read(bgx, 0, BGX_CONST) & 0xffffff;
+	conf->rx_fifosz = (u32)fifo_size / bgx->lmac_count;
+
+	return 0;
+}
+
+static int bgx_port_flow_ctrl_cfg(struct octtx_bgx_port *port,
+				  struct mbox_bgx_port_fc_cfg *conf)
+{
+	u16 high_water = conf->high_water;
+	u16 low_water = conf->low_water;
+	u8 rx_pause = conf->rx_pause;
+	u8 tx_pause = conf->tx_pause;
+	u16 max_hwater, min_lwater;
+	u16 fifo_size, drop_mark;
+	struct bgxpf *bgx;
+	int lmac;
+	u64 reg;
+	u8 smu;
+
+#define BGX_RX_FRM_CTL_CTL_BCK		BIT_ULL(3)
+#define BGX_SMUX_TX_CTL_L2P_BP_CONV	BIT_ULL(7)
+#define BGX_GMP_GMI_TX_FC_TYPE		BIT_ULL(2)
+#define BGX_CMR_RX_OVR_BP_EN(X)		BIT_ULL(((X) + 8))
+#define BGX_CMR_RX_OVR_BP_BP(X)		BIT_ULL(((X) + 4))
+#define RX_BP_OFF_MIN_MARK		(0x10)
+
+	bgx = get_bgx_dev(port->node, port->bgx);
+	if (!bgx)
+		return -EINVAL;
+
+	lmac = port->lmac;
+
+	switch (port->lmac_type) {
+	case OCTTX_BGX_LMAC_TYPE_40GR:
+	case OCTTX_BGX_LMAC_TYPE_XAUI:
+	case OCTTX_BGX_LMAC_TYPE_RXAUI:
+	case OCTTX_BGX_LMAC_TYPE_10GR:
+		smu = true;
+		break;
+	case OCTTX_BGX_LMAC_TYPE_SGMII:
+	case OCTTX_BGX_LMAC_TYPE_QSGMII:
+		smu = false;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (conf->fc_cfg == BGX_PORT_FC_CFG_SET) {
+		if (!high_water || !low_water || high_water < low_water)
+			return -EINVAL;
+
+		fifo_size = bgx_reg_read(bgx, 0, BGX_CONST) & 0xffffff;
+		fifo_size /= bgx->lmac_count;
+
+		drop_mark = bgx_reg_read(bgx, lmac, BGX_CMRX_RX_BP_DROP) & 0x3f;
+		drop_mark *= 16;
+
+		/* max_hwater & min_lwater in bytes */
+		max_hwater = fifo_size - drop_mark;
+		min_lwater = RX_BP_OFF_MIN_MARK * 16;
+
+		if (high_water > max_hwater || low_water < min_lwater)
+			return -EINVAL;
+
+		bgx_reg_write(bgx, lmac, BGX_CMR_RX_BP_ON, high_water / 16);
+		bgx_reg_write(bgx, lmac, BGX_CMR_RX_BP_OFF, low_water / 16);
+
+		if (smu) {
+			reg = bgx_reg_read(bgx, lmac, BGX_SMUX_RX_FRM_CTL);
+			reg &= ~BGX_RX_FRM_CTL_CTL_BCK;
+			reg |= FIELD_PREP(BGX_RX_FRM_CTL_CTL_BCK, !!rx_pause);
+			bgx_reg_write(bgx, lmac, BGX_SMUX_RX_FRM_CTL, reg);
+
+			reg = bgx_reg_read(bgx, lmac, BGX_SMUX_TX_CTL);
+			reg &= ~BGX_SMUX_TX_CTL_L2P_BP_CONV;
+			reg |= FIELD_PREP(BGX_SMUX_TX_CTL_L2P_BP_CONV,
+					!!tx_pause);
+			bgx_reg_write(bgx, lmac, BGX_SMUX_TX_CTL, reg);
+		} else {
+			reg = bgx_reg_read(bgx, lmac, BGX_GMP_GMI_RXX_FRM_CTL);
+			reg &= ~BGX_RX_FRM_CTL_CTL_BCK;
+			reg |= FIELD_PREP(BGX_RX_FRM_CTL_CTL_BCK, !!rx_pause);
+			bgx_reg_write(bgx, lmac, BGX_GMP_GMI_RXX_FRM_CTL, reg);
+
+			reg = bgx_reg_read(bgx, lmac, BGX_GMP_GMI_TXX_CTL);
+			reg &= ~BGX_GMP_GMI_TX_FC_TYPE;
+			reg |= FIELD_PREP(BGX_GMP_GMI_TX_FC_TYPE, !!tx_pause);
+			bgx_reg_write(bgx, lmac, BGX_GMP_GMI_TXX_CTL, reg);
+		}
+
+		reg = bgx_reg_read(bgx, 0, BGX_CMR_RX_OVR_BP);
+		if (tx_pause) {
+			reg &= ~BGX_CMR_RX_OVR_BP_EN(lmac);
+		} else {
+			reg |= BGX_CMR_RX_OVR_BP_EN(lmac);
+			reg &= ~BGX_CMR_RX_OVR_BP_BP(lmac);
+		}
+		bgx_reg_write(bgx, 0, BGX_CMR_RX_OVR_BP, reg);
+
+		return 0;
+	}
+
+	if (smu) {
+		reg = bgx_reg_read(bgx, lmac, BGX_SMUX_RX_FRM_CTL);
+		conf->rx_pause = !!(reg & BGX_RX_FRM_CTL_CTL_BCK);
+
+		reg = bgx_reg_read(bgx, lmac, BGX_SMUX_TX_CTL);
+		conf->tx_pause = !!(reg & BGX_SMUX_TX_CTL_L2P_BP_CONV);
+	} else {
+		reg = bgx_reg_read(bgx, lmac, BGX_GMP_GMI_RXX_FRM_CTL);
+		conf->rx_pause = !!(reg & BGX_RX_FRM_CTL_CTL_BCK);
+
+		reg = bgx_reg_read(bgx, lmac, BGX_GMP_GMI_TXX_CTL);
+		conf->tx_pause = !!(reg & BGX_GMP_GMI_TX_FC_TYPE);
+	}
+
+	conf->high_water = bgx_reg_read(bgx, lmac, BGX_CMR_RX_BP_ON) & 0xfff;
+	conf->low_water = bgx_reg_read(bgx, lmac, BGX_CMR_RX_BP_OFF) & 0x7f;
+	conf->high_water *= 16;
+	conf->low_water *= 16;
+
 	return 0;
 }
 

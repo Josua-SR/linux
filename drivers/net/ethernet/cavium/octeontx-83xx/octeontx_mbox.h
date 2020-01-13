@@ -316,6 +316,8 @@ enum {
 #define MBOX_BGX_PORT_ADD_MACADDR 15
 #define MBOX_BGX_PORT_DEL_MACADDR 16
 #define MBOX_BGX_PORT_GET_MACADDR_ENTRIES 17
+#define MBOX_BGX_PORT_GET_FIFO_CFG  18
+#define MBOX_BGX_PORT_FLOW_CTRL_CFG 19
 
 /* BGX port configuration parameters: */
 typedef struct mbox_bgx_port_conf {
@@ -416,6 +418,26 @@ typedef struct mbox_bgx_port_stats {
 	u64 rx_fragmented_errors;
 	u64 rx_jabber_errors;
 } mbox_bgx_port_stats_t;
+
+/* BGX port fifo config: */
+struct mbox_bgx_port_fifo_cfg {
+	u32 rx_fifosz; /* in Bytes */
+};
+
+enum bgx_port_fc {
+	BGX_PORT_FC_CFG_GET = 0,
+	BGX_PORT_FC_CFG_SET = 1
+};
+
+/* BGX port flow control config: */
+struct mbox_bgx_port_fc_cfg {
+	/* BP on/off threshold levels in Bytes, should be multiple of 16 */
+	u16 high_water;
+	u16 low_water;
+	u8 rx_pause; /* rx_pause = 1/0 to enable/disable fc on Tx */
+	u8 tx_pause; /* tx_pause = 1/0 to enable/disable fc on Rx */
+	enum bgx_port_fc fc_cfg;
+};
 
 /*----------------------------------------------------------------------------*/
 /* LBK messages:                                                              */
