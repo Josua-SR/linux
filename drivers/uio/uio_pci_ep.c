@@ -29,7 +29,7 @@ struct uio_pci {
 };
 
 /* make sure we have at least one mem regions to map the host ram */
-#define MAX_BAR_MAP	(MAX_UIO_MAPS > 6 ? 6 : MAX_UIO_MAPS - 1)
+#define MAX_BAR_MAP	6
 
 /* temporary hack to export the BAR0 address for pcinet */
 void __iomem *bar0_internal_addr;
