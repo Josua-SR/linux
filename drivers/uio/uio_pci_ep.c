@@ -156,8 +156,11 @@ static int uio_pci_ep_probe(struct platform_device *pdev)
 			mem->addr = virt_to_phys(mem->internal_addr);
 		}
 
-		props = PCI_BASE_ADDRESS_SPACE_MEMORY |
-			PCI_BASE_ADDRESS_MEM_TYPE_32;
+		props = PCI_BASE_ADDRESS_SPACE_MEMORY;
+		if (bar_id < 4)
+			props |= PCI_BASE_ADDRESS_MEM_TYPE_64;
+		else
+			props |= PCI_BASE_ADDRESS_MEM_TYPE_32;
 		/* Now create the BAR to match the memory region */
 		armada_pcie_ep_setup_bar(ep, 0, bar_id, props, mem->size);
 		armada_pcie_ep_bar_map(ep, 0, bar_id, (phys_addr_t)mem->addr,
