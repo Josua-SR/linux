@@ -504,6 +504,9 @@ static int pki_receive_message(u32 id, u16 domain_id,
 		hdr->res_code = pki_port_vlan_fltr_entry_cfg(vf, hdr->vfid,
 							     mdata);
 		break;
+	case MBOX_PKI_PORT_MTU_CONFIG:
+		hdr->res_code = pki_port_mtu_cfg(vf, hdr->vfid, mdata);
+		break;
 	}
 
 	mutex_unlock(&octeontx_pki_devices_lock);

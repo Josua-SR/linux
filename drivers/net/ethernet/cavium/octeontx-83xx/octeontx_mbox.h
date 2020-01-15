@@ -723,6 +723,7 @@ struct __attribute__((__packed__)) mbox_tim_ring_conf {
 #define MBOX_PKI_SET_PORT_CONFIG		23
 #define MBOX_PKI_PORT_VLAN_FILTER_CONFIG        24
 #define MBOX_PKI_PORT_VLAN_FILTER_ENTRY_CONFIG  25
+#define MBOX_PKI_PORT_MTU_CONFIG		26
 
 /* pki pkind parse mode */
 enum  {
@@ -737,6 +738,13 @@ enum  {
 typedef struct mbox_pki_port_type {
 	u8 port_type;
 } mbox_pki_port_t;
+
+/* pki mtu config */
+typedef struct mbox_pki_mtu_cfg {
+	u8 port_type;
+	u16 minlen;
+	u16 maxlen;
+} mbox_pki_mtu_cfg_t;
 
 /* pki port qpg config */
 struct mbox_pki_port_qpg_attr {
@@ -952,5 +960,16 @@ struct pki_port_vlan_filter_entry_config {
 	u16 vlan_tpid; /* in host byte-order */
 	u16 vlan_id;   /* in host byte-order */
 };
+
+/*----------------------------------------------------------------------------*/
+/* PKO messages:                                                              */
+/*----------------------------------------------------------------------------*/
+/* Message IDs for PKO_COPROC */
+#define MBOX_PKO_MTU_CONFIG		1
+
+/* pko mtu config */
+typedef struct mbox_pko_mtu_cfg {
+	u32 mtu;
+} mbox_pko_mtu_cfg_t;
 
 #endif

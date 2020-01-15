@@ -478,6 +478,8 @@ int pki_port_open(struct pkipf_vf *vf, u16 vf_id,
 		}
 		cfg |= (0x1ULL << PKI_STYLE_CFG_LENERR_EN_SHIFT);
 		cfg |= (0x1ull << PKI_STYLE_CFG_DROP_SHIFT);
+		cfg |= (0x1ull << PKI_STYLE_CFG_MAXERR_EN_SHIFT);
+		cfg |= (0x1ull << PKI_STYLE_CFG_MINERR_EN_SHIFT);
 		for (i = 0; i < pki->max_cls; i++)
 			pki_reg_write(pki,
 				      PKI_CLX_STYLEX_CFG(i, port->init_style),
@@ -1419,4 +1421,45 @@ int pki_port_vlan_fltr_entry_cfg(struct pkipf_vf *vf, u16 vf_id,
 exit:
 	mutex_unlock(&pcam->lock);
 	return rc;
+}
+
+int pki_port_mtu_cfg(struct pkipf_vf *vf, u16 vf_id,
+		     mbox_pki_mtu_cfg_t *cfg)
+{
+	struct pki_port *port;
+	u64 frmlen;
+	int i;
+	struct pki_t *pki = vf->pki;
+
+	switch (cfg->port_type) {
+	case OCTTX_PORT_TYPE_NET:
+		port = &vf->bgx_port[vf_id];
+		break;
+	case OCTTX_PORT_TYPE_PCI:
+		port = &vf->sdp_port[vf_id];
+		break;
+	case OCTTX_PORT_TYPE_INT:
+		port = &vf->lbk_port[vf_id];
+		break;
+	default:
+		return MBOX_RET_INVALID;
+	}
+	if (port->state == PKI_PORT_CLOSE)
+		return MBOX_RET_INVALID;
+
+	if (cfg->maxlen > OCTTX_HW_MAX_FRS)
+		return MBOX_RET_INVALID;
+
+	if (cfg->minlen < OCTTX_HW_MIN_FRS)
+		return MBOX_RET_INVALID;
+
+	for (i = 0; i < pki->max_cls; i++) {
+		frmlen = pki_reg_read(pki, PKI_FRM_LEN_CHKX(i));
+		set_field(&frmlen, PKI_FRM_LEN_CHK_MAXLEN_MASK,
+			  PKI_FRM_LEN_CHK_MAXLEN_SHIFT, cfg->maxlen);
+		set_field(&frmlen, PKI_FRM_LEN_CHK_MINLEN_MASK,
+			  PKI_FRM_LEN_CHK_MINLEN_SHIFT, cfg->minlen);
+		pki_reg_write(pki, PKI_FRM_LEN_CHKX(i), frmlen);
+	}
+	return MBOX_RET_SUCCESS;
 }

@@ -289,6 +289,9 @@
 #define PKO_VF_DQ_OP_DQSTATUS_SHIFT             60
 #define PKO_VF_DQ_STATUS_OK			0x0
 
+#define PKO_PF_CC_WORD_CNT_MASK			0xFFFFF
+#define PKO_PF_CC_WORD_CNT_SHIFT		12
+
 #define NULL_FIFO				0x13
 #define DQS_PER_VF				0x08
 
@@ -296,6 +299,7 @@ struct pkopf_vf {
 	struct octeontx_pf_vf	domain;
 	int			chan;
 	int			mac_num;
+	int			tx_fifo_sz;
 };
 
 struct pkopf {
@@ -331,7 +335,8 @@ struct pkopf_com_s {
 	int (*receive_message)(u32, u16 domain_id,
 			       struct mbox_hdr *hdr,
 			       union mbox_data *req,
-			       union mbox_data *resp);
+			       union mbox_data *resp,
+			       void *mdata);
 	int (*get_vf_count)(u32 id);
 };
 

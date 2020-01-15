@@ -1296,6 +1296,7 @@ static int bgx_create_domain(u32 id, u16 domain_id,
 			port->bgx = gport->bgx;
 			port->lmac = gport->lmac;
 			port->lmac_type = gport->lmac_type;
+			port->tx_fifo_sz = gport->tx_fifo_sz;
 			port->base_chan = gport->base_chan;
 			port->num_chans = gport->num_chans;
 
@@ -1438,6 +1439,7 @@ struct bgx_com_s *bgx_octeontx_init(void)
 			port->dom_port_idx = BGX_INVALID_ID;
 			reg = bgx_reg_read(bgx, lmac_idx, BGX_CMR_CONFIG);
 			port->lmac_type = (reg >> 8) & 0x7; /* LMAC_TYPE */
+			port->tx_fifo_sz = OCTTX_BGX_FIFO_LEN / bgx->lmac_count;
 
 			INIT_LIST_HEAD(&port->list);
 			list_add(&port->list, &octeontx_bgx_ports);

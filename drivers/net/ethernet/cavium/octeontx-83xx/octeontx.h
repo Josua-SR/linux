@@ -16,6 +16,10 @@
 
 #define OCTTX_MAX_NODES	1 /* Maximum number of CPU devices/nodes */
 
+#define OCTTX_HW_MAX_FRS     9212
+#define OCTTX_HW_MIN_FRS     60
+#define OCTTX_BGX_FIFO_LEN   (48 * 1024) /* 48K TX FIFO */
+
 #define get_gmid(x) (x)
 
 struct octeontx_pf_vf {
@@ -121,6 +125,7 @@ struct octtx_bgx_port {
 	int	bgx; /* Node-local BGX device index */
 	int	lmac; /* BGX-local port/LMAC number/index */
 	int	lmac_type; /* OCTTX_BGX_LMAC_TYPE_nnn */
+	int	tx_fifo_sz;  /* LMAC tx fifo size */
 	int	base_chan; /* Node-local base channel (PKI_CHAN_E) */
 	int	num_chans;
 	int	pkind; /* PKI port number */

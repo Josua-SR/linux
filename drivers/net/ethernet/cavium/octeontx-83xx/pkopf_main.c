@@ -374,7 +374,7 @@ static u64 pko_pf_create_domain(u32 id, u16 domain_id, u32 pko_vf_count,
 	struct pkopf *curr;
 	struct pci_dev *virtfn;
 	resource_size_t vf_start;
-	int i, pko_mac;
+	int i, pko_mac, tx_fifo_len = 0;
 	int vf_idx = 0, port_idx = 0;
 	int mac_num, mac_mode, chan, ret = 0;
 	const u32 max_frame = 0xffff;
@@ -470,6 +470,7 @@ static u64 pko_pf_create_domain(u32 id, u16 domain_id, u32 pko_vf_count,
 						bgx_port[port_idx].bgx,
 						bgx_port[port_idx].lmac, 0);
 				mac_mode = bgx_port[port_idx].lmac_type;
+				tx_fifo_len = bgx_port[port_idx].tx_fifo_sz;
 				port_idx++;
 				if (port_idx >= bgx_count) {
 					pko_mac = PKO_MAC_LBK;
@@ -488,6 +489,7 @@ static u64 pko_pf_create_domain(u32 id, u16 domain_id, u32 pko_vf_count,
 			}
 			pko->vf[i].mac_num = mac_num;
 			pko->vf[i].chan = chan;
+			pko->vf[i].tx_fifo_sz = tx_fifo_len;
 
 			dev_dbg(&pko->pdev->dev,
 				"i: %d, max_frame: %d, mac_num: %d, mac_mode: %d, chan: %d\n",
@@ -551,10 +553,54 @@ static struct pkopf_vf *get_vf(u32 id, u16 domain_id, u16 subdomain_id,
 		return NULL;
 }
 
+static inline void set_field(u64 *ptr, u64 field_mask, u8 field_shift, u64 val)
+{
+	*ptr &= ~(field_mask << field_shift);
+	*ptr |= (val & field_mask) << field_shift;
+}
+
+static int pko_port_mtu_cfg(struct pkopf *pko, struct pkopf_vf *vf, u16 vf_id,
+			    mbox_pko_mtu_cfg_t *cfg)
+{
+	int queue_base = vf_id * 8;
+	u64 reg, tx_credit;
+	int mac_num;
+
+	if (cfg->mtu > OCTTX_HW_MAX_FRS || cfg->mtu < OCTTX_HW_MIN_FRS)
+		return MBOX_RET_INVALID;
+
+	mac_num = vf->mac_num;
+
+	tx_credit = ((vf->tx_fifo_sz) - cfg->mtu) / 16;
+
+	/* Setting up the channel credit for L1_SQ */
+	reg = pko_reg_read(pko, PKO_PF_L1_SQX_LINK(mac_num));
+	if (mac_num > SDP_MAC_NUM) /* BGX MAC specific configuration */
+		set_field(&reg, PKO_PF_CC_WORD_CNT_MASK,
+			  PKO_PF_CC_WORD_CNT_SHIFT, tx_credit);
+	pko_reg_write(pko, PKO_PF_L1_SQX_LINK(mac_num), reg);
+
+	dev_dbg(&pko->pdev->dev, "PKO: VF[%d] L1_SQ[%d]_LINK ::0x%llx\n",
+		vf_id, mac_num, pko_reg_read(pko, PKO_PF_L1_SQX_LINK(mac_num)));
+
+	/* Setting up the channel credit for L3_L2_SQ */
+	reg = pko_reg_read(pko, PKO_PF_L3_L2_SQX_CHANNEL(queue_base));
+	if (mac_num > SDP_MAC_NUM) /* BGX MAC specific configuration */
+		set_field(&reg, PKO_PF_CC_WORD_CNT_MASK,
+			  PKO_PF_CC_WORD_CNT_SHIFT, tx_credit);
+	pko_reg_write(pko, PKO_PF_L3_L2_SQX_CHANNEL(queue_base), reg);
+	dev_dbg(&pko->pdev->dev, "PKO: L3_L2_SQ[%d]_CHANNEL ::0x%llx\n",
+		queue_base, pko_reg_read(pko,
+					 PKO_PF_L3_L2_SQX_CHANNEL(queue_base)));
+
+	return MBOX_RET_SUCCESS;
+}
+
 static int pko_pf_receive_message(u32 id, u16 domain_id,
 				  struct mbox_hdr *hdr,
 				  union mbox_data *req,
-				  union mbox_data *resp)
+				  union mbox_data *resp,
+				  void *mdata)
 {
 	struct pkopf_vf *vf;
 	struct pkopf *pko = NULL;
@@ -575,6 +621,9 @@ static int pko_pf_receive_message(u32 id, u16 domain_id,
 	switch (hdr->msg) {
 	case IDENTIFY:
 		identify(vf, domain_id, hdr->vfid);
+		break;
+	case MBOX_PKO_MTU_CONFIG:
+		hdr->res_code = pko_port_mtu_cfg(pko, vf, hdr->vfid, mdata);
 		break;
 	default:
 		hdr->res_code = MBOX_RET_INVALID;
@@ -604,12 +653,6 @@ static int pko_pf_get_vf_count(u32 id)
 
 	mutex_unlock(&octeontx_pko_devices_lock);
 	return pko->total_vfs;
-}
-
-static inline void set_field(u64 *ptr, u64 field_mask, u8 field_shift, u64 val)
-{
-	*ptr &= ~(field_mask << field_shift);
-	*ptr |= (val & field_mask) << field_shift;
 }
 
 static inline uint64_t reg_ldadd_u64(void *addr, int64_t off)
@@ -925,7 +968,7 @@ static void pko_mac_teardown(struct pkopf *pko, int mac_num)
 static void pko_pq_init(struct pkopf *pko, int vf, int mac_num, u32 max_frame)
 {
 	u64 queue_base = vf * 8;
-	u64 reg;
+	u64 reg, tx_credit;
 
 	/* Non-BGX links perform DDWR on prio 0 */
 	reg = (mac_num << 16) | (queue_base << 32);
@@ -954,7 +997,13 @@ static void pko_pq_init(struct pkopf *pko, int vf, int mac_num, u32 max_frame)
 			pko_reg_read(pko, PKO_PF_L1_SQX_SCHEDULE(mac_num)));
 	}
 
+	/* Setting up the channel credit for L1_SQ */
 	reg = (mac_num | 0ULL) << 44;
+	if (mac_num > SDP_MAC_NUM) {  /* BGX MAC specific configuration */
+		tx_credit = ((pko->vf[vf].tx_fifo_sz) - OCTTX_HW_MAX_FRS) / 16;
+		/* Enable credits and set credit pkt count to max allowed */
+		reg |=  (tx_credit << 12) | (0x1FF << 2) | BIT_ULL(1);
+	}
 	pko_reg_write(pko, PKO_PF_L1_SQX_LINK(mac_num), reg);
 
 	dev_dbg(&pko->pdev->dev, "PKO: VF[%d] L1_SQ[%d]_LINK ::0x%llx\n",
@@ -1031,7 +1080,7 @@ static int pko_sq_init(struct pkopf *pko, int vf, int level, u32 channel,
 {
 	int channel_level;
 	int queue_base;
-	u64 reg;
+	u64 reg, tx_credit;
 
 	channel_level = pko_reg_read(pko, PKO_PF_CHANNEL_LEVEL);
 	channel_level += 2;
@@ -1066,6 +1115,13 @@ static int pko_sq_init(struct pkopf *pko, int vf, int level, u32 channel,
 		 __func__, level, channel_level, pko->max_levels);
 	if (level == channel_level) {
 		reg = ((channel | 0ULL) & 0xffful) << 32;
+		/* BGX MAC specific configuration */
+		if (mac_num > SDP_MAC_NUM) {
+			tx_credit = ((pko->vf[vf].tx_fifo_sz) -
+				     OCTTX_HW_MAX_FRS) / 16;
+			/* Enable cc and set credit pkt count to max allowed */
+			reg |=  (tx_credit << 12) | (0x1FF << 2) | BIT_ULL(1);
+		}
 		pko_reg_write(pko, PKO_PF_L3_L2_SQX_CHANNEL(queue_base), reg);
 		dev_dbg(&pko->pdev->dev, "PKO: L3_L2_SQ[%d]_CHANNEL ::0x%llx\n",
 			queue_base,

@@ -551,7 +551,8 @@ static int octtx_master_receive_message(struct mbox_hdr *hdr,
 				req, resp, add_data);
 		break;
 	case PKO_COPROC:
-		pkopf->receive_message(0, domain->domain_id, hdr, req, resp);
+		pkopf->receive_message(0, domain->domain_id, hdr, req, resp,
+				       add_data);
 		break;
 	case TIM_COPROC:
 		timpf->receive_message(0, domain->domain_id, hdr,
