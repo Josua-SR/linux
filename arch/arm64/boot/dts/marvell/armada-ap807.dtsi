@@ -69,3 +69,7 @@
 		};
 	};
 };
+
+&ap_sdhci0 {
+	compatible = "marvell,armada-ap807-sdhci";
+};
