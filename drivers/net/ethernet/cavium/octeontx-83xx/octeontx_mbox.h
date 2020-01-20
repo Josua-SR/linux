@@ -440,6 +440,11 @@ struct mbox_bgx_port_fc_cfg {
 	enum bgx_port_fc fc_cfg;
 };
 
+struct mbox_bgx_port_mac_filter {
+	u8 mac_addr[6];
+	int index;
+};
+
 /*----------------------------------------------------------------------------*/
 /* LBK messages:                                                              */
 /*----------------------------------------------------------------------------*/
