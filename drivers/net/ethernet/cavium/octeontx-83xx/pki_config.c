@@ -1426,10 +1426,11 @@ exit:
 int pki_port_mtu_cfg(struct pkipf_vf *vf, u16 vf_id,
 		     mbox_pki_mtu_cfg_t *cfg)
 {
+	struct pki_t *pki = vf->pki;
 	struct pki_port *port;
+	u16 max_frame_len;
 	u64 frmlen;
 	int i;
-	struct pki_t *pki = vf->pki;
 
 	switch (cfg->port_type) {
 	case OCTTX_PORT_TYPE_NET:
@@ -1453,10 +1454,28 @@ int pki_port_mtu_cfg(struct pkipf_vf *vf, u16 vf_id,
 	if (cfg->minlen < OCTTX_HW_MIN_FRS)
 		return MBOX_RET_INVALID;
 
+	max_frame_len = cfg->maxlen;
+	/* Updating max_frame_len for that port */
+	port->max_frame_len = cfg->maxlen;
+	/* Traversing all the ports to find max frame length among all ports */
+	for (i = 0; i < MAX_PKI_PORTS; i++) {
+		if (vf->bgx_port[i].valid) {
+			if (vf->bgx_port[i].max_frame_len > max_frame_len)
+				max_frame_len = vf->bgx_port[i].max_frame_len;
+		}
+		if (vf->lbk_port[i].valid) {
+			if (vf->lbk_port[i].max_frame_len > max_frame_len)
+				max_frame_len = vf->lbk_port[i].max_frame_len;
+		}
+	}
+	if (vf->sdp_port[0].valid) {
+		if (vf->sdp_port[0].max_frame_len > max_frame_len)
+			max_frame_len = vf->sdp_port[0].max_frame_len;
+	}
 	for (i = 0; i < pki->max_cls; i++) {
 		frmlen = pki_reg_read(pki, PKI_FRM_LEN_CHKX(i));
 		set_field(&frmlen, PKI_FRM_LEN_CHK_MAXLEN_MASK,
-			  PKI_FRM_LEN_CHK_MAXLEN_SHIFT, cfg->maxlen);
+			  PKI_FRM_LEN_CHK_MAXLEN_SHIFT, max_frame_len);
 		set_field(&frmlen, PKI_FRM_LEN_CHK_MINLEN_MASK,
 			  PKI_FRM_LEN_CHK_MINLEN_SHIFT, cfg->minlen);
 		pki_reg_write(pki, PKI_FRM_LEN_CHKX(i), frmlen);
