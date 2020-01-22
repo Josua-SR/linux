@@ -453,12 +453,16 @@ skip_secure_buffer:
 		drvdata->buf = drvdata->vaddr;
 	}
 
+	if (drvdata->mode == CS_MODE_READ_PREVBOOT)
+		goto out;
+
 	drvdata->mode = CS_MODE_SYSFS;
 	tmc_etr_enable_hw(drvdata);
 out:
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
 
-	if (!ret && !is_etm_sync_mode_hw())
+	if (!ret && !is_etm_sync_mode_hw() &&
+		(drvdata->mode != CS_MODE_READ_PREVBOOT))
 		smp_call_function_single(drvdata->rc_cpu, tmc_etr_timer_setup,
 					 drvdata, true);
 err:
@@ -607,6 +611,14 @@ int tmc_read_prepare_etr(struct tmc_drvdata *drvdata)
 	if (WARN_ON_ONCE(drvdata->config_type != TMC_CONFIG_TYPE_ETR))
 		return -EINVAL;
 
+	if (drvdata->mode == CS_MODE_READ_PREVBOOT) {
+		/* Initialize drvdata for reading trace data from last boot */
+		tmc_enable_etr_sink_sysfs(drvdata->csdev);
+		/* Update the buffer offset, len */
+		tmc_etr_dump_hw(drvdata);
+		return 0;
+	}
+
 	if (drvdata->etr_options & CSETR_QUIRK_NO_STOP_FLUSH)
 		smp_call_function_single(drvdata->rc_cpu, tmc_flushstop_etm_off,
 					 drvdata, true);
@@ -685,7 +697,8 @@ int tmc_read_unprepare_etr(struct tmc_drvdata *drvdata)
 	if (vaddr)
 		dma_free_coherent(drvdata->dev, drvdata->size, vaddr, paddr);
 
-	if (drvdata->etr_options & CSETR_QUIRK_NO_STOP_FLUSH)
+	if ((drvdata->etr_options & CSETR_QUIRK_NO_STOP_FLUSH) &&
+	    (drvdata->mode == CS_MODE_SYSFS))
 		smp_call_function_single(drvdata->rc_cpu, tmc_flushstop_etm_on,
 					drvdata, true);
 	return 0;
