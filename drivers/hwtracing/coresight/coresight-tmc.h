@@ -155,6 +155,10 @@ enum tmc_mem_intf_width {
 #define OCTEONTX_TRC_FREE_SBUF		0xc2000c08
 /* Args: x1 - non secure buffer address, x2 - size */
 #define OCTEONTX_TRC_UNREGISTER_DRVBUF	0xc2000c09
+/* Args: Nil
+ * Returns: cpu trace buffer size
+ */
+#define OCTEONTX_TRC_GET_CPU_BUFSIZE    0xc2000c0a
 
 /**
  * struct etr_tsync_data - Timer based sync insertion data management
@@ -278,6 +282,20 @@ static inline void tmc_etr_set_cap(struct tmc_drvdata *drvdata, u32 cap)
 static inline bool tmc_etr_has_cap(struct tmc_drvdata *drvdata, u32 cap)
 {
 	return !!(drvdata->etr_caps & cap);
+}
+
+static inline int tmc_get_cpu_tracebufsize(struct tmc_drvdata *drvdata,
+					  u32 *len)
+{
+	struct arm_smccc_res res;
+
+	arm_smccc_smc(OCTEONTX_TRC_GET_CPU_BUFSIZE, 0, 0, 0,
+		      0, 0, 0, 0, &res);
+	if (res.a0 != SMCCC_RET_SUCCESS)
+		return -EFAULT;
+
+	*len = (u32)res.a1;
+	return 0;
 }
 
 static inline int tmc_alloc_secbuf(struct tmc_drvdata *drvdata,
