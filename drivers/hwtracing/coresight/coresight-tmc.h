@@ -157,6 +157,20 @@ enum tmc_mem_intf_width {
 #define OCTEONTX_TRC_UNREGISTER_DRVBUF	0xc2000c09
 
 /**
+ * struct etr_tsync_data - Timer based sync insertion data management
+ * @syncs_per_fill:	syncs inserted per buffer wrap
+ * @prev_rwp:		writepointer for the last sync insertion
+ * @len_thold:		Buffer length threshold for inserting syncs
+ * @tick:		Tick interval in ns
+ */
+struct etr_tsync_data {
+	int syncs_per_fill;
+	u64 prev_rwp;
+	u64 len_thold;
+	u64 tick;
+};
+
+/**
  * struct tmc_drvdata - specifics associated to an TMC component
  * @base:	memory mapped base address for this component.
  * @dev:	the device entity associated to this component.
@@ -179,6 +193,12 @@ enum tmc_mem_intf_width {
  *		device configuration register (DEVID)
  * @etr_options: Bitmask of options to manage Silicon issues
  * @cpu:	CPU id this component is associated with
+ * @rc_cpu:	The cpu on which remote function calls can be run
+ *		In certain kernel configurations, some cores are not expected
+ *		to be interrupted and we need a fallback target cpu.
+ * @etm_source:	ETM source associated with this ETR
+ * @etr_tsync_data: Timer based sync insertion data
+ * @timer:	Timer for initiating sync insertion
  */
 struct tmc_drvdata {
 	void __iomem		*base;
@@ -202,6 +222,10 @@ struct tmc_drvdata {
 	u32			etr_caps;
 	u32			etr_options;
 	int			cpu;
+	int			rc_cpu;
+	void			*etm_source;
+	struct etr_tsync_data	tsync_data;
+	struct hrtimer		timer;
 };
 
 /* Generic functions */
@@ -219,6 +243,7 @@ extern const struct coresight_ops tmc_etf_cs_ops;
 /* ETR functions */
 int tmc_read_prepare_etr(struct tmc_drvdata *drvdata);
 int tmc_read_unprepare_etr(struct tmc_drvdata *drvdata);
+void tmc_etr_add_cpumap(struct tmc_drvdata *drvdata);
 extern const struct coresight_ops tmc_etr_cs_ops;
 
 

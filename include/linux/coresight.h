@@ -142,6 +142,12 @@ struct coresight_connection {
 	struct coresight_device *child_dev;
 };
 
+enum hw_state {
+	USR_STOP,
+	SW_STOP,
+	USR_START,
+};
+
 /**
  * struct coresight_device - representation of a device as used by the framework
  * @conns:	array of coresight_connections associated to this component.
@@ -155,6 +161,7 @@ struct coresight_connection {
  * @refcnt:	keep track of what is in use.
  * @orphan:	true if the component has connections that haven't been linked.
  * @enable:	'true' if component is currently part of an active path.
+ * @hw_state:   state of hw
  * @activated:	'true' only if a _sink_ has been activated.  A sink can be
 		activated but not yet enabled.  Enabling for a _sink_
 		happens when a source has been selected for that it.
@@ -170,6 +177,7 @@ struct coresight_device {
 	atomic_t *refcnt;
 	bool orphan;
 	bool enable;	/* true only if configured as part of a path */
+	int hw_state;
 	bool activated;	/* true only if a sink is part of a path */
 };
 
@@ -189,6 +197,8 @@ struct coresight_device {
  * @set_buffer:		initialises buffer mechanic before a trace session.
  * @reset_buffer:	finalises buffer mechanic after a trace session.
  * @update_buffer:	update buffer pointers after a trace session.
+ * @register_source:	Add reference to source
+ * @unregister_source:	Remove reference to source
  */
 struct coresight_ops_sink {
 	int (*enable)(struct coresight_device *csdev, u32 mode);
@@ -205,6 +215,9 @@ struct coresight_ops_sink {
 	void (*update_buffer)(struct coresight_device *csdev,
 			      struct perf_output_handle *handle,
 			      void *sink_config);
+	void (*register_source)(struct coresight_device *sink_dev,
+				void *source);
+	void (*unregister_source)(struct coresight_device *sink_dev);
 };
 
 /**
@@ -227,6 +240,8 @@ struct coresight_ops_link {
  *		to the HW.
  * @enable:	enables tracing for a source.
  * @disable:	disables tracing for a source.
+ * @enable_raw:	Raw HW enable, without any other register configuration
+ * @disable_raw:Raw HW disable
  */
 struct coresight_ops_source {
 	int (*cpu_id)(struct coresight_device *csdev);
@@ -235,6 +250,8 @@ struct coresight_ops_source {
 		      struct perf_event *event,  u32 mode);
 	void (*disable)(struct coresight_device *csdev,
 			struct perf_event *event);
+	void (*enable_raw)(struct coresight_device *csdev);
+	void (*disable_raw)(struct coresight_device *csdev);
 };
 
 struct coresight_ops {

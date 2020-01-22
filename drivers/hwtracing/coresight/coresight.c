@@ -25,6 +25,8 @@
 #include <linux/delay.h>
 #include <linux/pm_runtime.h>
 
+#include <asm/cputype.h>
+
 #include "coresight-priv.h"
 
 static DEFINE_MUTEX(coresight_mutex);
@@ -629,6 +631,13 @@ int coresight_enable(struct coresight_device *csdev)
 		goto out;
 	}
 
+	if (!is_etm_sync_mode_hw()) {
+		/* Add reference to source
+		 * Used by sync insertion logic in ETR driver
+		 */
+		sink_ops(sink)->register_source(sink, csdev);
+	}
+
 	path = coresight_build_path(csdev, sink);
 	if (IS_ERR(path)) {
 		pr_err("building path(s) failed\n");
@@ -680,6 +689,7 @@ EXPORT_SYMBOL_GPL(coresight_enable);
 void coresight_disable(struct coresight_device *csdev)
 {
 	int cpu, ret;
+	struct coresight_device *sink;
 	struct list_head *path = NULL;
 
 	mutex_lock(&coresight_mutex);
@@ -704,6 +714,16 @@ void coresight_disable(struct coresight_device *csdev)
 	default:
 		/* We can't be here */
 		break;
+	}
+
+	if (!is_etm_sync_mode_hw()) {
+		sink = coresight_get_enabled_sink(csdev, false);
+		if (!sink)
+			goto out;
+		/* Remove source reference
+		 * Used by sync insertion logic in ETR driver
+		 */
+		sink_ops(sink)->unregister_source(csdev);
 	}
 
 	coresight_disable_path(path);
