@@ -27,10 +27,38 @@
 	};
 };
 
+&dma_xor0 {
+	status = "okay";
+};
+
+&dma_xor1 {
+	status = "okay";
+};
+
+&xor0 {
+	status = "disabled";
+};
+
+&xor1 {
+	status = "disabled";
+};
+
+&uio_xor0 {
+	status = "disabled";
+};
+
+&uio_xor1 {
+	status = "disabled";
+};
+
 &cp0_pci_ep_uio {
 	status = "okay";
 };
 
 &cp0_pcie_ep {
+	status = "okay";
+};
+
+&cp0_pcinet_target {
 	status = "okay";
 };
