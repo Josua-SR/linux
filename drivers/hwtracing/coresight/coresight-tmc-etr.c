@@ -30,13 +30,13 @@ static void tmc_etr_enable_hw(struct tmc_drvdata *drvdata)
 
 	CS_UNLOCK(drvdata->base);
 
-	if (drvdata->etr_options & CORESIGHT_OPTS_RESET_CTL_REG)
+	if (drvdata->etr_options & CSETR_QUIRK_RESET_CTL_REG)
 		tmc_disable_hw(drvdata);
 
 	/* Wait for TMCSReady bit to be set */
 	tmc_wait_for_tmcready(drvdata);
 
-	if (drvdata && CORESIGHT_OPTS_BUFFSIZE_8BX)
+	if (drvdata && CSETR_QUIRK_BUFFSIZE_8BX)
 		writel_relaxed(drvdata->size / 8, drvdata->base + TMC_RSZ);
 	else
 		writel_relaxed(drvdata->size / 4, drvdata->base + TMC_RSZ);
@@ -54,7 +54,7 @@ static void tmc_etr_enable_hw(struct tmc_drvdata *drvdata)
 
 	writel_relaxed(axictl, drvdata->base + TMC_AXICTL);
 
-	if (drvdata->etr_options & CORESIGHT_OPTS_SECURE_BUFF)
+	if (drvdata->etr_options & CSETR_QUIRK_SECURE_BUFF)
 		tmc_write_dba(drvdata, drvdata->s_paddr);
 	else
 		tmc_write_dba(drvdata, drvdata->paddr);
@@ -65,7 +65,7 @@ static void tmc_etr_enable_hw(struct tmc_drvdata *drvdata)
 	 */
 	if (tmc_etr_has_cap(drvdata, TMC_ETR_SAVE_RESTORE)) {
 		tmc_write_rrp(drvdata, drvdata->paddr);
-		if (drvdata->etr_options & CORESIGHT_OPTS_SECURE_BUFF)
+		if (drvdata->etr_options & CSETR_QUIRK_SECURE_BUFF)
 			tmc_write_rwp(drvdata, drvdata->s_paddr);
 		else
 			tmc_write_rwp(drvdata, drvdata->paddr);
@@ -93,7 +93,7 @@ static void tmc_etr_dump_hw(struct tmc_drvdata *drvdata)
 	rwp = tmc_read_rwp(drvdata);
 	val = readl_relaxed(drvdata->base + TMC_STS);
 
-	if (drvdata->etr_options & CORESIGHT_OPTS_SECURE_BUFF)
+	if (drvdata->etr_options & CSETR_QUIRK_SECURE_BUFF)
 		offset = rwp - drvdata->s_paddr;
 	else
 		offset = rwp - drvdata->paddr;
@@ -171,7 +171,7 @@ static int tmc_enable_etr_sink_sysfs(struct coresight_device *csdev)
 		if (!vaddr)
 			return -ENOMEM;
 
-		if (!(drvdata->etr_options & CORESIGHT_OPTS_SECURE_BUFF))
+		if (!(drvdata->etr_options & CSETR_QUIRK_SECURE_BUFF))
 			goto skip_secure_buffer;
 
 		/* Register driver allocated dma buffer for necessary
