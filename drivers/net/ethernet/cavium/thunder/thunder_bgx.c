@@ -1019,7 +1019,7 @@ next_poll:
 
 static void bgx_poll_for_link(struct work_struct *work)
 {
-	u64 spu_link, smu_link, spu_br_link, spu_bx_link;
+	u64 spu_link, smu_link, spu_br_link, spu_bx_link, spu_br_align;
 	bool link_state_change = 0;
 	struct lmac *lmac;
 
@@ -1038,16 +1038,22 @@ static void bgx_poll_for_link(struct work_struct *work)
 	spu_link = bgx_reg_read(lmac->bgx, lmac->lmacid, BGX_SPUX_STATUS1);
 	smu_link = bgx_reg_read(lmac->bgx, lmac->lmacid, BGX_SMUX_RX_CTL);
 
-	if (lmac->lmac_type == BGX_MODE_XLAUI) {
-		spu_br_link = bgx_reg_read(lmac->bgx, lmac->lmacid,
-					   BGX_SPUX_BR_STATUS1);
-		link_state_change |= !!(spu_br_link & SPU_BR_STATUS_BLK_LOCK);
-		link_state_change |= !!(spu_br_link & SPU_BR_STATUS_RCV_LNK);
-	} else {
-		spu_bx_link = bgx_reg_read(lmac->bgx, lmac->lmacid,
-					   BGX_SPUX_BX_STATUS);
-		link_state_change |= !!(spu_bx_link & SPU_BX_STATUS_RX_ALIGN);
-	}
+	/* Checking for link state change for different LMAC types */
+	/* For 10GBASE-R, XFI */
+	spu_br_link = bgx_reg_read(lmac->bgx, lmac->lmacid,
+				   BGX_SPUX_BR_STATUS1);
+	link_state_change |= !!(spu_br_link & SPU_BR_STATUS_BLK_LOCK);
+	link_state_change |= !!(spu_br_link & SPU_BR_STATUS_RCV_LNK);
+
+	/* For 40GBASE-R */
+	spu_br_align = bgx_reg_read(lmac->bgx, lmac->lmacid,
+				    BGX_SPUX_BR_ALGN_STATUS);
+	link_state_change |= !!(spu_br_align & SPU_BR_ALGN_STATUS_ALIGND);
+
+	/* For XAUI/DXAUI/RXAUI */
+	spu_bx_link = bgx_reg_read(lmac->bgx, lmac->lmacid,
+				   BGX_SPUX_BX_STATUS);
+	link_state_change |= !!(spu_bx_link & SPU_BX_STATUS_RX_ALIGN);
 
 	if ((spu_link & SPU_STATUS1_RCV_LNK) &&
 	    !(smu_link & SMU_RX_CTL_STATUS) &&
