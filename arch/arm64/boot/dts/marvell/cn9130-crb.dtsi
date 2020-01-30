@@ -28,6 +28,16 @@
 		reg = <0x0 0x0 0x0 0x80000000>;
 	};
 
+	ap0_reg_mmc_vccq: ap0_mmc_vccq@0 {
+		compatible = "regulator-gpio";
+		regulator-name = "ap0_mmc_vccq";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <3300000>;
+		gpios = <&expander0 5 GPIO_ACTIVE_HIGH>;
+		states = <1800000 0x1
+			  3300000 0x0>;
+	};
+
 	cp0_reg_usb3_vbus1: cp0_usb3_vbus@1 {
 		compatible = "regulator-fixed";
 		regulator-name = "cp0-xhci1-vbus";
@@ -75,6 +85,9 @@
 	pinctrl-names = "default";
 	bus-width = <8>;
 	status = "okay";
+	mmc-ddr-1_8v;
+	mmc-hs400-1_8v;
+	vqmmc-supply = <&ap0_reg_mmc_vccq>;
 };
 
 /*
