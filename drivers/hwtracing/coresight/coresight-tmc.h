@@ -247,6 +247,7 @@ extern const struct coresight_ops tmc_etf_cs_ops;
 /* ETR functions */
 int tmc_read_prepare_etr(struct tmc_drvdata *drvdata);
 int tmc_read_unprepare_etr(struct tmc_drvdata *drvdata);
+void tmc_etr_timer_init(struct tmc_drvdata *drvdata);
 void tmc_etr_add_cpumap(struct tmc_drvdata *drvdata);
 extern const struct coresight_ops tmc_etr_cs_ops;
 

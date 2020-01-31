@@ -173,6 +173,16 @@ static enum hrtimer_restart tmc_etr_timer_handler_global(struct hrtimer *t)
 	return HRTIMER_RESTART;
 }
 
+/* Timer init API common for both global and per core mode */
+void tmc_etr_timer_init(struct tmc_drvdata *drvdata)
+{
+	struct hrtimer *timer;
+
+	timer = is_etm_sync_mode_sw_global() ?
+		tmc_etr_tsync_global_timer() : &drvdata->timer;
+	hrtimer_init(timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+}
+
 /* Timer setup API common for both global and per core mode
  *
  * Global mode: Timer gets started only if its not active already.
@@ -203,7 +213,6 @@ static void tmc_etr_timer_setup(void *data)
 
 	timer = mode_global ?
 		tmc_etr_tsync_global_timer() : &drvdata->timer;
-	hrtimer_init(timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	timer->function = mode_global ?
 		tmc_etr_timer_handler_global : tmc_etr_timer_handler_percore;
 	dev_dbg(drvdata->dev, "Starting sync timer, mode:%s period:%lld ns\n",
@@ -469,10 +478,10 @@ err:
 	/* Free memory outside the spinlock if need be */
 	if (!used && vaddr) {
 		if (buff_sec_mapped)
-			tmc_unregister_drvbuf(drvdata, drvdata->paddr,
+			tmc_unregister_drvbuf(drvdata, paddr,
 					      drvdata->size);
 		if (s_paddr)
-			tmc_free_secbuf(drvdata, drvdata->s_paddr,
+			tmc_free_secbuf(drvdata, s_paddr,
 					drvdata->size);
 		dma_free_coherent(drvdata->dev, drvdata->size, vaddr, paddr);
 	}
@@ -613,7 +622,9 @@ int tmc_read_prepare_etr(struct tmc_drvdata *drvdata)
 
 	if (drvdata->mode == CS_MODE_READ_PREVBOOT) {
 		/* Initialize drvdata for reading trace data from last boot */
-		tmc_enable_etr_sink_sysfs(drvdata->csdev);
+		ret = tmc_enable_etr_sink_sysfs(drvdata->csdev);
+		if (ret)
+			return ret;
 		/* Update the buffer offset, len */
 		tmc_etr_dump_hw(drvdata);
 		return 0;
@@ -662,7 +673,7 @@ out:
 int tmc_read_unprepare_etr(struct tmc_drvdata *drvdata)
 {
 	unsigned long flags;
-	dma_addr_t paddr;
+	dma_addr_t paddr, s_paddr;
 	void __iomem *vaddr = NULL;
 
 	/* config types are set a boot time and never change */
@@ -687,15 +698,26 @@ int tmc_read_unprepare_etr(struct tmc_drvdata *drvdata)
 		 */
 		vaddr = drvdata->vaddr;
 		paddr = drvdata->paddr;
+		s_paddr = drvdata->s_paddr;
 		drvdata->buf = drvdata->vaddr = NULL;
+		/* Assumes s_paddr, 0 is invalid */
+		drvdata->s_paddr = 0;
 	}
 
 	drvdata->reading = false;
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
 
 	/* Free allocated memory out side of the spinlock */
-	if (vaddr)
+	if (vaddr) {
+		if (s_paddr) {
+			tmc_unregister_drvbuf(drvdata, paddr,
+					      drvdata->size);
+			tmc_free_secbuf(drvdata, s_paddr,
+					drvdata->size);
+		}
+
 		dma_free_coherent(drvdata->dev, drvdata->size, vaddr, paddr);
+	}
 
 	if ((drvdata->etr_options & CSETR_QUIRK_NO_STOP_FLUSH) &&
 	    (drvdata->mode == CS_MODE_SYSFS))
