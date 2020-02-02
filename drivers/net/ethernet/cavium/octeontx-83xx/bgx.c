@@ -51,7 +51,7 @@ static int bgx_port_flow_ctrl_cfg(struct octtx_bgx_port *port,
 
 #define BGX_INVALID_ID	(-1)
 
-#define DEFAULT_PAUSE_TIME		0x7FF
+#define BGX_LMAC_DFLT_PAUSE_TIME		0x7FF
 
 /* BGX CSRs (offsets from the PF base address for particular BGX:LMAC).
  * NOTE: Most of the CSR definitions are provided in thunder_bgx.h.
@@ -377,22 +377,22 @@ static int bgx_set_ieee802_fc(struct bgxpf *bgx, int lmac, int lmac_type)
 
 		/* Set pause time and interval*/
 		bgx_reg_write(bgx, lmac, BGX_SMU_TX_PAUSE_PKT_TIME,
-			      DEFAULT_PAUSE_TIME);
+			      BGX_LMAC_DFLT_PAUSE_TIME);
 		reg = bgx_reg_read(bgx, lmac, BGX_SMU_TX_PAUSE_PKT_INTERVAL);
 		reg &= ~0xFFFFULL;
 		bgx_reg_write(bgx, lmac, BGX_SMU_TX_PAUSE_PKT_INTERVAL,
-			      reg | (DEFAULT_PAUSE_TIME / 2));
+			      reg | (BGX_LMAC_DFLT_PAUSE_TIME / 2));
 		break;
 	case OCTTX_BGX_LMAC_TYPE_SGMII:
 	case OCTTX_BGX_LMAC_TYPE_QSGMII:
 		/* Set pause time and interval*/
 		bgx_reg_write(bgx, lmac, BGX_GMP_GMI_TXX_PAUSE_PKT_TIME,
-			      DEFAULT_PAUSE_TIME);
+			      BGX_LMAC_DFLT_PAUSE_TIME);
 		reg = bgx_reg_read(bgx, lmac,
 				   BGX_GMP_GMI_TXX_PAUSE_PKT_INTERVAL);
 		reg &= ~0xFFFFULL;
 		bgx_reg_write(bgx, lmac, BGX_GMP_GMI_TXX_PAUSE_PKT_INTERVAL,
-			      reg | (DEFAULT_PAUSE_TIME / 2));
+			      reg | (BGX_LMAC_DFLT_PAUSE_TIME / 2));
 		break;
 	}
 	return 0;
