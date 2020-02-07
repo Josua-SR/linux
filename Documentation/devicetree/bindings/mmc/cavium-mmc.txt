@@ -23,6 +23,18 @@ Optional properties:
  - cavium,dat-clk-skew : number of coprocessor clocks before sampling data
  - cavium,drv-strength : eMMC bus pin output drive strength
  - cavium,clk-slew     : eMMC bus pins output slew rate control
+ - marvell,hs200-tap-adjust : offset to use from the calculated HS200 tap for
+			 data input.  This is a signed value.  Default is 0.
+ - marvell,hs400-tap-adjust : offset to use from the calculated HS400 tap for
+                         data input if HS400 tuning is enabled.  Default is 0.
+ - marvell,hs400-tuning-block : If set this enables HS400 tuning and specifies
+			 the block number to use.  Note that this block number
+			 WILL be overwritten to contain the tuning pattern if
+			 it is not already present, even if this block falls
+			 into a partition.  Typically block 1 is chosen which
+			 may cause issues with EFI partitioning.  If EFI
+			 partitioning is used then this block should be
+			 changed.
 
 Deprecated properties:
  - spi-max-frequency : use max-frequency instead
@@ -70,6 +82,19 @@ GPIO control via vmmc-supply & vqmmc-supply:
   There's no need to list vqmmc-supply if all the mmc-slots on
   a board run at same voltage, and have same width.
 
+Tuning support:
+  Tuning is required for eMMC for HS200 and HS400 modes to work properly.
+  The eMMC specification only provides a means of performing tuning in
+  HS200 mode but in many cases this causes reliability issues in HS400
+  mode.  In order to tune in HS400 mode a block must be set aside where
+  a tuning pattern will be written once then read with each data input
+  tap value to choose the best tap value.  HS400 tuning is optional though
+  it is recommended.  Offsets to the chosen tuning value may also be
+  specified but in general these should not be needed.
+
+  cavium,cmd-clk-skew and cavium,dat-clk-skew are not used for OcteonTX2
+  and later devices.
+
 Examples:
 	mmc_1_4: mmc@1,4 {
 		compatible = "cavium,thunder-8390-mmc";
@@ -91,11 +116,14 @@ Examples:
 		mmc-slot@1 {
 			compatible = "mmc-slot";
 			reg = <1>;
-			vmmc-supply = <&mmc_supply_3v3>;
+			vmmc-supply = <&mmc_supply_1v8>;
 			vqmmc-supply = <&vqmmc_1v8>;
 			max-frequency = <100000000>;
 			bus-width = <8>;
 			cap-mmc-highspeed;
 			non-removable;
+			mmc-hs200-1_8v;
+			mmc-hs400-1_8v;
+			marvell,hs400-tuning-block = <1>;
 		};
 	};
