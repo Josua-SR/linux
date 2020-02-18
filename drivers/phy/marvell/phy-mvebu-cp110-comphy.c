@@ -24,6 +24,8 @@ struct mvebu_comhy_conf {
 	unsigned port;
 };
 
+#define COMPHY_FORCE_PCIE_CONFIG	BIT(21)
+
 #define MVEBU_COMPHY_CONF(_lane, _port, _mode)	\
 	{					\
 		.lane = _lane,			\
@@ -51,7 +53,8 @@ struct mvebu_comhy_conf {
 		(COMPHY_FW_MODE_FORMAT(mode) | ((idx) << 8) | ((speeds) << 2))
 
 #define COMPHY_FW_PCIE_FORMAT(pcie_width, mode, idx, speeds)	\
-		(((pcie_width) << 18) | COMPHY_FW_NET_FORMAT(mode, idx, speeds))
+		(((pcie_width) << 18) | COMPHY_FW_NET_FORMAT(mode, idx, speeds)\
+		| COMPHY_FORCE_PCIE_CONFIG)
 
 #define COMPHY_SATA_MODE	0x1
 #define COMPHY_SGMII_MODE	0x2	/* SGMII 1G */
@@ -380,7 +383,7 @@ static int mvebu_comphy_power_off(struct phy *phy)
 	const struct mvebu_comphy_data *data = priv->data;
 
 	return data->comphy_smc(MV_SIP_COMPHY_POWER_OFF, priv->phys,
-				lane->id, 0);
+				lane->id, COMPHY_FORCE_PCIE_CONFIG);
 }
 
 static int mvebu_comphy_send_command(struct phy *phy, u32 command)
