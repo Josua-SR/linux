@@ -336,11 +336,6 @@
 #define PKI_VF_SIZE			0x10000
 #define PKI_VF_BASE(x)			(0x01e00000ULL | (PKI_VF_SIZE * (x)))
 
-#define PKI_FRM_LEN_CHK_MAXLEN_SHIFT    16
-#define PKI_FRM_LEN_CHK_MAXLEN_MASK     0xFFFFULL
-#define PKI_FRM_LEN_CHK_MINLEN_SHIFT    0
-#define PKI_FRM_LEN_CHK_MINLEN_MASK     0xFFFFULL
-
 enum PKI_LTYPE_E {
 	PKI_LTYPE_E_NONE	= 0,
 	PKI_LTYPE_E_ENET	= 1,
@@ -615,7 +610,4 @@ int pki_port_vlan_fltr_cfg(struct pkipf_vf *vf, u16 vf_id,
 			   struct pki_port_vlan_filter_config *cfg);
 int pki_port_vlan_fltr_entry_cfg(struct pkipf_vf *vf, u16 vf_id,
 				 struct pki_port_vlan_filter_entry_config *cfg);
-int pki_port_mtu_cfg(struct pkipf_vf *vf, u16 vf_id,
-		     mbox_pki_mtu_cfg_t *cfg);
-
 #endif
