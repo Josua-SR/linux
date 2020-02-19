@@ -305,6 +305,20 @@ static int mvebu_comphy_eth_power_on(struct phy *phy)
 	return ret;
 }
 
+static int mvebu_comphy_exit(struct phy *phy)
+{
+	struct mvebu_comphy_lane *lane = phy_get_drvdata(phy);
+	struct mvebu_comphy_priv *priv = lane->priv;
+
+	dev_dbg(priv->dev, "phy exited (lane %u port %u)\n",
+		lane->id, lane->port);
+
+	/* Let the port go. */
+	lane->port = -1;
+
+	return 0;
+}
+
 static int mvebu_comphy_power_on(struct phy *phy)
 {
 	struct mvebu_comphy_lane *lane = phy_get_drvdata(phy);
@@ -405,6 +419,7 @@ static int mvebu_comphy_send_command(struct phy *phy, u32 command)
 }
 
 static const struct phy_ops mvebu_comphy_ops = {
+	.exit           = mvebu_comphy_exit,
 	.power_on	= mvebu_comphy_power_on,
 	.power_off	= mvebu_comphy_power_off,
 	.set_mode	= mvebu_comphy_set_mode,
