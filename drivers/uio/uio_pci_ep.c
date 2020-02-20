@@ -22,6 +22,9 @@
 #include <linux/pci_regs.h>
 #include <linux/mm.h>
 
+#define PCINET_CONFIG_BAR_SIZE	SZ_1K
+#define AGNIC_CONFIG_BAR_SIZE	SZ_64K
+
 struct uio_pci {
 	struct device	*dev;
 	void		*ep;
@@ -31,9 +34,12 @@ struct uio_pci {
 /* make sure we have at least one mem regions to map the host ram */
 #define MAX_BAR_MAP	6
 
-/* temporary hack to export the BAR0 address for pcinet */
+/* temporary hack to export the BAR0 address for pcinet and network agent*/
 void __iomem *bar0_internal_addr;
 EXPORT_SYMBOL(bar0_internal_addr);
+
+void __iomem *nwa_internal_addr;
+EXPORT_SYMBOL(nwa_internal_addr);
 
 static int uio_pci_ep_probe(struct platform_device *pdev)
 {
@@ -153,6 +159,8 @@ static int uio_pci_ep_probe(struct platform_device *pdev)
 			}
 			mem->internal_addr = page_address(pg);
 			bar0_internal_addr = mem->internal_addr;
+			nwa_internal_addr = bar0_internal_addr +
+				AGNIC_CONFIG_BAR_SIZE + PCINET_CONFIG_BAR_SIZE;
 			mem->addr = virt_to_phys(mem->internal_addr);
 		}
 
