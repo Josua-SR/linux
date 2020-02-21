@@ -35,6 +35,14 @@ Optional properties:
 			 may cause issues with EFI partitioning.  If EFI
 			 partitioning is used then this block should be
 			 changed.
+ - marvell,cmd-out-hs200-dly:	Hold time delay in picoseconds for the command
+				signal in HS200 mode.  The default is 800ps.
+ - marvell,data-out-hs200-dly:	Hold time delay in picoseconds for the data
+				signal in HS200 mode.  The default is 800ps.
+ - marvell,cmd-out-hs400-dly:	Hold time delay in picoseconds for the command
+				signal in HS400 mode.  The default is 800ps.
+ - marvell,data-out-hs400-dly:	Hold time delay in picoseconds for the data
+				signal in HS400 mode.  The default is 400ps.
 
 Deprecated properties:
  - spi-max-frequency : use max-frequency instead
