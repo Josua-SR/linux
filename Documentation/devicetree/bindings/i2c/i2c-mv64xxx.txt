@@ -31,8 +31,8 @@ default frequency is 100kHz
 		     of the controller
 
  - clock-names	   : names of used clocks, mandatory if the second clock is
-		     used, the name must be "core", and "reg" (the latter is
-		     only for Armada 7K/8K).
+		     used, the name must be "core", "reg" and "axi" (the latter
+		     two are only for Armada 7K/8K).
 
 Examples:
 
@@ -59,6 +59,6 @@ For the Armada 7040:
 		reg = <0x701000 0x20>;
 		interrupts = <29>;
 		clock-frequency = <100000>;
-		clock-names = "core", "reg";
-		clocks = <&core_clock>, <&reg_clock>;
+		clock-names = "core", "reg", "axi";
+		clocks = <&core_clock>, <&reg_clock>, <&axi_clock>;
 	};
