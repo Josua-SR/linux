@@ -512,9 +512,10 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			interrupts = <ICU_GRP_NSR 120 IRQ_TYPE_LEVEL_HIGH>;
-			clock-names = "core", "reg";
+			clock-names = "core", "reg", "axi";
 			clocks = <&CP110_LABEL(clk) 1 21>,
-				 <&CP110_LABEL(clk) 1 17>;
+				 <&CP110_LABEL(clk) 1 17>,
+				 <&CP110_LABEL(clk) 1 18>;
 			status = "disabled";
 		};
 
@@ -524,9 +525,10 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			interrupts = <ICU_GRP_NSR 121 IRQ_TYPE_LEVEL_HIGH>;
-			clock-names = "core", "reg";
+			clock-names = "core", "reg", "axi";
 			clocks = <&CP110_LABEL(clk) 1 21>,
-				 <&CP110_LABEL(clk) 1 17>;
+				 <&CP110_LABEL(clk) 1 17>,
+				 <&CP110_LABEL(clk) 1 18>;
 			status = "disabled";
 		};
 

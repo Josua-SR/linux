@@ -136,6 +136,7 @@ struct mv64xxx_i2c_data {
 	u32			freq_n;
 	struct clk              *clk;
 	struct clk              *reg_clk;
+	struct clk              *axi_clk;
 	wait_queue_head_t	waitq;
 	spinlock_t		lock;
 	struct i2c_msg		*msg;
@@ -917,6 +918,14 @@ mv64xxx_i2c_probe(struct platform_device *pd)
 	if (!IS_ERR(drv_data->reg_clk))
 		clk_prepare_enable(drv_data->reg_clk);
 
+	drv_data->axi_clk = devm_clk_get(&pd->dev, "axi");
+	if (IS_ERR(drv_data->axi_clk) &&
+	    PTR_ERR(drv_data->axi_clk) == -EPROBE_DEFER) {
+		return -EPROBE_DEFER;
+	}
+	if (!IS_ERR(drv_data->axi_clk))
+		clk_prepare_enable(drv_data->axi_clk);
+
 	drv_data->irq = platform_get_irq(pd, 0);
 
 	if (pdata) {
@@ -966,6 +975,7 @@ exit_free_irq:
 exit_reset:
 	reset_control_assert(drv_data->rstc);
 exit_clk:
+	clk_disable_unprepare(drv_data->axi_clk);
 	clk_disable_unprepare(drv_data->reg_clk);
 	clk_disable_unprepare(drv_data->clk);
 
@@ -980,6 +990,7 @@ mv64xxx_i2c_remove(struct platform_device *dev)
 	i2c_del_adapter(&drv_data->adapter);
 	free_irq(drv_data->irq, drv_data);
 	reset_control_assert(drv_data->rstc);
+	clk_disable_unprepare(drv_data->axi_clk);
 	clk_disable_unprepare(drv_data->reg_clk);
 	clk_disable_unprepare(drv_data->clk);
 
