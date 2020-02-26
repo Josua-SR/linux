@@ -16,6 +16,7 @@ dtb-$(CONFIG_ARCH_MVEBU) += armada-7040-db-B.dtb
 dtb-$(CONFIG_ARCH_MVEBU) += armada-7040-db-C.dtb
 dtb-$(CONFIG_ARCH_MVEBU) += armada-7040-db-D.dtb
 dtb-$(CONFIG_ARCH_MVEBU) += armada-7040-db-E.dtb
+dtb-$(CONFIG_ARCH_MVEBU) += armada-7040-db-F.dtb
 dtb-$(CONFIG_ARCH_MVEBU) += armada-8040-db.dtb
 dtb-$(CONFIG_ARCH_MVEBU) += armada-8040-db-B.dtb
 dtb-$(CONFIG_ARCH_MVEBU) += armada-8040-db-C.dtb
