@@ -157,6 +157,14 @@
 #define DPI_REQQX_INT_ENA_W1C(x)		  (0x6680ULL | ((x) << 3))
 #define DPI_REQQX_INT_ENA_W1S(x)		  (0x66C0ULL | ((x) << 3))
 
+#define DPI_SLI_MRRS_MIN		128
+#define DPI_SLI_MRRS_MAX		1024
+#define DPI_SLI_MPS_MIN			128
+#define DPI_SLI_MPS_MAX			512
+#define DPI_SLI_MAX_PORTS		4
+#define DPI_SLI_PRTX_CFG_MPS(x)		(((x) & 0x7) << 4)
+#define DPI_SLI_PRTX_CFG_MRRS(x)	(((x) & 0x7) << 0)
+
 /* VF Registers: */
 #define DPI_VDMA_EN		(0X0ULL)
 #define DPI_VDMA_REQQ_CTL	  (0X8ULL)

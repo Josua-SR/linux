@@ -33,6 +33,14 @@ static int dpi_get_reg_cfg(struct dpipf *dpi,
 			   u16 domain_id, u16 vf,
 			   struct mbox_dpi_reg_cfg *reg_cfg);
 
+static int mps = 128;
+module_param(mps, int, 0644);
+MODULE_PARM_DESC(mps, "Maximum payload size, Supported sizes are 128, 256 and 512 bytes");
+
+static int mrrs = 128;
+module_param(mrrs, int, 0644);
+MODULE_PARM_DESC(mrrs, "Maximum read request size, Supported sizes are 128, 256, 512 and 1024 bytes");
+
 /* Supported devices */
 static const struct pci_device_id dpi_id_table[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_OCTEONTX_DPI_PF) },
@@ -562,7 +570,8 @@ int dpi_dma_engine_get_num(void)
  */
 int dpi_init(struct dpipf *dpi)
 {
-	int engine = 0;
+	int engine = 0, port;
+	u8 mrrs_val, mps_val;
 	u64 reg = 0;
 
 	for (engine = 0; engine < dpi_dma_engine_get_num(); engine++) {
@@ -590,12 +599,48 @@ int dpi_init(struct dpipf *dpi)
 
 	dpi_reg_write(dpi, DPI_CTL, DPI_CTL_EN);
 
+	/* Configure MPS and MRRS for DPI */
+	if (mrrs < DPI_SLI_MRRS_MIN || mrrs > DPI_SLI_MRRS_MAX ||
+	    !is_power_of_2(mrrs)) {
+		dev_info(&dpi->pdev->dev,
+			 "Invalid MRRS size:%d,Using default size(128 bytes)\n",
+			 mrrs);
+		mrrs = 128;
+	}
+	mrrs_val = fls(mrrs) - 8;
+
+	if (mps < DPI_SLI_MPS_MIN || mps > DPI_SLI_MPS_MAX ||
+	    !is_power_of_2(mps)) {
+		dev_info(&dpi->pdev->dev,
+			 "Invalid MPS size:%d,Using default size(128 bytes)\n",
+			 mps);
+		mps = 128;
+	}
+	mps_val = fls(mps) - 8;
+
+	for (port = 0; port < DPI_SLI_MAX_PORTS; port++) {
+		reg = dpi_reg_read(dpi, DPI_SLI_PRTX_CFG(port));
+		reg &= ~(DPI_SLI_PRTX_CFG_MRRS(0x7) |
+			 DPI_SLI_PRTX_CFG_MPS(0x7));
+		reg |= (DPI_SLI_PRTX_CFG_MPS(mps_val) |
+			DPI_SLI_PRTX_CFG_MRRS(mrrs_val));
+		dpi_reg_write(dpi, DPI_SLI_PRTX_CFG(port), reg);
+	}
+
 	return 0;
 }
 
 int dpi_fini(struct dpipf *dpi)
 {
-	int engine = 0;
+	int engine = 0, port;
+	u64 reg = 0ULL;
+
+	for (port = 0; port < DPI_SLI_MAX_PORTS; port++) {
+		reg = dpi_reg_read(dpi, DPI_SLI_PRTX_CFG(port));
+		reg &= ~(DPI_SLI_PRTX_CFG_MRRS(0x7) |
+			 DPI_SLI_PRTX_CFG_MPS(0x7));
+		dpi_reg_write(dpi, DPI_SLI_PRTX_CFG(port), reg);
+	}
 
 	for (engine = 0; engine < dpi_dma_engine_get_num(); engine++) {
 		dpi_reg_write(dpi, DPI_ENGX_BUF(engine), 0x0ULL);
