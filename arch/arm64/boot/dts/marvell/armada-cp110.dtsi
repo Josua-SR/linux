@@ -221,6 +221,12 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 
+			clocks = <&CP110_LABEL(clk) 1 5>,
+				 <&CP110_LABEL(clk) 1 6>,
+				 <&CP110_LABEL(clk) 1 18>;
+
+			clock-names = "mg_clk", "mg_core_clk", "axi_clk";
+
 			CP110_LABEL(comphy0): phy@0 {
 				reg = <0>;
 				#phy-cells = <1>;
