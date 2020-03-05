@@ -1811,19 +1811,19 @@ static const struct mvpp2_ethtool_counter mvpp2_ethtool_regs[] = {
 #define MVPP2_LAST_MIB		MVPP2_MIB_LATE_COLLISION
 
 	/* Extend counters */
-	{ MVPP2_OVERRUN_DROP_REG(0),	" rx_ppv2_overrun" },
-	{ MVPP2_CLS_DROP_REG(0),	" rx_cls_drop    " },
-	{ MVPP2_RX_PKT_FULLQ_DROP_REG,	" rx_fullq_drop  " },
-	{ MVPP2_RX_PKT_EARLY_DROP_REG,	" rx_early_drop  " },
-	{ MVPP2_RX_PKT_BM_DROP_REG,	" rx_bm_drop     " },
+	{ MVPP2_OVERRUN_DROP_REG(0),	"rx_ppv2_overrun" },
+	{ MVPP2_CLS_DROP_REG(0),	"rx_cls_drop" },
+	{ MVPP2_RX_PKT_FULLQ_DROP_REG,	"rx_fullq_drop" },
+	{ MVPP2_RX_PKT_EARLY_DROP_REG,	"rx_early_drop" },
+	{ MVPP2_RX_PKT_BM_DROP_REG,	"rx_bm_drop" },
 
 	/* Extend SW counters (not registers) */
 #define MVPP2_FIRST_CNT_SW		0xf000
 #define MVPP2_TX_GUARD_CNT(cpu)	(MVPP2_FIRST_CNT_SW + cpu)
-	{ MVPP2_TX_GUARD_CNT(0),	"tx-guard-cpu0 " },
-	{ MVPP2_TX_GUARD_CNT(1),	"tx-guard-cpu1 " },
-	{ MVPP2_TX_GUARD_CNT(2),	"tx-guard-cpu2 " },
-	{ MVPP2_TX_GUARD_CNT(3),	"tx-guard-cpu3 " },
+	{ MVPP2_TX_GUARD_CNT(0),	"tx-guard-cpu0" },
+	{ MVPP2_TX_GUARD_CNT(1),	"tx-guard-cpu1" },
+	{ MVPP2_TX_GUARD_CNT(2),	"tx-guard-cpu2" },
+	{ MVPP2_TX_GUARD_CNT(3),	"tx-guard-cpu3" },
 };
 
 static const char mvpp22_priv_flags_strings[][ETH_GSTRING_LEN] = {
