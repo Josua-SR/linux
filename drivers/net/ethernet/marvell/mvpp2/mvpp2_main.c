@@ -7380,11 +7380,13 @@ static int mvpp2_probe(struct platform_device *pdev)
 
 	if (dev_of_node(&pdev->dev)) {
 		priv->pp_clk = devm_clk_get(&pdev->dev, "pp_clk");
-		if (IS_ERR(priv->pp_clk))
-			return PTR_ERR(priv->pp_clk);
+		if (IS_ERR(priv->pp_clk)) {
+			err = PTR_ERR(priv->pp_clk);
+			goto err_cm3;
+		}
 		err = clk_prepare_enable(priv->pp_clk);
 		if (err < 0)
-			return err;
+			goto err_cm3;
 
 		priv->gop_clk = devm_clk_get(&pdev->dev, "gop_clk");
 		if (IS_ERR(priv->gop_clk)) {
@@ -7576,6 +7578,11 @@ err_gop_clk:
 	clk_disable_unprepare(priv->gop_clk);
 err_pp_clk:
 	clk_disable_unprepare(priv->pp_clk);
+err_cm3:
+	if (!has_acpi_companion(&pdev->dev))
+		gen_pool_free(priv->sram_pool, (unsigned long)priv->cm3_base,
+			      MSS_SRAM_SIZE);
+
 	return err;
 }
 
