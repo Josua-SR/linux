@@ -407,11 +407,6 @@ static int armada_pcie_ep_probe(struct platform_device *pdev)
 		"shadow", (phys_addr_t)p, base->start,
 		base->end - base->start);
 
-	/* Disable Function 0. Set the vendor ID to 0xFFFFFFFF to avoid
-	 * detection until the EP is fully configured
-	 */
-	writel_relaxed(0xffffffff, cfg_func_base(ep, 0, PCI_VENDOR_ID));
-
 	armada_ep = ep;
 
 	return 0;
