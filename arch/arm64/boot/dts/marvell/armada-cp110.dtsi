@@ -685,10 +685,6 @@
 		      <0x00 0xf0000000 0x0 0x01000000>,
 		      <0x80 0x00000000 0x8 0x00000000>;
 		reg-names = "bar0", "bar2", "bar4", "host-map";
-		device-id = <0x7080>;
-		vf-device-id = <0x7081>;
-		class-code = <0x2>;
-		subclass-code = <0x0>;
 		status = "disabled";
 	};
 

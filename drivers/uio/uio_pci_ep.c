@@ -32,7 +32,7 @@ struct uio_pci {
 };
 
 /* make sure we have at least one mem regions to map the host ram */
-#define MAX_BAR_MAP	6
+#define MAX_BAR_MAP	5
 
 /* temporary hack to export the BAR0 address for pcinet and network agent*/
 void __iomem *bar0_internal_addr;
@@ -44,19 +44,13 @@ EXPORT_SYMBOL(nwa_internal_addr);
 static int uio_pci_ep_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct device_node *node = dev->of_node;
 	void *ep;
 	struct uio_pci *uio_pci;
-	struct pci_epf_header hdr;
 	struct resource *res;
 	struct uio_info *info;
 	struct uio_mem *mem;
-	char *name;
-	struct page *pg;
-	int    bar_id, mem_id, ret;
-	u16 bar_mask = 0;
-	u32 val;
-	u32 props;
+	char  *name;
+	int    bar_id, mem_id;
 
 	ep = armada_pcie_ep_get();
 	if (!ep) {
@@ -79,79 +73,43 @@ static int uio_pci_ep_probe(struct platform_device *pdev)
 
 	/* store private data */
 	info->name = "uio_pci_ep_0";
-	info->version = "1.0.0";
+	info->version = "1.0.1";
 
 	/* setup the PCI EP topology. This should eventually move to the PCI
 	 *  EP Function driver
 	 */
 	uio_pci->ep = ep;
 
-	/* Configure the EP PCIe header */
-	memset(&hdr, 0, sizeof(hdr));
-	hdr.vendor_id = PCI_VENDOR_ID_MARVELL;
-	hdr.mem_en = 1;
-
-	ret = of_property_read_u32(node, "device-id", &val);
-	if (ret) {
-		dev_err(dev, "missing device-id from DT node\n");
-		return ret;
-	}
-	hdr.device_id = val;
-
-	ret = of_property_read_u32(node, "vf-device-id", &val);
-	if (ret) {
-		dev_err(dev, "missing vf-device-id from DT node\n");
-		return ret;
-	}
-	hdr.vf_device_id = val;
-
-	ret = of_property_read_u32(node, "class-code", &val);
-	if (ret) {
-		dev_err(dev, "missing class-code from DT node\n");
-		return ret;
-	}
-	hdr.baseclass_code = val;
-
-	ret = of_property_read_u32(node, "subclass-code", &val);
-	if (ret) {
-		dev_err(dev, "missing subclass-code from DT node\n");
-		return ret;
-	}
-	hdr.subclass_code = val;
-
-	armada_pcie_ep_write_header(ep, 0, &hdr);
-
 	/* Setup the BARs according to device tree */
-	for (bar_id = 0, mem_id = 0; bar_id < MAX_BAR_MAP; bar_id++) {
+	for (bar_id = 0, mem_id = 0; bar_id < MAX_BAR_MAP;
+	     mem_id++, bar_id++) {
 		name = devm_kzalloc(dev, 6 * sizeof(char), GFP_KERNEL);
 		if (name == NULL)
 			return -ENOMEM;
-
 		snprintf(name, 5, "bar%d", bar_id);
+
 		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, name);
 		if (!res) {
 			kfree(name);
-			continue;
+			dev_err(dev, "Did not find BAR-%d resource %pR\n",
+				bar_id, res);
+			return -ENOMEM;
 		}
-
-		bar_mask |= 1 << bar_id;
-
 		/* Setup the UIO memory attributes */
 		mem = &info->mem[mem_id];
 		mem->memtype = UIO_MEM_PHYS;
 		mem->size = resource_size(res);
-		mem->addr = res->start;
 		mem->name = name;
 
 		if (!is_power_of_2(mem->size)) {
-			dev_err(dev, "BAR-%d size in not power of 2\n", bar_id);
+			dev_err(dev, "BAR-%d size in not power of 2\n",
+				bar_id);
 			return -EINVAL;
 		}
 
-		/* NULL means allocate RAM backup */
-		if (!mem->addr) {
-			pg = alloc_pages(GFP_KERNEL | __GFP_ZERO,
-					 get_order(mem->size));
+		if (bar_id == 0) {
+			struct page *pg = alloc_pages(GFP_KERNEL | __GFP_ZERO,
+						      get_order(mem->size));
 			if (!pg) {
 				dev_err(dev, "alloc RAM resource %pR failed\n",
 					res);
@@ -159,30 +117,29 @@ static int uio_pci_ep_probe(struct platform_device *pdev)
 			}
 			mem->internal_addr = page_address(pg);
 			bar0_internal_addr = mem->internal_addr;
-			nwa_internal_addr = bar0_internal_addr +
+			nwa_internal_addr  = bar0_internal_addr +
 				AGNIC_CONFIG_BAR_SIZE + PCINET_CONFIG_BAR_SIZE;
 			mem->addr = virt_to_phys(mem->internal_addr);
+			armada_pcie_ep_bar_map(ep, 0, bar_id,
+					       (phys_addr_t)mem->addr,
+					       mem->size);
+		} else {
+			mem->addr = res->start;
+			mem->internal_addr = devm_ioremap(dev, mem->addr,
+							  mem->size);
+			if (IS_ERR(mem->internal_addr)) {
+				dev_err(dev, "map BAR-%d memory %pR failed\n",
+					bar_id, res);
+				return -ENOMEM;
+			}
 		}
 
-		props = PCI_BASE_ADDRESS_SPACE_MEMORY;
+		/* First 2 BARs in HW are 64 bit registers
+		 * and consume 2 BAR slots
+		 */
 		if (bar_id < 4)
-			props |= PCI_BASE_ADDRESS_MEM_TYPE_64;
-		else
-			props |= PCI_BASE_ADDRESS_MEM_TYPE_32;
-		/* Now create the BAR to match the memory region */
-		armada_pcie_ep_setup_bar(ep, 0, bar_id, props, mem->size);
-		armada_pcie_ep_bar_map(ep, 0, bar_id, (phys_addr_t)mem->addr,
-				    mem->size);
-
-		/* First 2 BARs in HW are 64 bit BARs and consume 2 BAR slots */
-		if (bar_id < 4) {
 			bar_id++;
-			bar_mask |= 1 << bar_id;
-		}
-		mem_id++;
 	}
-
-	armada_pcie_ep_disable_bars(ep, 0, ~bar_mask);
 
 	/* remap host RAM to local memory space  using shift mapping.
 	 * i.e. address 0x0 in host becomes uio_pci->host_map->start.
@@ -195,8 +152,6 @@ static int uio_pci_ep_probe(struct platform_device *pdev)
 		dev_err(dev, "Device tree missing host mappings\n");
 		return -ENODEV;
 	}
-	armada_pcie_ep_remap_host(ep, 0, uio_pci->host_map->start, 0x0,
-				  resource_size(uio_pci->host_map));
 
 	/* Describe the host as a UIO space */
 	name = devm_kzalloc(dev, 16 * sizeof(char), GFP_KERNEL);
@@ -220,9 +175,6 @@ static int uio_pci_ep_probe(struct platform_device *pdev)
 		dev_err(dev, "UIO registration failed\n");
 		return -ENODEV;
 	}
-
-	/* Finally, enable the PCIe host to detect us */
-	armada_pcie_ep_cfg_enable(ep, 0);
 
 	dev_info(dev, "Registered UIO PCI EP successfully\n");
 
