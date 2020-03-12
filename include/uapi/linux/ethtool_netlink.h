@@ -26,6 +26,7 @@ enum {
 enum {
 	ETHTOOL_MSG_KERNEL_NONE,
 	ETHTOOL_MSG_RINGS_GET_REPLY,
+	ETHTOOL_MSG_RINGS_NTF,
 
 	/* add new constants above here */
 	__ETHTOOL_MSG_KERNEL_CNT,
