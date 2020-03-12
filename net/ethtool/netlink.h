@@ -329,4 +329,8 @@ struct ethnl_request_ops {
 	void (*cleanup_data)(struct ethnl_reply_data *reply_data);
 };
 
+
+extern const struct ethnl_request_ops ethnl_rings_request_ops;
+
+
 #endif /* _NET_ETHTOOL_NETLINK_H */
