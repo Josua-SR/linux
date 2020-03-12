@@ -15,6 +15,7 @@
 enum {
 	ETHTOOL_MSG_USER_NONE,
 	ETHTOOL_MSG_RINGS_GET,
+	ETHTOOL_MSG_RINGS_SET,
 
 	/* add new constants above here */
 	__ETHTOOL_MSG_USER_CNT,

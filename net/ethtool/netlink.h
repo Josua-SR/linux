@@ -332,5 +332,6 @@ struct ethnl_request_ops {
 
 extern const struct ethnl_request_ops ethnl_rings_request_ops;
 
+int ethnl_set_rings(struct sk_buff *skb, struct genl_info *info);
 
 #endif /* _NET_ETHTOOL_NETLINK_H */
