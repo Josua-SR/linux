@@ -10,6 +10,7 @@
 
 #define pr_fmt(fmt) "ap-cpu-clk: " fmt
 
+#include <linux/arm-smccc.h>
 #include <linux/clk-provider.h>
 #include <linux/clk.h>
 #include <linux/mfd/syscon.h>
@@ -18,6 +19,7 @@
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include "armada_ap_cp_helper.h"
+#include "soc/marvell/armada8k/fw.h"
 
 #define AP806_CPU_CLUSTER0		0
 #define AP806_CPU_CLUSTER1		1
@@ -141,7 +143,106 @@ struct ap_cpu_clk {
 	struct clk_hw hw;
 	struct regmap *pll_cr_base;
 	struct cpu_dfs_regs *pll_regs;
+	phys_addr_t phys;
 };
+
+static int dfx_sread_smc(unsigned long addr, unsigned int *reg)
+{
+	struct arm_smccc_res res;
+
+	arm_smccc_smc(MV_SIP_DFX, MV_SIP_DFX_SREAD, addr, 0, 0, 0, 0, 0, &res);
+
+	if (res.a0 == 0 && reg != NULL)
+		*reg = res.a1;
+
+	return res.a0;
+}
+
+static int dfx_swrite_smc(unsigned long addr, unsigned long val)
+{
+	struct arm_smccc_res res;
+
+	arm_smccc_smc(MV_SIP_DFX, MV_SIP_DFX_SWRITE, addr, val,
+		      0, 0, 0, 0, &res);
+
+	return res.a0;
+}
+
+static int ap_clk_regmap_read(struct ap_cpu_clk *clk, unsigned int reg,
+			      unsigned int *val)
+{
+	int ret;
+
+	ret = dfx_sread_smc(clk->phys + reg, val);
+	if (ret != SMCCC_RET_SUCCESS)
+		ret = regmap_read(clk->pll_cr_base, reg, val);
+
+	return ret;
+}
+
+static int ap_clk_regmap_write(struct ap_cpu_clk *clk, unsigned int reg,
+			  unsigned int val)
+{
+	int ret;
+
+	ret = dfx_swrite_smc(clk->phys + reg, val);
+	if (ret != SMCCC_RET_SUCCESS)
+		ret = regmap_write(clk->pll_cr_base, reg, val);
+
+	return ret;
+}
+
+static int ap_clk_regmap_update_bits(struct ap_cpu_clk *clk, unsigned int reg,
+				     unsigned int mask, unsigned int val)
+{
+	int ret;
+	unsigned int tmp;
+
+	ret = dfx_sread_smc(clk->phys + reg, &tmp);
+	if (ret != SMCCC_RET_SUCCESS)
+		goto try_legacy;
+
+	tmp &= ~mask;
+	tmp |= val & mask;
+
+	ret = dfx_swrite_smc(clk->phys + reg, tmp);
+	if (ret == SMCCC_RET_SUCCESS)
+		return ret;
+
+try_legacy:
+	return regmap_update_bits(clk->pll_cr_base, reg, mask, val);
+}
+
+static int ap_clk_regmap_read_poll_timeout(struct ap_cpu_clk *clk,
+					    unsigned int reg,
+					    unsigned int stable_bit)
+{
+	int ret;
+	u32 val;
+	ktime_t timeout;
+
+	timeout = ktime_add_us(ktime_get(), STATUS_POLL_TIMEOUT_US);
+	do {
+		ret = dfx_sread_smc(clk->phys + reg, &val);
+		if (ret || (val & stable_bit))
+			break;
+
+		usleep_range((STATUS_POLL_PERIOD_US >> 2) + 1,
+			     STATUS_POLL_PERIOD_US);
+
+	} while (ktime_before(ktime_get(), timeout));
+
+	if (ret == SMCCC_RET_SUCCESS)
+		return (val & stable_bit) ? 0 : -ETIMEDOUT;
+
+	/* If above fail, try legacy */
+	ret = regmap_read_poll_timeout(clk->pll_cr_base,
+				       reg, val,
+				       val & stable_bit, STATUS_POLL_PERIOD_US,
+				       STATUS_POLL_TIMEOUT_US);
+
+	return ret;
+}
 
 static unsigned long ap_cpu_clk_recalc_rate(struct clk_hw *hw,
 					    unsigned long parent_rate)
@@ -152,7 +253,7 @@ static unsigned long ap_cpu_clk_recalc_rate(struct clk_hw *hw,
 
 	cpu_clkdiv_reg = clk->pll_regs->divider_reg +
 		(clk->cluster * clk->pll_regs->cluster_offset);
-	regmap_read(clk->pll_cr_base, cpu_clkdiv_reg, &cpu_clkdiv_ratio);
+	ap_clk_regmap_read(clk, cpu_clkdiv_reg, &cpu_clkdiv_ratio);
 	cpu_clkdiv_ratio &= clk->pll_regs->divider_mask;
 	cpu_clkdiv_ratio >>= clk->pll_regs->divider_offset;
 
@@ -173,7 +274,7 @@ static int ap_cpu_clk_set_rate(struct clk_hw *hw, unsigned long rate,
 	cpu_ratio_reg = clk->pll_regs->ratio_reg +
 		(clk->cluster * clk->pll_regs->cluster_offset);
 
-	regmap_read(clk->pll_cr_base, cpu_clkdiv_reg, &reg);
+	ap_clk_regmap_read(clk, cpu_clkdiv_reg, &reg);
 	reg &= ~(clk->pll_regs->divider_mask);
 	reg |= (divider << clk->pll_regs->divider_offset);
 
@@ -187,29 +288,26 @@ static int ap_cpu_clk_set_rate(struct clk_hw *hw, unsigned long rate,
 		reg |= ((divider * clk->pll_regs->divider_ratio) <<
 				AP807_PLL_CR_1_CPU_CLK_DIV_RATIO_OFFSET);
 	}
-	regmap_write(clk->pll_cr_base, cpu_clkdiv_reg, reg);
+	ap_clk_regmap_write(clk, cpu_clkdiv_reg, reg);
 
+	ap_clk_regmap_update_bits(clk, cpu_force_reg, clk->pll_regs->force_mask,
+				  clk->pll_regs->force_mask);
 
-	regmap_update_bits(clk->pll_cr_base, cpu_force_reg,
-			   clk->pll_regs->force_mask,
-			   clk->pll_regs->force_mask);
-
-	regmap_update_bits(clk->pll_cr_base, cpu_ratio_reg,
-			   BIT(clk->pll_regs->ratio_offset),
-			   BIT(clk->pll_regs->ratio_offset));
+	ap_clk_regmap_update_bits(clk, cpu_ratio_reg,
+				  BIT(clk->pll_regs->ratio_offset),
+				  BIT(clk->pll_regs->ratio_offset));
 
 	stable_bit = BIT(clk->pll_regs->ratio_state_offset +
 			 clk->cluster *
 			 clk->pll_regs->ratio_state_cluster_offset),
-	ret = regmap_read_poll_timeout(clk->pll_cr_base,
-				       clk->pll_regs->ratio_state_reg, reg,
-				       reg & stable_bit, STATUS_POLL_PERIOD_US,
-				       STATUS_POLL_TIMEOUT_US);
+	ret = ap_clk_regmap_read_poll_timeout(clk,
+					      clk->pll_regs->ratio_state_reg,
+					      stable_bit);
 	if (ret)
 		return ret;
 
-	regmap_update_bits(clk->pll_cr_base, cpu_ratio_reg,
-			   BIT(clk->pll_regs->ratio_offset), 0);
+	ap_clk_regmap_update_bits(clk, cpu_ratio_reg,
+				  BIT(clk->pll_regs->ratio_offset), 0);
 
 	return 0;
 }
@@ -238,6 +336,11 @@ static int ap_cpu_clock_probe(struct platform_device *pdev)
 	struct clk_hw_onecell_data *ap_cpu_data;
 	struct ap_cpu_clk *ap_cpu_clk;
 	struct regmap *regmap;
+	struct resource res;
+
+	ret = of_address_to_resource(np->parent, 0, &res);
+	if (ret)
+		return ret;
 
 	regmap = syscon_node_to_regmap(np->parent);
 	if (IS_ERR(regmap)) {
@@ -314,6 +417,12 @@ static int ap_cpu_clock_probe(struct platform_device *pdev)
 		ap_cpu_clk[cluster_index].pll_cr_base = regmap;
 		ap_cpu_clk[cluster_index].hw.init = &init;
 		ap_cpu_clk[cluster_index].dev = dev;
+
+		/*
+		 * Hack to retrieve a physical addr that will be given to the
+		 * firmware.
+		 */
+		ap_cpu_clk[cluster_index].phys = res.start;
 
 		if (of_device_is_compatible(pdev->dev.of_node,
 					"marvell,ap806-cpu-clock")) {
