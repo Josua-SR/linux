@@ -7738,6 +7738,11 @@ static int mv_pp2x_remove(struct platform_device *pdev)
 
 	clk_disable_unprepare(hw->pp_clk);
 	clk_disable_unprepare(hw->gop_clk);
+	if (priv->pp2_version != PPV21)  {
+		clk_disable_unprepare(hw->gop_core_clk);
+		clk_disable_unprepare(hw->mg_clk);
+		clk_disable_unprepare(hw->mg_core_clk);
+	}
 
 	if (priv->pp2_version != PPV21 &&
 	    mv_pp2x_queue_mode == MVPP2_QDIST_MULTI_MODE) {
