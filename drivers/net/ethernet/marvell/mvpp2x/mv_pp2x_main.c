@@ -89,7 +89,7 @@ u8 mv_pp2x_num_cos_queues = 4;
 u8 mv_pp2x_rx_count = MVPP2_DEFAULT_RX_COUNT;
 
 static enum cpuhp_state cp_online_hpstate;
-static enum cpuhp_state port_online_hpstate[MVPP2_MAX_PORTS];
+static enum cpuhp_state port_online_hpstate;
 
 static u8 mv_pp2x_queue_mode = MVPP2_QDIST_MULTI_MODE;
 static u8 mv_bm_underrun_protect = MVPP23_BM_UNPR_EN;
@@ -4981,7 +4981,7 @@ int mv_pp2x_open(struct net_device *dev)
 
 	/* Only Mvpp22&23 support hot plug feature */
 	if (port->priv->pp2_version != PPV21  && !(port->flags & (MVPP2_F_IF_MUSDK | MVPP2_F_LOOPBACK))) {
-		err = cpuhp_state_add_instance_nocalls(port_online_hpstate[port->id],
+		err = cpuhp_state_add_instance_nocalls(port_online_hpstate,
 						       &port->node_online);
 		if (err < 0)
 			goto err_free_all;
@@ -5021,7 +5021,7 @@ int mv_pp2x_open(struct net_device *dev)
 	return 0;
 
 err_port_cpuhp:
-	cpuhp_state_remove_instance_nocalls(port_online_hpstate[port->id],
+	cpuhp_state_remove_instance_nocalls(port_online_hpstate,
 					    &port->node_online);
 err_free_all:
 	mv_pp2x_cleanup_irqs(port);
@@ -5054,7 +5054,7 @@ int mv_pp2x_stop(struct net_device *dev)
 		mv_pp22_cleanup_uio_irqs(port);
 
 	if (port->port_hotplugged)
-		cpuhp_state_remove_instance_nocalls(port_online_hpstate[port->id],
+		cpuhp_state_remove_instance_nocalls(port_online_hpstate,
 						    &port->node_online);
 
 	mv_pp2x_tx_done_init_on_open(port, false);
@@ -6660,17 +6660,6 @@ static int mv_pp2x_port_probe(struct platform_device *pdev,
 
 	mv_pp2x_port_irq_names_update(port);
 
-	if (priv->pp2_version != PPV21) {
-		err = cpuhp_setup_state_multi(CPUHP_AP_ONLINE_DYN,
-					      "net/mvpp2_port:online",
-					      mv_pp2x_port_cpu_online,
-					      mv_pp2x_port_cpu_down);
-		if (err < 0)
-			goto err_unreg_netdev;
-
-		port_online_hpstate[port->id] = err;
-	}
-
 	/* Init statistic lock */
 	spin_lock_init(&port->mac_data.stats_spinlock);
 
@@ -6691,8 +6680,6 @@ static int mv_pp2x_port_probe(struct platform_device *pdev,
 
 	return 0;
 
-err_unreg_netdev:
-	unregister_netdev(dev);
 err_free_stats:
 	free_percpu(port->stats);
 err_free_irq:
@@ -6719,9 +6706,6 @@ static void mv_pp2x_port_remove(struct mv_pp2x_port *port)
 		kfree(port->uio.u_info.name);
 	}
 #endif
-
-	if (port->priv->pp2_version != PPV21)
-		cpuhp_remove_multi_state(port_online_hpstate[port->id]);
 
 	mv_pp2x_port_napi_remove(port);
 	unregister_netdev(port->dev);
@@ -7660,19 +7644,10 @@ static int mv_pp2x_probe(struct platform_device *pdev)
 
 	/* Only Mvpp22&23 support hot plug feature */
 	if (priv->pp2_version != PPV21 && mv_pp2x_queue_mode == MVPP2_QDIST_MULTI_MODE) {
-		err = cpuhp_setup_state_multi(CPUHP_AP_ONLINE_DYN,
-					      "net/mvpp2:online",
-					      NULL,
-					      mv_pp2x_cp_cpu_down);
-		if (err < 0)
-			goto err_uio;
-
-		cp_online_hpstate = err;
-
 		err = cpuhp_state_add_instance_nocalls(cp_online_hpstate,
 						       &priv->node_online);
 		if (err)
-			goto err_cpuhp;
+			goto err_uio;
 	}
 	INIT_DELAYED_WORK(&priv->stats_task, mv_pp2x_get_device_stats);
 
@@ -7692,8 +7667,6 @@ static int mv_pp2x_probe(struct platform_device *pdev)
 	pr_debug("Platform Device Name : %s\n", kobject_name(&pdev->dev.kobj));
 	return 0;
 
-err_cpuhp:
-	cpuhp_remove_multi_state(cp_online_hpstate);
 err_uio:
 	if (priv->pp2_version != PPV21)
 		uio_unregister_device(&priv->uio.u_info);
@@ -7718,12 +7691,6 @@ static int mv_pp2x_remove(struct platform_device *pdev)
 	int i, num_of_ports, num_of_pools;
 	struct mv_pp2x_cp_pcpu *cp_pcpu;
 
-	if (priv->pp2_version != PPV21 &&
-	    mv_pp2x_queue_mode == MVPP2_QDIST_MULTI_MODE) {
-		cpuhp_state_remove_instance_nocalls(cp_online_hpstate,
-						    &priv->node_online);
-		cpuhp_remove_multi_state(cp_online_hpstate);
-	}
 
 #if 0
 	if (priv->pp2_version != PPV21) {
@@ -7771,6 +7738,12 @@ static int mv_pp2x_remove(struct platform_device *pdev)
 
 	clk_disable_unprepare(hw->pp_clk);
 	clk_disable_unprepare(hw->gop_clk);
+
+	if (priv->pp2_version != PPV21 &&
+	    mv_pp2x_queue_mode == MVPP2_QDIST_MULTI_MODE) {
+		cpuhp_state_remove_instance_nocalls(cp_online_hpstate,
+						    &priv->node_online);
+	}
 
 	return 0;
 }
@@ -7956,7 +7929,36 @@ static int __init mpp2_module_init(void)
 	mv_pp2x_pools[MVPP2_BM_SWF_JUMBO_POOL].pkt_size =
 		MVPP2_BM_JUMBO_PKT_SIZE;
 
+	if (mv_pp2x_queue_mode == MVPP2_QDIST_MULTI_MODE) {
+		ret = cpuhp_setup_state_multi(CPUHP_AP_ONLINE_DYN,
+					      "net/mvpp2:online",
+					      NULL,
+					      mv_pp2x_cp_cpu_down);
+		if (ret < 0)
+			return ret;
+
+		cp_online_hpstate = ret;
+
+		ret = cpuhp_setup_state_multi(CPUHP_AP_ONLINE_DYN,
+					      "net/mvpp2_port:online",
+					      mv_pp2x_port_cpu_online,
+					      mv_pp2x_port_cpu_down);
+		if (ret < 0)
+			goto err_controller_state;
+
+		port_online_hpstate = ret;
+	}
+
 	ret = platform_driver_register(&mv_pp2x_driver);
+	if (ret)
+		goto err_port_state;
+
+	return 0;
+
+err_port_state:
+	cpuhp_remove_multi_state(port_online_hpstate);
+err_controller_state:
+	cpuhp_remove_multi_state(cp_online_hpstate);
 
 	return ret;
 }
@@ -7964,6 +7966,10 @@ static int __init mpp2_module_init(void)
 static void __exit mpp2_module_exit(void)
 {
 	platform_driver_unregister(&mv_pp2x_driver);
+	if (mv_pp2x_queue_mode == MVPP2_QDIST_MULTI_MODE) {
+		cpuhp_remove_multi_state(port_online_hpstate);
+		cpuhp_remove_multi_state(cp_online_hpstate);
+	}
 }
 
 module_init(mpp2_module_init);
