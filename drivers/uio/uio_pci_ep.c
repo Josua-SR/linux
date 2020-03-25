@@ -22,13 +22,6 @@
 #include <linux/pci_regs.h>
 #include <linux/mm.h>
 
-#define NPU_BARMAP_GIU_SIZE		(16 * SZ_1K)
-#define NPU_BARMAP_CTRL_SIZE		(SZ_4K)
-#define NPU_BARMAP_MGMT_NETDEV_SIZE	(SZ_4K)
-#define NPU_BARMAP_NW_AGENT_OFFSET	(NPU_BARMAP_GIU_SIZE + \
-					NPU_BARMAP_CTRL_SIZE + \
-					NPU_BARMAP_MGMT_NETDEV_SIZE)
-
 struct uio_pci {
 	struct device	*dev;
 	void		*ep;
@@ -38,10 +31,7 @@ struct uio_pci {
 /* make sure we have at least one mem regions to map the host ram */
 #define MAX_BAR_MAP	5
 
-void __iomem *nwa_internal_addr;
-EXPORT_SYMBOL(nwa_internal_addr);
-
-/* temporary hack to export the BAR0 address for pcinet and network agent*/
+/* temporary hack to export the BAR0 address/size to Facility */
 void __iomem	*bar0_addr;
 EXPORT_SYMBOL(bar0_addr);
 size_t		bar0_size;
@@ -124,8 +114,6 @@ static int uio_pci_ep_probe(struct platform_device *pdev)
 			mem->internal_addr = page_address(pg);
 			bar0_addr = mem->internal_addr;
 			bar0_size = mem->size;
-			nwa_internal_addr = bar0_addr +
-						NPU_BARMAP_NW_AGENT_OFFSET;
 			mem->addr = virt_to_phys(mem->internal_addr);
 			armada_pcie_ep_bar_map(ep, 0, bar_id,
 					       (phys_addr_t)mem->addr,
