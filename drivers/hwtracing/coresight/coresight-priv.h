@@ -32,7 +32,10 @@
 #define CORESIGHT_DEVID		0xfc8
 #define CORESIGHT_DEVTYPE	0xfcc
 
-#define TIMEOUT_US		100
+/* Timeout is in ms to accommodate larger ETR flush time
+ * taken by OcteonTx2 implementation
+ */
+#define TIMEOUT_US		5000
 #define BMVAL(val, lsb, msb)	((val & GENMASK(msb, lsb)) >> lsb)
 
 #define ETM_MODE_EXCL_KERN	BIT(30)
