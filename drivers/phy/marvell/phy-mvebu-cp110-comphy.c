@@ -14,7 +14,6 @@
 #include <linux/phy.h>
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
-#include <linux/clk.h>
 
 #include <dt-bindings/phy/phy-comphy-mvebu.h>
 
@@ -443,8 +442,7 @@ static int mvebu_comphy_probe(struct platform_device *pdev)
 	struct phy_provider *provider;
 	struct device_node *child;
 	struct resource *res;
-	int i, err;
-	struct clk *mg_clk, *mg_core_clk, *axi_clk;
+	int i;
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -474,34 +472,6 @@ static int mvebu_comphy_probe(struct platform_device *pdev)
 			return -EBUSY;
 		}
 	}
-
-	mg_clk = devm_clk_get(&pdev->dev, "mg_clk");
-	if (IS_ERR(mg_clk))
-		return PTR_ERR(mg_clk);
-
-	err = clk_prepare_enable(mg_clk);
-	if (err < 0)
-		return err;
-
-	mg_core_clk = devm_clk_get(&pdev->dev, "mg_core_clk");
-	if (IS_ERR(mg_core_clk)) {
-		err = PTR_ERR(mg_core_clk);
-		goto err_mg_clk;
-	}
-
-	err = clk_prepare_enable(mg_core_clk);
-	if (err < 0)
-		goto err_mg_clk;
-
-	axi_clk = devm_clk_get(&pdev->dev, "axi_clk");
-	if (IS_ERR(axi_clk)) {
-		err = PTR_ERR(axi_clk);
-		goto err_mg_core_clk;
-	}
-
-	err = clk_prepare_enable(axi_clk);
-	if (err < 0)
-		goto err_mg_core_clk;
 
 	for_each_available_child_of_node(pdev->dev.of_node, child) {
 		struct mvebu_comphy_lane *lane;
@@ -561,12 +531,6 @@ static int mvebu_comphy_probe(struct platform_device *pdev)
 	provider = devm_of_phy_provider_register(&pdev->dev,
 						 mvebu_comphy_xlate);
 	return PTR_ERR_OR_ZERO(provider);
-
-err_mg_core_clk:
-	clk_disable_unprepare(mg_core_clk);
-err_mg_clk:
-	clk_disable_unprepare(mg_clk);
-	return err;
 }
 
 static const struct of_device_id mvebu_comphy_of_match_table[] = {
