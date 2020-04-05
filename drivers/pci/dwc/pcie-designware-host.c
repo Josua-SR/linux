@@ -431,6 +431,7 @@ int dw_pcie_host_init(struct pcie_port *pp)
 		goto error;
 
 	bus = bridge->bus;
+	pp->root_bus = bus;
 
 	if (pp->ops->scan_bus)
 		pp->ops->scan_bus(pp);
@@ -447,6 +448,28 @@ int dw_pcie_host_init(struct pcie_port *pp)
 error:
 	pci_free_host_bridge(bridge);
 	return ret;
+}
+
+void dw_pcie_host_deinit(struct pcie_port *pp)
+{
+	int i;
+
+	/* Everything at the dw_pcie layer is created through devres,
+	 * except for the root bus and the MSI interrupt domain.
+	 */
+	pci_stop_root_bus(pp->root_bus);
+	pci_remove_root_bus(pp->root_bus);
+
+	if (IS_ENABLED(CONFIG_PCI_MSI) && !pp->ops->msi_host_init) {
+		unsigned int virq;
+
+		for (i = 0; i < MAX_MSI_IRQS; i++) {
+			virq = irq_find_mapping(pp->irq_domain, i);
+			if (virq)
+				irq_dispose_mapping(virq);
+		}
+		irq_domain_remove(pp->irq_domain);
+	}
 }
 
 static int dw_pcie_rd_other_conf(struct pcie_port *pp, struct pci_bus *bus,

@@ -150,6 +150,7 @@ struct dw_pcie_host_ops {
 
 struct pcie_port {
 	u8			root_bus_nr;
+	struct pci_bus		*root_bus;
 	u64			cfg0_base;
 	void __iomem		*va_cfg0_base;
 	u32			cfg0_size;
@@ -312,6 +313,7 @@ irqreturn_t dw_handle_msi_irq(struct pcie_port *pp);
 void dw_pcie_msi_init(struct pcie_port *pp);
 void dw_pcie_setup_rc(struct pcie_port *pp);
 int dw_pcie_host_init(struct pcie_port *pp);
+void dw_pcie_host_deinit(struct pcie_port *pp);
 #else
 static inline irqreturn_t dw_handle_msi_irq(struct pcie_port *pp)
 {
@@ -329,6 +331,9 @@ static inline void dw_pcie_setup_rc(struct pcie_port *pp)
 static inline int dw_pcie_host_init(struct pcie_port *pp)
 {
 	return 0;
+}
+static inline void dw_pcie_host_deinit(struct pcie_port *pp)
+{
 }
 #endif
 
