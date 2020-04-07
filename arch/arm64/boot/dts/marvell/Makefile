@@ -41,6 +41,7 @@ dtb-$(CONFIG_ARCH_MVEBU) += cn9131-db-C.dtb
 dtb-$(CONFIG_ARCH_MVEBU) += cn9131-db-D.dtb
 dtb-$(CONFIG_ARCH_MVEBU) += cn9132-db-A.dtb
 dtb-$(CONFIG_ARCH_MVEBU) += cn9132-db-B.dtb
+dtb-$(CONFIG_ARCH_MVEBU) += cn9132-db-C.dtb
 dtb-$(CONFIG_ARCH_MVEBU) += cn9132-db-D.dtb
 dtb-$(CONFIG_ARCH_MVEBU) += cn9130-crb-A.dtb
 dtb-$(CONFIG_ARCH_MVEBU) += cn9130-crb-B.dtb
