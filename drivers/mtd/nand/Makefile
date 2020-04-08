@@ -4,3 +4,4 @@
 #
 
 obj-y	+= raw/
+obj-y	+= cavium/

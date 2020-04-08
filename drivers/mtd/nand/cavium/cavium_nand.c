@@ -280,7 +280,7 @@ struct cvm_nand_buf {
 
 /* NAND flash controller (NDF) related information */
 struct cvm_nfc {
-	struct nand_hw_control controller;
+	struct nand_controller controller;
 	struct device *dev;
 	void __iomem *base;
 	struct list_head chips;
@@ -315,7 +315,7 @@ static inline struct cvm_nand_chip *to_cvm_nand(struct nand_chip *nand)
 	return container_of(nand, struct cvm_nand_chip, nand);
 }
 
-static inline struct cvm_nfc *to_cvm_nfc(struct nand_hw_control *ctrl)
+static inline struct cvm_nfc *to_cvm_nfc(struct nand_controller *ctrl)
 {
 	return container_of(ctrl, struct cvm_nfc, controller);
 }
@@ -1249,8 +1249,7 @@ static int cvm_nand_setup_data_interface(struct mtd_info *mtd, int chipnr,
 
 	if (!conf) {
 		rc = -EINVAL;
-	} else if (nand->data_interface &&
-			chip->iface_set && chip->iface_mode == mode) {
+	} else if (chip->iface_set && chip->iface_mode == mode) {
 		/*
 		 * Cases:
 		 * - called from nand_reset, which clears DDR timing
@@ -1321,13 +1320,13 @@ static void cavm_bch_reset(void)
  * Return 0 on success or -1 on failure
  */
 static int octeon_nand_bch_calculate_ecc_internal(struct mtd_info *mtd,
-	      dma_addr_t ihandle, uint8_t *code)
+	      dma_addr_t ihandle, u8 *code)
 {
 	struct nand_chip *nand = mtd_to_nand(mtd);
 	struct cvm_nfc *tn = to_cvm_nfc(nand->controller);
 	int rc;
 	int i;
-	static uint8_t *ecc_buffer;
+	static u8 *ecc_buffer;
 	static int ecc_size;
 	static dma_addr_t ecc_handle;
 	union bch_resp *r = tn->bch_resp;
@@ -1380,7 +1379,7 @@ static int octeon_nand_bch_calculate_ecc_internal(struct mtd_info *mtd,
  * ecc_code:   buffer for ECC
  */
 static int octeon_nand_bch_calculate(struct mtd_info *mtd,
-		const uint8_t *dat, uint8_t *ecc_code)
+		const u8 *dat, u8 *ecc_code)
 {
 	struct nand_chip *nand = mtd_to_nand(mtd);
 	struct cvm_nfc *tn = to_cvm_nfc(nand->controller);
@@ -1411,7 +1410,7 @@ static int octeon_nand_bch_correct(struct mtd_info *mtd, u_char *dat,
 	struct nand_chip *nand = mtd_to_nand(mtd);
 	struct cvm_nfc *tn = to_cvm_nfc(nand->controller);
 	int i = nand->ecc.size + nand->ecc.bytes;
-	static uint8_t *data_buffer;
+	static u8 *data_buffer;
 	static dma_addr_t ihandle;
 	static int buffer_size;
 	dma_addr_t ohandle;
@@ -1488,7 +1487,7 @@ void octeon_nand_bch_hwctl(struct mtd_info *mtd, int mode)
 }
 
 static int octeon_nand_hw_bch_read_page(struct mtd_info *mtd,
-					struct nand_chip *chip, uint8_t *buf,
+					struct nand_chip *chip, u8 *buf,
 					int oob_required, int page)
 {
 	struct nand_chip *nand = mtd_to_nand(mtd);
@@ -1496,8 +1495,8 @@ static int octeon_nand_hw_bch_read_page(struct mtd_info *mtd,
 	int i, eccsize = chip->ecc.size, ret;
 	int eccbytes = chip->ecc.bytes;
 	int eccsteps = chip->ecc.steps;
-	uint8_t *p;
-	uint8_t *ecc_code = chip->buffers->ecccode;
+	u8 *p;
+	u8 *ecc_code = chip->ecc.code_buf;
 	unsigned int max_bitflips = 0;
 
 	/* chip->read_buf() insists on sequential order, we do OOB first */
@@ -1537,15 +1536,15 @@ static int octeon_nand_hw_bch_read_page(struct mtd_info *mtd,
 
 static int octeon_nand_hw_bch_write_page(struct mtd_info *mtd,
 					 struct nand_chip *chip,
-					 const uint8_t *buf, int oob_required,
+					 const u8 *buf, int oob_required,
 					 int page)
 {
 	struct cvm_nfc *tn = to_cvm_nfc(chip->controller);
 	int i, eccsize = chip->ecc.size, ret;
 	int eccbytes = chip->ecc.bytes;
 	int eccsteps = chip->ecc.steps;
-	const uint8_t *p;
-	uint8_t *ecc_calc = chip->buffers->ecccalc;
+	const u8 *p;
+	u8 *ecc_calc = chip->ecc.calc_buf;
 
 	DEV_DBG(DEBUG_WRITE, tn->dev, "%s(buf?%p, oob%d p%x)\n",
 		__func__, buf, oob_required, page);
@@ -1595,7 +1594,7 @@ static int octeon_nand_hw_bch_write_page(struct mtd_info *mtd,
  */
 static int octeon_nand_write_page_raw(struct mtd_info *mtd,
 				      struct nand_chip *chip,
-				      const uint8_t *buf, int oob_required,
+				      const u8 *buf, int oob_required,
 				      int page)
 {
 	chip->write_buf(mtd, buf, mtd->writesize);
@@ -1617,7 +1616,7 @@ static int octeon_nand_write_oob_std(struct mtd_info *mtd,
 				     int page)
 {
 	int status = 0;
-	const uint8_t *buf = chip->oob_poi;
+	const u8 *buf = chip->oob_poi;
 	int length = mtd->oobsize;
 
 	chip->cmdfunc(mtd, NAND_CMD_SEQIN, mtd->writesize, page);
@@ -1642,7 +1641,7 @@ static int octeon_nand_write_oob_std(struct mtd_info *mtd,
  */
 static int octeon_nand_read_page_raw(struct mtd_info *mtd,
 				     struct nand_chip *chip,
-				     uint8_t *buf, int oob_required, int page)
+				     u8 *buf, int oob_required, int page)
 {
 	chip->read_buf(mtd, buf, mtd->writesize);
 	if (oob_required)
@@ -1704,7 +1703,7 @@ static int cvm_bch_save_empty_eccmask(struct nand_chip *nand)
 	struct cvm_nfc *tn = to_cvm_nfc(nand->controller);
 	unsigned int eccsize = nand->ecc.size;
 	unsigned int eccbytes = nand->ecc.bytes;
-	uint8_t erased_ecc[eccbytes];
+	u8 erased_ecc[eccbytes];
 	dma_addr_t erased_handle;
 	unsigned char *erased_page = dma_alloc_coherent(tn->dev, eccsize,
 					&erased_handle, GFP_KERNEL);
