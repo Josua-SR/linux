@@ -44,6 +44,7 @@
 
 	pmic: pmic@8 {
 		compatible = "fsl,pfuze100";
+		fsl,pfuze-support-disable-sw;
 		reg = <0x08>;
 
 		regulators {
