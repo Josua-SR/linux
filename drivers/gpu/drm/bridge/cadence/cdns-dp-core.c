@@ -511,9 +511,11 @@ static int __cdns_dp_probe(struct platform_device *pdev,
 #endif
 
 	dev_set_drvdata(dev, mhdp);
-	
+
+#ifdef CONFIG_DRM_CDNS_AUDIO
 	/* register audio driver */
 	cdns_mhdp_register_audio_driver(dev);
+#endif
 
 	dp_aux_init(mhdp, dev);
 
@@ -523,7 +525,9 @@ static int __cdns_dp_probe(struct platform_device *pdev,
 static void __cdns_dp_remove(struct cdns_mhdp_device *mhdp)
 {
 	dp_aux_destroy(mhdp);
+#ifdef CONFIG_DRM_CDNS_AUDIO
 	cdns_mhdp_unregister_audio_driver(mhdp->dev);
+#endif
 }
 
 /* -----------------------------------------------------------------------------

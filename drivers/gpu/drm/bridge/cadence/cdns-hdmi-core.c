@@ -603,8 +603,10 @@ static int __cdns_hdmi_probe(struct platform_device *pdev,
 
 	dev_set_drvdata(dev, mhdp);
 
+#ifdef CONFIG_DRM_CDNS_AUDIO
 	/* register audio driver */
 	cdns_mhdp_register_audio_driver(dev);
+#endif
 
 	/* register cec driver */
 #ifdef CONFIG_DRM_CDNS_HDMI_CEC
@@ -620,7 +622,9 @@ static void __cdns_hdmi_remove(struct cdns_mhdp_device *mhdp)
 #ifdef CONFIG_DRM_CDNS_HDMI_CEC
 	cdns_mhdp_unregister_cec_driver(mhdp->dev);
 #endif
+#ifdef CONFIG_DRM_CDNS_AUDIO
 	cdns_mhdp_unregister_audio_driver(mhdp->dev);
+#endif
 }
 
 /* -----------------------------------------------------------------------------
