@@ -307,3 +307,8 @@
 		>;
 	};
 };
+
+&{/busfreq} {
+	/* Disable busfreq, to avoid crash */
+	status = "disabled";
+};
