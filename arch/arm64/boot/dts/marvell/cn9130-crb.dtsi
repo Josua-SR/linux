@@ -60,7 +60,7 @@
 		regulator-name = "cp0_sd_vccq";
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <3300000>;
-		gpios = <&cp0_gpio1 25 GPIO_ACTIVE_HIGH>;
+		gpios = <&cp0_gpio2 18 GPIO_ACTIVE_HIGH>;
 		states = <1800000 0x1
 			  3300000 0x0>;
 	};
@@ -132,7 +132,6 @@
 	pinctrl-0 = <&cp0_sdhci_pins
 		     &cp0_sdhci_cd_pins_crb>;
 	bus-width = <4>;
-	no-1-8-v;
 	vqmmc-supply = <&cp0_reg_sd_vccq>;
 	vmmc-supply = <&cp0_reg_sd_vcc>;
 	status = "okay";
