@@ -739,6 +739,14 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		ERRATA_MIDR_ALL_VERSIONS(MIDR_OCTEON_T83),
 	},
 #endif
+#ifdef CONFIG_MRVL_ERRATUM_30350
+	{
+	/* ThunderX, T83 passes 1.1 and 1.2*/
+		.desc = "Marvell erratum 30350",
+		.capability = ARM64_WORKAROUND_MRVL_30350,
+		ERRATA_MIDR_REV_RANGE(MIDR_OCTEON_T83, 0, 1, 2),
+	},
+#endif
 	{
 		.desc = "Mismatched cache line size",
 		.capability = ARM64_MISMATCHED_CACHE_LINE_SIZE,

@@ -157,6 +157,24 @@ alternative_cb_end
 #endif
 	.endm
 
+#ifdef CONFIG_MRVL_ERRATUM_30350
+	.macro swtag_fix
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	ldr	xzr, [sp]
+	.endm
+#endif
+
 #ifdef CONFIG_GTI_WATCHDOG
 	.macro	kernel_entry, el, regsize = 64, exc_el3 = 0
 #else
@@ -700,6 +718,13 @@ ENDPROC(el1_sync)
 
 	.align	6
 el1_irq:
+#ifdef CONFIG_MRVL_ERRATUM_30350
+alternative_if_not ARM64_WORKAROUND_MRVL_30350
+	b	2f
+alternative_else_nop_endif
+	swtag_fix
+2:
+#endif
 	kernel_entry 1
 	enable_dbg
 #ifdef CONFIG_TRACE_IRQFLAGS
@@ -917,6 +942,13 @@ ENDPROC(el0_sync)
 
 	.align	6
 el0_irq:
+#ifdef CONFIG_MRVL_ERRATUM_30350
+alternative_if_not ARM64_WORKAROUND_MRVL_30350
+	b	2f
+alternative_else_nop_endif
+	swtag_fix
+2:
+#endif
 	kernel_entry 0
 el0_irq_naked:
 	enable_dbg

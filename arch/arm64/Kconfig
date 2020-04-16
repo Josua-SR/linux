@@ -554,6 +554,19 @@ config MRVL_ERRATUM_38500
 
 	  If unsure, say Y.
 
+config MRVL_ERRATUM_30350
+	bool "Marvell erratum 30350"
+	default y
+	help
+	  Enable workaround for erratum 30350. On some OcteonTX1 T83 chips,
+	  an issue exists whereby a killed instruction that is a main
+	  micro-TLB miss may also update the switch-tag micro TLB. A subsequent
+	  load may then be misinterpreted as a load to SSOW_VHWS()_SWTP, and
+	  return incorrect data. To workaround this erratum, insert at least 13
+	  nops followed by a load as this will clean up the micro-TLB state.
+
+	  If unsure, say Y.
+
 config QCOM_FALKOR_ERRATUM_1003
 	bool "Falkor E1003: Incorrect translation due to ASID change"
 	default y
