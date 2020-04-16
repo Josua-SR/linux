@@ -420,6 +420,27 @@ int ssow_reset_domain(u32 id, u16 domain_id, u64 grp_mask)
 					if (((reg >> 32) & 0x3) < 2)
 						writeq_relaxed(0x0, reg_base +
 					      SSOW_VF_VHWSX_OP_SWTAG_UNTAG(0));
+#ifdef CONFIG_MRVL_ERRATUM_30350
+					__asm__ volatile(ALTERNATIVE("b 1f",
+								     "nop",
+						    ARM64_WORKAROUND_MRVL_30350)
+						"	nop\n"
+						"	nop\n"
+						"	nop\n"
+						"	nop\n"
+						"	nop\n"
+						"	nop\n"
+						"	nop\n"
+						"	nop\n"
+						"	nop\n"
+						"	nop\n"
+						"	nop\n"
+						"	nop\n"
+						"	ldr xzr, [sp]\n"
+						"1:\n"
+						: : : "memory"
+					);
+#endif
 				}
 			}
 			sso_pf_set_value(id, SSO_PF_HWSX_SX_GRPMASK(i, 0), 0);
