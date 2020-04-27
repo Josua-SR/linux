@@ -33,6 +33,21 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-always-on;
 	};
+
+	resmem: reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/* global autoconfigured region for contiguous allocations */
+		linux,cma {
+			compatible = "shared-dma-pool";
+			reusable;
+			size = <0 0x3c000000>;
+			alloc-ranges = <0 0x40000000 0 0x40000000>;
+			linux,cma-default;
+		};
+	};
 };
 
 &i2c2 {
@@ -255,8 +270,13 @@
 	};
 };
 
+&gpu3d {
+	status = "okay";
+};
+
 &dcss {
 	status = "okay";
+	// CONFIG_DRM_IMX_DCSS
 
 	port@0 {
 		dcss_out: endpoint {
@@ -266,6 +286,10 @@
 };
 
 &hdmi {
+	// DRM_IMX ?
+	// CONFIG_DRM_IMX_CDNS_MHDP
+	// DRM_CDNS_MHDP
+	// CONFIG_DRM_CDNS_HDMI ?
 	compatible = "cdn,imx8mq-hdmi";
 	lane-mapping = <0xe4>;
 	status = "okay";
