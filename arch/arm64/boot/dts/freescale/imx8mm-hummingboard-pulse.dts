@@ -60,7 +60,6 @@
 			regulator-max-microvolt = <3300000>;
 			gpio = <&gpio2 19 GPIO_ACTIVE_HIGH>;
 			off-on-delay = <20000>;
-			enable-active-high;
 		};
 
 		reg_usb_vbus: usb-vbus {
@@ -86,6 +85,59 @@
                         "Micbias", "MICBIAS",
                         "Mic in", "IN2R";
         };
+
+	xclk: clock {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <25000000>;
+	};
+};
+
+&mipi_csi_1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+	/delete-node/ port;
+	port {
+		csi1_mipi_ep: endpoint {
+			remote-endpoint = <&csi1_ep>;
+			/* If the following entries are changed, then
+			 * the entries in the basler_camera_mipi1_ep node
+			 * need to updated too. */
+			/* On the i.mx8mmini NXP uses data-lanes
+			 * other than expected by the kernel.
+			 * On the imx8mmini the entry data-lanes
+			 * must contain the number of data lanes.
+			 */
+			data-lanes = <4>;
+			clock-lanes = <0>;
+			link-frequencies = /bits/ 64 <248000000>;
+			status= "okay";
+			csis-hs-settle = <7>;
+			csis-clk-settle = <2>;
+			csis-wclk;
+		};
+	};
+};
+
+
+&csi1_bridge {
+	#address-cells = <2>;
+	#size-cells = <0>;
+	fsl,mipi-mode;
+	dma-coherent;
+	bsl,dma-invalidate;
+	status = "okay";
+	port {
+		csi1_ep: endpoint {
+			reg = <0>;
+			remote-endpoint = <&csi1_mipi_ep>;
+		};
+		mipi1_sensor_ep: endpoint2 {
+			reg = <1>;
+			remote-endpoint = <&basler_camera_mipi1_ep>;
+		};
+	};
 };
 
 &clk {
@@ -320,7 +372,7 @@
 		pinctrl_usdhc2_gpio: usdhc2grpgpio {
 			fsl,pins = <
 				MX8MM_IOMUXC_SD2_CD_B_GPIO2_IO12	0x1c4
-				MX8MM_IOMUXC_SD2_RESET_B_GPIO2_IO19	0x41
+				MX8MM_IOMUXC_SD2_RESET_B_GPIO2_IO19	0x101
 			>;
 		};
 
@@ -339,7 +391,7 @@
 		pinctrl_usdhc2_100mhz: usdhc2grp100mhz {
 			fsl,pins = <
 				MX8MM_IOMUXC_SD2_CLK_USDHC2_CLK		0x194
-				MX8MM_IOMUXC_SD2_CMD_USDHC2_CMD		0x1d4
+				MX8MM_IOMUXC_SD2_CMD_USDHC2_CMD		0x1d0
 				MX8MM_IOMUXC_SD2_DATA0_USDHC2_DATA0	0x1d4
 				MX8MM_IOMUXC_SD2_DATA1_USDHC2_DATA1	0x1d4
 				MX8MM_IOMUXC_SD2_DATA2_USDHC2_DATA2	0x1d4
@@ -351,7 +403,7 @@
 		pinctrl_usdhc2_200mhz: usdhc2grp200mhz {
 			fsl,pins = <
 				MX8MM_IOMUXC_SD2_CLK_USDHC2_CLK		0x196
-				MX8MM_IOMUXC_SD2_CMD_USDHC2_CMD		0x1d6
+				MX8MM_IOMUXC_SD2_CMD_USDHC2_CMD		0x1d0
 				MX8MM_IOMUXC_SD2_DATA0_USDHC2_DATA0	0x1d6
 				MX8MM_IOMUXC_SD2_DATA1_USDHC2_DATA1	0x1d6
 				MX8MM_IOMUXC_SD2_DATA2_USDHC2_DATA2	0x1d6
@@ -595,23 +647,8 @@
         	clocks = <&clk IMX8MM_CLK_SAI2_ROOT>;
         	clock-names = "mclk";
         	reg = <0x1a>;
-       		wlf,mute-gpios = <&gpio1 8 GPIO_ACTIVE_LOW>;
         	status = "okay";
         };
-
-	adv_bridge: adv7535@3d {
-		compatible = "adi,adv7533";
-		reg = <0x3d>;
-		adi,addr-cec = <0x3b>;
-		adi,dsi-lanes = <4>;
-		status = "okay";
-
-		port {
-			adv7535_from_dsim: endpoint {
-				remote-endpoint = <&dsim_to_adv7535>;
-			};
-		};
-	};
 };
 
 &i2c3 {
@@ -632,6 +669,42 @@
                 reg = <0x57>;
                 pagesize = <16>;
         };
+
+	adv_bridge: adv7535@39 {
+		compatible = "adi,adv7533";
+		reg = <0x39>;
+		adi,addr-cec = <0x3b>;
+		adi,dsi-lanes = <4>;
+		status = "okay";
+
+		port {
+			adv7535_from_dsim: endpoint {
+				remote-endpoint = <&dsim_to_adv7535>;
+			};
+		};
+	};
+
+	basler_camera_mipi1: basler_camera_mipi@36 {
+		compatible = "basler,basler-camera";
+		reg = <0x36>;
+		status = "okay";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_csi_pwn>, <&pinctrl_csi_rst>;
+		clocks = <&xclk>;
+		clock-names = "xclk";
+		reset-gpios = <&gpio1 6 GPIO_ACTIVE_LOW>;
+		powerdown-gpios = <&gpio1 5 GPIO_ACTIVE_HIGH>;
+		port {
+			basler_camera_mipi1_ep: endpoint {
+				remote-endpoint = <&mipi1_sensor_ep>;
+				/* IMPORTANT: The following three entries needs to be held
+                                 * in sync with the information stored in the csi1_mipi_ep node */
+				data-lanes = <1 2 3 4>;
+				clock-lanes = <0>;
+				link-frequencies = /bits/ 64 <248000000>;
+			};
+		};
+	};
 };
 
 &i2c4 {
@@ -673,8 +746,8 @@
 	pinctrl-names = "default", "dsd";
 	pinctrl-0 = <&pinctrl_sai1>;
 	pinctrl-1 = <&pinctrl_sai1_dsd>;
-	assigned-clocks = <&clk IMX8MM_CLK_ECSPI3>,
-			<&clk 338>;
+	assigned-clocks = <&clk IMX8MM_CLK_SAI1>,
+			<&clk IMX8MM_CLK_SAI1>;
 	assigned-clock-parents = <&clk IMX8MM_AUDIO_PLL1_OUT>;
 	assigned-clock-rates = <0>, <49152000>;
 	clocks = <&clk IMX8MM_CLK_SAI1_IPG>, <&clk IMX8MM_CLK_DUMMY>,
@@ -691,8 +764,8 @@
 &sai2 {
         pinctrl-names = "default";
         pinctrl-0 = <&pinctrl_sai2>;
-        assigned-clocks = <&clk IMX8MM_CLK_PDM>,
-                        <&clk 339>;
+        assigned-clocks = <&clk IMX8MM_CLK_SAI2>,
+                        <&clk IMX8MM_CLK_SAI2>;
         assigned-clock-parents = <&clk IMX8MM_AUDIO_PLL1_OUT>;
         assigned-clock-rates = <0>, <24576000>;
         status = "okay";
@@ -702,8 +775,8 @@
 &sai5 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_sai5>;
-	assigned-clocks = <&clk IMX8MM_CLK_ECSPI1_ROOT>,
-			<&clk 342>;
+	assigned-clocks = <&clk IMX8MM_CLK_SAI5>,
+			<&clk IMX8MM_CLK_SAI5>;
 	assigned-clock-parents = <&clk IMX8MM_AUDIO_PLL1_OUT>;
 	assigned-clock-rates = <0>, <49152000>;
 	clocks = <&clk IMX8MM_CLK_SAI5_IPG>, <&clk IMX8MM_CLK_DUMMY>,
@@ -754,7 +827,7 @@
 &uart3 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart3>;
-	assigned-clocks = <&clk IMX8MM_CLK_SAI1_ROOT>;
+	assigned-clocks = <&clk IMX8MM_CLK_UART3>;
 	assigned-clock-parents = <&clk IMX8MM_SYS_PLL1_80M>;
 	fsl,uart-has-rtscts;
 	status = "okay";
@@ -780,7 +853,6 @@
 	no-sdio;
 	no-sd;
 	mmc-ddr-1_8v;
-//	status = "okay";
 	status = "disabled";
 };
 
@@ -793,7 +865,6 @@
 	bus-width = <4>;
 	vmmc-supply = <&reg_usdhc2_vmmc>;
 	status = "okay";
-//	status = "disabled";
 };
 
 &usdhc3 {
@@ -804,7 +875,6 @@
 	bus-width = <8>;
 	non-removable;
 	status = "okay";
-//	status = "disabled";
 };
 
 &wdog1 {
