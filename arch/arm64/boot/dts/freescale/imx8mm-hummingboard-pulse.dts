@@ -122,19 +122,17 @@
 
 
 &csi1_bridge {
-	#address-cells = <2>;
+	#address-cells = <1>;
 	#size-cells = <0>;
 	fsl,mipi-mode;
 	dma-coherent;
 	bsl,dma-invalidate;
 	status = "okay";
 	port {
-		csi1_ep: endpoint {
-			reg = <0>;
+		csi1_ep: endpoint@0 {
 			remote-endpoint = <&csi1_mipi_ep>;
 		};
-		mipi1_sensor_ep: endpoint2 {
-			reg = <1>;
+		mipi1_sensor_ep: endpoint@1 {
 			remote-endpoint = <&basler_camera_mipi1_ep>;
 		};
 	};
