@@ -31,6 +31,9 @@ Required properties (child nodes):
 - #phy-cells : from the generic phy bindings, must be 1. Defines the
                input port to use for a given comphy lane.
 
+Optional properties:
+- phy-skip-config : used to avoid reconfig phy when priorly configured.
+
 Example for marvell,comphy-cp110:
 
 	CP110_LABEL(comphy): phy@120000 {
