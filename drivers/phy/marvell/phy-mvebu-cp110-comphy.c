@@ -520,6 +520,9 @@ static int mvebu_comphy_probe(struct platform_device *pdev)
 		lane->port = -1;
 		phy_set_drvdata(phy, lane);
 
+		if (of_get_property(phy->dev.of_node, "phy-skip-config", NULL))
+			continue;
+
 		/*
 		 * To avoid relying on the bootloader/firmware configuration,
 		 * power off all comphys.
