@@ -262,7 +262,7 @@ static void tmc_etr_enable_hw(struct tmc_drvdata *drvdata)
 	/* Wait for TMCSReady bit to be set */
 	tmc_wait_for_tmcready(drvdata);
 
-	if (drvdata && CSETR_QUIRK_BUFFSIZE_8BX)
+	if (drvdata->etr_options & CSETR_QUIRK_BUFFSIZE_8BX)
 		writel_relaxed(drvdata->size / 8, drvdata->base + TMC_RSZ);
 	else
 		writel_relaxed(drvdata->size / 4, drvdata->base + TMC_RSZ);
