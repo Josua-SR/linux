@@ -31,11 +31,16 @@ struct uio_pci {
 /* make sure we have at least one mem regions to map the host ram */
 #define MAX_BAR_MAP	5
 
-/* temporary hack to export the BAR0 address/size to Facility */
+/* export the BAR0/2 address/size, used by Facility */
 void __iomem	*bar0_addr;
 EXPORT_SYMBOL(bar0_addr);
 size_t		bar0_size;
 EXPORT_SYMBOL(bar0_size);
+void __iomem	*bar2_addr;
+EXPORT_SYMBOL(bar2_addr);
+size_t		bar2_size;
+EXPORT_SYMBOL(bar2_size);
+
 
 static int uio_pci_ep_probe(struct platform_device *pdev)
 {
@@ -126,6 +131,11 @@ static int uio_pci_ep_probe(struct platform_device *pdev)
 				dev_err(dev, "map BAR-%d memory %pR failed\n",
 					bar_id, res);
 				return -ENOMEM;
+			}
+
+			if (bar_id == 2) {
+				bar2_addr = mem->internal_addr;
+				bar2_size = mem->size;
 			}
 		}
 
