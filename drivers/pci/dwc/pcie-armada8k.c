@@ -24,10 +24,13 @@
 #include <linux/of_irq.h>
 
 #include "pcie-designware.h"
+#include <linux/of_gpio.h>
 
 struct armada8k_pcie {
 	struct dw_pcie *pci;
 	struct clk *clk;
+	struct gpio_desc	*reset_gpio;
+	enum of_gpio_flags	flags;
 };
 
 #define PCIE_VENDOR_REGS_OFFSET		0x8000
@@ -307,12 +310,31 @@ static int armada8k_phy_config(struct platform_device *pdev,
 	return err;
 }
 
+/* armada8k_pcie_reset
+ * The function implements the PCIe reset via GPIO.
+ * First, pull down the GPIO used for PCIe reset, and wait 200ms;
+ * Second, set the GPIO output value with setting from DTS, and wait
+ * 200ms for taking effect.
+ * Return: void, always success.
+ */
+static void armada8k_pcie_reset(struct armada8k_pcie *pcie)
+{
+	/* Set the reset gpio to low first */
+	gpiod_direction_output(pcie->reset_gpio, 0);
+	/* After 200ms to reset pcie */
+	mdelay(200);
+	gpiod_direction_output(pcie->reset_gpio,
+			       (pcie->flags & OF_GPIO_ACTIVE_LOW) ? 0 : 1);
+	mdelay(200);
+}
+
 static int armada8k_pcie_probe(struct platform_device *pdev)
 {
 	struct dw_pcie *pci;
 	struct armada8k_pcie *pcie;
 	struct device *dev = &pdev->dev;
 	struct resource *base;
+	int reset_gpio;
 	int ret;
 
 	pcie = devm_kzalloc(dev, sizeof(*pcie), GFP_KERNEL);
@@ -343,6 +365,15 @@ static int armada8k_pcie_probe(struct platform_device *pdev)
 		dev_err(dev, "couldn't remap regs base %p\n", base);
 		ret = PTR_ERR(pci->dbi_base);
 		goto fail;
+	}
+
+	/* Config reset gpio for pcie if the reset connected to gpio */
+	reset_gpio = of_get_named_gpio_flags(pdev->dev.of_node,
+					     "reset-gpio", 0,
+					     &pcie->flags);
+	if (gpio_is_valid(reset_gpio)) {
+		pcie->reset_gpio = gpio_to_desc(reset_gpio);
+		armada8k_pcie_reset(pcie);
 	}
 
 	ret = armada8k_phy_config(pdev, pcie);
