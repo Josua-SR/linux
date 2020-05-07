@@ -27,10 +27,13 @@
 #include <linux/of_gpio.h>
 
 struct armada8k_pcie {
+#define MV_A8K_PCIE_MAX_WIDTH		4
 	struct dw_pcie *pci;
 	struct clk *clk;
 	struct gpio_desc	*reset_gpio;
 	enum of_gpio_flags	flags;
+	int phy_count;
+	struct phy *comphy[MV_A8K_PCIE_MAX_WIDTH];
 };
 
 #define PCIE_VENDOR_REGS_OFFSET		0x8000
@@ -259,16 +262,15 @@ static int armada8k_phy_config(struct platform_device *pdev,
 			       struct armada8k_pcie *pcie)
 {
 	struct phy *comphy;
-	int err, phy_count;
+	int err;
 	char i;
 
-	phy_count = of_count_phandle_with_args(pdev->dev.of_node, "phys",
+	pcie->phy_count = of_count_phandle_with_args(pdev->dev.of_node, "phys",
 					       "#phy-cells");
-
-	if (phy_count <= 0)
+	if (pcie->phy_count <= 0)
 		return 0;
 
-	for (i = 0; i < phy_count; i++) {
+	for (i = 0; i < pcie->phy_count; i++) {
 		comphy = devm_of_phy_get_by_index(&pdev->dev,
 						  pdev->dev.of_node, i);
 		if (IS_ERR(comphy)) {
@@ -276,14 +278,17 @@ static int armada8k_phy_config(struct platform_device *pdev,
 			return PTR_ERR(comphy);
 		}
 
-		switch (phy_count) {
+		pcie->comphy[i] = comphy;
+
+		switch (pcie->phy_count) {
 		case PCIE_LNK_X1:
 		case PCIE_LNK_X2:
 		case PCIE_LNK_X4:
-			phy_set_bus_width(comphy, phy_count);
+			phy_set_bus_width(comphy, pcie->phy_count);
 			break;
 		default:
-			dev_err(&pdev->dev, "wrong pcie width %d", phy_count);
+			dev_err(&pdev->dev, "wrong pcie width %d",
+				pcie->phy_count);
 			return -EINVAL;
 		}
 
@@ -295,13 +300,15 @@ static int armada8k_phy_config(struct platform_device *pdev,
 
 		err = phy_init(comphy);
 		if (err < 0) {
-			dev_err(&pdev->dev, "phy init failed %d", phy_count);
+			dev_err(&pdev->dev, "phy init failed %d",
+				pcie->phy_count);
 			return err;
 		}
 
 		err = phy_power_on(comphy);
 		if (err < 0) {
-			dev_err(&pdev->dev, "phy init failed %d", phy_count);
+			dev_err(&pdev->dev, "phy init failed %d",
+				pcie->phy_count);
 			phy_exit(comphy);
 			return err;
 		}
@@ -326,6 +333,16 @@ static void armada8k_pcie_reset(struct armada8k_pcie *pcie)
 	gpiod_direction_output(pcie->reset_gpio,
 			       (pcie->flags & OF_GPIO_ACTIVE_LOW) ? 0 : 1);
 	mdelay(200);
+}
+
+static void armada8k_phy_deconfig(struct armada8k_pcie *pcie)
+{
+	int i;
+
+	for (i = 0; i < pcie->phy_count; i++) {
+		phy_power_off(pcie->comphy[i]);
+		phy_exit(pcie->comphy[i]);
+	}
 }
 
 static int armada8k_pcie_probe(struct platform_device *pdev)
@@ -386,15 +403,35 @@ static int armada8k_pcie_probe(struct platform_device *pdev)
 
 	ret = armada8k_add_pcie_port(pcie, pdev);
 	if (ret)
-		goto fail;
+		goto fail_phy;
 
 	return 0;
 
+fail_phy:
+	armada8k_phy_deconfig(pcie);
 fail:
 	if (!IS_ERR(pcie->clk))
 		clk_disable_unprepare(pcie->clk);
 
 	return ret;
+}
+
+static int armada8k_pcie_remove(struct platform_device *pdev)
+{
+	struct armada8k_pcie *pcie = platform_get_drvdata(pdev);
+	struct dw_pcie *pci = pcie->pci;
+	struct device *dev = &pdev->dev;
+
+	dw_pcie_host_deinit(&pci->pp);
+
+	armada8k_phy_deconfig(pcie);
+
+	if (!IS_ERR(pcie->clk))
+		clk_disable_unprepare(pcie->clk);
+
+	dev_dbg(dev, "%s\n", __func__);
+
+	return 0;
 }
 
 static const struct of_device_id armada8k_pcie_of_match[] = {
@@ -404,6 +441,7 @@ static const struct of_device_id armada8k_pcie_of_match[] = {
 
 static struct platform_driver armada8k_pcie_driver = {
 	.probe		= armada8k_pcie_probe,
+	.remove		= armada8k_pcie_remove,
 	.driver = {
 		.name	= "armada8k-pcie",
 		.of_match_table = of_match_ptr(armada8k_pcie_of_match),
