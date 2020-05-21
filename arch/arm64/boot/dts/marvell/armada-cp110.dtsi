@@ -672,8 +672,8 @@
 		};
 	};
 
-	CP110_LABEL(pcinet_target):pcinet-target {
-		compatible = "marvell,pcinet-target";
+	CP110_LABEL(armada_ep):armada-ep {
+		compatible = "marvell,armada-ep";
 		msi-parent = <&gic_v2m0>;
 		status = "disabled";
 	};

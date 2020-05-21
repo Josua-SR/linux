@@ -80,7 +80,7 @@
 	phy-skip-config;
 };
 
-&cp0_pcinet_target {
+&cp0_armada_ep {
 	status = "okay";
 };
 
