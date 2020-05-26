@@ -2320,6 +2320,82 @@ static void mv_pp21_link_event(struct net_device *dev)
 	}
 }
 
+static void mv_pp2x_gmac_speed_duplex_set(struct gop_hw *gop,
+					  struct mv_mac_data *mac)
+{
+	u32 reg_val;
+
+	reg_val = mv_gop110_gmac_read(gop, mac->gop_index,
+				      MV_GMAC_PORT_AUTO_NEG_CFG_REG);
+
+	switch (mac->duplex) {
+	case DUPLEX_FULL:
+		reg_val &= ~MV_GMAC_PORT_AUTO_NEG_CFG_EN_FDX_AN_MASK;
+		reg_val |= MV_GMAC_PORT_AUTO_NEG_CFG_SET_FULL_DX_MASK;
+		break;
+	case DUPLEX_HALF:
+		reg_val &= ~MV_GMAC_PORT_AUTO_NEG_CFG_EN_FDX_AN_MASK;
+		reg_val &= ~MV_GMAC_PORT_AUTO_NEG_CFG_SET_FULL_DX_MASK;
+		break;
+	default:
+		return;
+	}
+
+	switch (mac->speed) {
+	case SPEED_10:
+		reg_val &= ~MV_GMAC_PORT_AUTO_NEG_CFG_EN_AN_SPEED_MASK;
+		reg_val &= ~MV_GMAC_PORT_AUTO_NEG_CFG_SET_GMII_SPEED_MASK;
+		reg_val &= ~MV_GMAC_PORT_AUTO_NEG_CFG_SET_MII_SPEED_MASK;
+		break;
+	case SPEED_100:
+		reg_val &= ~MV_GMAC_PORT_AUTO_NEG_CFG_EN_AN_SPEED_MASK;
+		reg_val &= ~MV_GMAC_PORT_AUTO_NEG_CFG_SET_GMII_SPEED_MASK;
+		reg_val |= MV_GMAC_PORT_AUTO_NEG_CFG_SET_MII_SPEED_MASK;
+		break;
+	case SPEED_1000:
+		reg_val &= ~MV_GMAC_PORT_AUTO_NEG_CFG_EN_AN_SPEED_MASK;
+		reg_val |= MV_GMAC_PORT_AUTO_NEG_CFG_SET_GMII_SPEED_MASK;
+		/* the 100/10 bit doesn't matter in this case */
+		break;
+	default:
+		pr_err("Wrong speed configuration\n");
+		return;
+	}
+
+	mv_gop110_gmac_write(gop, mac->gop_index,
+			     MV_GMAC_PORT_AUTO_NEG_CFG_REG, reg_val);
+}
+
+static void mv_pp22_config_fc(struct mv_pp2x_port *port)
+{
+	struct phy_device *phydev = port->mac_data.phy_dev;
+	struct mv_mac_data *mac = &port->mac_data;
+	struct gop_hw *gop = &port->priv->hw.gop;
+	int gop_port = mac->gop_index;
+
+	if (!mac->fc_autoneg)
+		return;
+
+	mv_gop110_gmac_fc_set(gop, gop_port, MV_PORT_FC_TX_DISABLE);
+	mv_gop110_gmac_fc_set(gop, gop_port, MV_PORT_FC_RX_DISABLE);
+
+	/* Work out negotiated pause frame usage per
+	 * IEEE 802.3-2005 table 28B-3.
+	 */
+	if (phydev->advertising & phydev->lp_advertising & ADVERTISED_Pause) {
+		mv_gop110_gmac_fc_set(gop, gop_port, MV_PORT_FC_TX_ENABLE);
+		mv_gop110_gmac_fc_set(gop, gop_port, MV_PORT_FC_RX_ENABLE);
+	} else if (phydev->advertising & phydev->lp_advertising &
+		   ADVERTISED_Asym_Pause) {
+		if (phydev->advertising & ADVERTISED_Pause)
+			mv_gop110_gmac_fc_set(gop, gop_port,
+					      MV_PORT_FC_RX_ENABLE);
+		else if (phydev->lp_advertising & ADVERTISED_Pause)
+			mv_gop110_gmac_fc_set(gop, gop_port,
+					      MV_PORT_FC_TX_ENABLE);
+	}
+}
+
 static void mv_pp22_link_event(struct net_device *dev)
 {
 	struct mv_pp2x_port *port = netdev_priv(dev);
@@ -2337,6 +2413,15 @@ static void mv_pp22_link_event(struct net_device *dev)
 					mv_gop110_update_comphy(port, phydev->speed);
 			port->mac_data.duplex = phydev->duplex;
 			port->mac_data.speed  = phydev->speed;
+
+			if (phy_interface_mode_is_rgmii(port->mac_data.phy_mode))
+				mv_pp2x_gmac_speed_duplex_set(&port->priv->hw.gop,
+							      &port->mac_data);
+
+			if (phy_interface_mode_is_rgmii(port->mac_data.phy_mode) ||
+			    port->mac_data.phy_mode == PHY_INTERFACE_MODE_1000BASEX ||
+			    port->mac_data.phy_mode == PHY_INTERFACE_MODE_SGMII)
+				mv_pp22_config_fc(port);
 		}
 		port->mac_data.flags |= MV_EMAC_F_LINK_UP;
 	}
@@ -4406,14 +4491,13 @@ int mvcpn110_mac_hw_init(struct mv_pp2x_port *port)
 {
 	struct gop_hw *gop = &port->priv->hw.gop;
 	struct mv_mac_data *mac = &port->mac_data;
-	int gop_port = mac->gop_index;
 	u64 timer;
 
 	if (mac->flags & MV_EMAC_F_INIT)
 		return 0;
 
-	/* configure port PHY address */
-	mv_gop110_smi_phy_addr_cfg(gop, gop_port, mac->phy_addr);
+	/* Disable SMI polling */
+	mv_gop110_smi_poll_dis(gop);
 
 	if (port->comphy)
 		mv_serdes_port_init(port);
@@ -4426,6 +4510,8 @@ int mvcpn110_mac_hw_init(struct mv_pp2x_port *port)
 	mv_gop110_fca_set_periodic_timer(gop, mac->gop_index, timer);
 
 	mv_gop110_port_init(gop, mac);
+
+	mac->fc_autoneg = AUTONEG_ENABLE;
 
 	if (mac->force_link)
 		mv_gop110_fl_cfg(gop, mac);

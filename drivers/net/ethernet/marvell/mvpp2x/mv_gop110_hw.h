@@ -427,6 +427,7 @@ static inline void mv_gop110_rfu1_print(struct gop_hw *gop, char *reg_name,
 		mv_gop110_rfu1_read(gop, reg));
 }
 
+void mv_gop110_smi_poll_dis(struct gop_hw *gop);
 int mv_gop110_smi_init(struct gop_hw *gop);
 int mv_gop110_smi_phy_addr_cfg(struct gop_hw *gop, int port, int addr);
 

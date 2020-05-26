@@ -184,7 +184,6 @@ static void mv_gop110_gmac_rgmii_cfg(struct gop_hw *gop, int mac_num)
 	/* configure AN 0xb8e8 */
 	an = MV_GMAC_PORT_AUTO_NEG_CFG_AN_BYPASS_EN_MASK |
 		MV_GMAC_PORT_AUTO_NEG_CFG_EN_AN_SPEED_MASK   |
-		MV_GMAC_PORT_AUTO_NEG_CFG_EN_FC_AN_MASK      |
 		MV_GMAC_PORT_AUTO_NEG_CFG_EN_FDX_AN_MASK     |
 		MV_GMAC_PORT_AUTO_NEG_CFG_CHOOSE_SAMPLE_TX_CONFIG_MASK;
 	mv_gop110_gmac_write(gop, mac_num, MV_GMAC_PORT_AUTO_NEG_CFG_REG, an);
@@ -263,7 +262,6 @@ static void mv_gop110_gmac_sgmii_cfg(struct gop_hw *gop, int mac_num)
 	an = MV_GMAC_PORT_AUTO_NEG_CFG_EN_PCS_AN_MASK |
 		MV_GMAC_PORT_AUTO_NEG_CFG_AN_BYPASS_EN_MASK |
 		MV_GMAC_PORT_AUTO_NEG_CFG_EN_AN_SPEED_MASK  |
-		MV_GMAC_PORT_AUTO_NEG_CFG_EN_FC_AN_MASK     |
 		MV_GMAC_PORT_AUTO_NEG_CFG_EN_FDX_AN_MASK    |
 		MV_GMAC_PORT_AUTO_NEG_CFG_CHOOSE_SAMPLE_TX_CONFIG_MASK;
 	mv_gop110_gmac_write(gop, mac_num, MV_GMAC_PORT_AUTO_NEG_CFG_REG, an);
@@ -349,7 +347,6 @@ static void mv_gop110_gmac_1000basex_cfg(struct gop_hw *gop, int mac_num)
 	 */
 	an = MV_GMAC_PORT_AUTO_NEG_CFG_EN_PCS_AN_MASK |
 		MV_GMAC_PORT_AUTO_NEG_CFG_SET_GMII_SPEED_MASK  |
-		MV_GMAC_PORT_AUTO_NEG_CFG_EN_FC_AN_MASK     |
 		MV_GMAC_PORT_AUTO_NEG_CFG_EN_FDX_AN_MASK    |
 		MV_GMAC_PORT_AUTO_NEG_CFG_CHOOSE_SAMPLE_TX_CONFIG_MASK;
 	mv_gop110_gmac_write(gop, mac_num, MV_GMAC_PORT_AUTO_NEG_CFG_REG, an);
@@ -830,7 +827,6 @@ int mv_gop110_gmac_fc_set(struct gop_hw *gop, int mac_num, enum mv_port_fc fc)
 		break;
 
 	case MV_PORT_FC_RX_ENABLE:
-		reg_val &= ~MV_GMAC_PORT_AUTO_NEG_CFG_EN_FC_AN_MASK;
 		fc_en |= MV_GMAC_PORT_CTRL4_FC_EN_RX_MASK;
 		break;
 
@@ -1021,8 +1017,10 @@ int mv_gop110_port_init(struct gop_hw *gop, struct mv_mac_data *mac)
 		/* select proper Mac mode */
 		mv_gop110_xlg_2_gig_mac_cfg(gop, mac_num);
 
-		/* set InBand AutoNeg */
-		mv_gop110_in_band_auto_neg(gop, mac_num, true);
+		/* Use PHY autoneg for RGMII */
+		mv_gop110_gmac_set_autoneg(gop, mac, false);
+		mv_gop110_gmac_fc_set(gop, mac->gop_index, MV_PORT_FC_AN_NO);
+
 		/* mac unreset */
 		mv_gop110_gmac_reset(gop, mac_num, UNRESET);
 		mv_gop110_force_link_mode_set(gop, mac, false, false);
@@ -1900,6 +1898,16 @@ int mv_gop110_smi_init(struct gop_hw *gop)
 	mv_gop110_smi_write(gop, MV_SMI_MISC_CFG_REG, val);
 
 	return 0;
+}
+
+/* Init SMI polling */
+void mv_gop110_smi_poll_dis(struct gop_hw *gop)
+{
+	u32 val;
+
+	val = mv_gop110_smi_read(gop, MV_SMI_MISC_CFG_REG);
+	val &= ~MV_SMI_MISC_CFG_ENABLE_POLLING_MASK;
+	mv_gop110_smi_write(gop, MV_SMI_MISC_CFG_REG, val);
 }
 
 /* Set SMI PHY address */

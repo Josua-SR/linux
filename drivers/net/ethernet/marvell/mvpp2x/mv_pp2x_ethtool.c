@@ -373,8 +373,8 @@ static void mv_pp2x_get_pauseparam(struct net_device *dev,
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
 		mv_gop110_port_link_status(gop,	mac, &status);
-		pause->autoneg =
-			(status.autoneg_fc ? AUTONEG_ENABLE : AUTONEG_DISABLE);
+
+		pause->autoneg = mac->fc_autoneg;
 	break;
 	case PHY_INTERFACE_MODE_XAUI:
 	case PHY_INTERFACE_MODE_RXAUI:
@@ -435,12 +435,9 @@ static int mv_pp2x_set_pauseparam(struct net_device *dev,
 
 		mv_gop110_force_link_mode_set(gop, mac, false, true);
 
-		if (pause->autoneg) {
-			mv_gop110_gmac_fc_set(gop, gop_port, MV_PORT_FC_AN_SYM);
-			mv_gop110_autoneg_restart(gop, mac);
-		} else {
-			mv_gop110_gmac_fc_set(gop, gop_port, MV_PORT_FC_AN_NO);
-		}
+		mv_gop110_gmac_fc_set(gop, gop_port, MV_PORT_FC_AN_NO);
+
+		mac->fc_autoneg = pause->autoneg;
 
 		if (pause->rx_pause)
 			mv_gop110_gmac_fc_set(gop, gop_port, MV_PORT_FC_RX_ENABLE);
@@ -481,7 +478,7 @@ static int mv_pp2x_set_pauseparam(struct net_device *dev,
 		if (pause->autoneg) {
 			pr_err("10G port doesn't support fc autoneg\n");
 			return -EINVAL;
-			}
+		}
 		if (pause->rx_pause)
 			mv_gop110_xlg_mac_fc_set(gop, gop_port, MV_PORT_FC_RX_ENABLE);
 		else
@@ -513,6 +510,26 @@ static int mv_pp2x_set_pauseparam(struct net_device *dev,
 	default:
 		pr_err("%s: Wrong port mode (%d)", __func__, phy_mode);
 		return -EINVAL;
+	}
+
+	if (port->mac_data.phy_dev && pause->autoneg) {
+		port->mac_data.phy_dev->supported &=
+				~(SUPPORTED_Pause | SUPPORTED_Asym_Pause);
+
+		if (pause->rx_pause && pause->tx_pause)
+			port->mac_data.phy_dev->supported |=
+				SUPPORTED_Pause;
+		else if (pause->tx_pause)
+			port->mac_data.phy_dev->supported |=
+				SUPPORTED_Asym_Pause;
+		else if (pause->rx_pause)
+			port->mac_data.phy_dev->supported |=
+				(SUPPORTED_Pause | SUPPORTED_Asym_Pause);
+
+		port->mac_data.phy_dev->advertising =
+				port->mac_data.phy_dev->supported;
+
+		return phy_start_aneg(port->mac_data.phy_dev);
 	}
 
 	return 0;
@@ -692,6 +709,7 @@ static int mv_pp2x_ethtool_set_settings(struct net_device *dev,
 	case PHY_INTERFACE_MODE_RGMII_ID:
 	case PHY_INTERFACE_MODE_RGMII_RXID:
 	case PHY_INTERFACE_MODE_RGMII_TXID:
+		break;
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
