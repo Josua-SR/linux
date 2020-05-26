@@ -405,7 +405,6 @@ static int mv_pp2x_set_pauseparam(struct net_device *dev,
 	struct gop_hw *gop = &port->priv->hw.gop;
 	int gop_port = mac->gop_index;
 	phy_interface_t phy_mode;
-	int err;
 
 	if (port->priv->pp2_version == PPV21)
 		return -EOPNOTSUPP;
@@ -425,13 +424,6 @@ static int mv_pp2x_set_pauseparam(struct net_device *dev,
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
-		if (mac->speed == SPEED_2500) {
-			err = mv_gop110_check_port_type(gop, gop_port);
-			if (err) {
-				pr_err("Peridot module doesn't support FC\n");
-				return -EINVAL;
-			}
-		}
 
 		mv_gop110_force_link_mode_set(gop, mac, false, true);
 
