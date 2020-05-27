@@ -263,7 +263,7 @@ static int armada8k_phy_config(struct platform_device *pdev,
 {
 	struct phy *comphy;
 	int err;
-	char i;
+	int i;
 
 	pcie->phy_count = of_count_phandle_with_args(pdev->dev.of_node, "phys",
 					       "#phy-cells");
