@@ -3506,18 +3506,14 @@ static void mv_gop110_set_new_phy_mode(u32 speed, struct mv_mac_data *mac)
 static int mv_gop110_get_new_comphy_mode(u32 speed, int port_id)
 {
 	if (speed == SPEED_10000 && (port_id == 0 || port_id == 1))
-		return COMPHY_DEF(COMPHY_SFI_MODE, port_id,
-				  COMPHY_SPEED_10_3125G, COMPHY_POLARITY_NO_INVERT);
+		return PHY_INTERFACE_MODE_10GKR;
 	else if (speed == SPEED_5000 && (port_id == 0 || port_id == 1))
-		return COMPHY_DEF(COMPHY_SFI_MODE, port_id,
-				  COMPHY_SPEED_5_15625G, COMPHY_POLARITY_NO_INVERT);
+		return PHY_INTERFACE_MODE_5GKR;
 	else if (speed == SPEED_2500)
-		return COMPHY_DEF(COMPHY_HS_SGMII_MODE, port_id,
-				  COMPHY_SPEED_3_125G, COMPHY_POLARITY_NO_INVERT);
+		return PHY_INTERFACE_MODE_2500BASET;
 	else if (speed == SPEED_1000 || speed == SPEED_100 ||
 		 speed == SPEED_10)
-		return COMPHY_DEF(COMPHY_SGMII_MODE, port_id,
-				  COMPHY_SPEED_1_25G, COMPHY_POLARITY_NO_INVERT);
+		return PHY_INTERFACE_MODE_SGMII;
 	else
 		return -EINVAL;
 }
@@ -3556,21 +3552,19 @@ void mv_gop110_max_rx_size_set(struct mv_pp2x_port *port)
   */
 int mv_gop110_update_comphy(struct mv_pp2x_port *port, u32 speed)
 {
-	int comphy_old_mode, comphy_new_mode;
+	int phy_new_mode;
 	int err = 0;
 	struct gop_hw *gop = &port->priv->hw.gop;
 	struct mv_mac_data *mac = &port->mac_data;
 
-	comphy_new_mode = mv_gop110_get_new_comphy_mode(speed, port->id);
+	phy_new_mode = mv_gop110_get_new_comphy_mode(speed, port->id);
 
-	if (comphy_new_mode < 0) {
+	if (phy_new_mode < 0) {
 		pr_err("Port ID %d: unsupported speed set\n", port->id);
-			return comphy_new_mode;
+			return phy_new_mode;
 	}
 
-	comphy_old_mode = phy_get_mode(port->comphy[0]);
-
-	if (comphy_old_mode == comphy_new_mode)
+	if (port->mac_data.phy_mode == phy_new_mode)
 		return 0;
 
 	/* If port is UP:
@@ -3586,11 +3580,15 @@ int mv_gop110_update_comphy(struct mv_pp2x_port *port, u32 speed)
 		phy_power_off(port->comphy[0]);
 	}
 
-	err = phy_set_mode(port->comphy[0], comphy_new_mode);
+	err = phy_set_mode_ext(port->comphy[0], PHY_MODE_ETHERNET,
+			       phy_new_mode);
 	if (err < 0) {
-		phy_set_mode(port->comphy[0], comphy_old_mode);
+		phy_set_mode_ext(port->comphy[0], PHY_MODE_ETHERNET,
+				 port->mac_data.phy_mode);
 		pr_err("Port ID %d: err %d COMPHY lane is busy\n", port->id, err);
 		goto out;
+	} else {
+		port->mac_data.phy_mode = phy_new_mode;
 	}
 
 	mv_gop110_set_new_phy_mode(speed, mac);
