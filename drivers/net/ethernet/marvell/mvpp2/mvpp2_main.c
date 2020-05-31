@@ -6330,6 +6330,7 @@ static void mvpp2_gmac_config(struct mvpp2_port *port, unsigned int mode,
 		an &= ~(MVPP2_GMAC_FORCE_LINK_DOWN |
 			MVPP2_GMAC_FORCE_LINK_PASS);
 		an |= MVPP2_GMAC_IN_BAND_AUTONEG |
+		      MVPP2_GMAC_IN_BAND_AUTONEG_BYPASS |
 		      MVPP2_GMAC_CONFIG_GMII_SPEED |
 		      MVPP2_GMAC_CONFIG_FULL_DUPLEX;
 
