@@ -21,6 +21,8 @@
 #define CP110_EIP197_INDEX		CP110_NUM
 #define CP110_TDM_INDEX			CP110_NUM
 #define CP110_SPI_BUS_ID(n)		((CP110_NUM * 2) + (n))
+#define CP110_PCIEx_MAC_RESET_BIT_MASK(n)	\
+					(0x1 << 11 + ((n + 2) % 3))
 
 / {
 	/*
@@ -727,6 +729,8 @@
 		num-lanes = <1>;
 		clock-names = "core", "reg";
 		clocks = <&CP110_LABEL(clk) 1 13>, <&CP110_LABEL(clk) 1 14>;
+		marvell,system-controller = <&CP110_LABEL(syscon0)>;
+		mac-reset-bit-mask = <CP110_PCIEx_MAC_RESET_BIT_MASK(0)>;
 		status = "disabled";
 	};
 
@@ -756,6 +760,8 @@
 		num-lanes = <1>;
 		clock-names = "core", "reg";
 		clocks = <&CP110_LABEL(clk) 1 11>, <&CP110_LABEL(clk) 1 14>;
+		marvell,system-controller = <&CP110_LABEL(syscon0)>;
+		mac-reset-bit-mask = <CP110_PCIEx_MAC_RESET_BIT_MASK(1)>;
 		status = "disabled";
 	};
 
@@ -785,6 +791,8 @@
 		num-lanes = <1>;
 		clock-names = "core", "reg";
 		clocks = <&CP110_LABEL(clk) 1 12>, <&CP110_LABEL(clk) 1 14>;
+		marvell,system-controller = <&CP110_LABEL(syscon0)>;
+		mac-reset-bit-mask = <CP110_PCIEx_MAC_RESET_BIT_MASK(2)>;
 		status = "disabled";
 	};
 };

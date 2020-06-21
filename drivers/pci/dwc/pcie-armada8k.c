@@ -22,6 +22,8 @@
 #include <linux/resource.h>
 #include <linux/of_pci.h>
 #include <linux/of_irq.h>
+#include <linux/mfd/syscon.h>
+#include <linux/regmap.h>
 
 #include "pcie-designware.h"
 #include <linux/of_gpio.h>
@@ -31,6 +33,9 @@ struct armada8k_pcie {
 	struct dw_pcie *pci;
 	struct clk *clk;
 	struct gpio_desc	*reset_gpio;
+	struct regmap *sysctrl_base;
+	u32 mac_rest_bitmask;
+	struct work_struct recover_link_work;
 	enum of_gpio_flags	flags;
 	int phy_count;
 	struct phy *comphy[MV_A8K_PCIE_MAX_WIDTH];
@@ -83,6 +88,8 @@ struct armada8k_pcie {
 					STREAM_ID_BUS_BITS << 8 | \
 					STREAM_ID_DEV_BITS << 4 | \
 					STREAM_ID_FUNC_BITS)
+
+#define UNIT_SOFT_RESET_CONFIG_REG	0x268
 
 #define to_armada8k_pcie(x)	dev_get_drvdata((x)->dev)
 
@@ -170,6 +177,71 @@ static int armada8k_pcie_host_init(struct pcie_port *pp)
 	return 0;
 }
 
+/* armada8k_pcie_reset
+ * The function implements the PCIe reset via GPIO.
+ * First, pull down the GPIO used for PCIe reset, and wait 200ms;
+ * Second, set the GPIO output value with setting from DTS, and wait
+ * 200ms for taking effect.
+ * Return: void, always success.
+ */
+static void armada8k_pcie_reset(struct armada8k_pcie *pcie)
+{
+	/* Set the reset gpio to low first */
+	gpiod_direction_output(pcie->reset_gpio, 0);
+	/* After 200ms to reset pcie */
+	mdelay(200);
+	gpiod_direction_output(pcie->reset_gpio,
+			       (pcie->flags & OF_GPIO_ACTIVE_LOW) ? 0 : 1);
+	mdelay(200);
+}
+
+static void armada8k_pcie_recover_link(struct work_struct *ws)
+{
+	struct armada8k_pcie *pcie = container_of(ws, struct armada8k_pcie,
+						  recover_link_work);
+	struct pci_bus *bus = pcie->pci->pp.root_bus;
+	struct pcie_port *pp = &pcie->pci->pp;
+	struct regmap *sysctrl_base = pcie->sysctrl_base;
+	struct pci_dev *root_port;
+	u32 reg;
+
+	root_port = pci_get_slot(bus, 0);
+	if (!root_port) {
+		dev_err(pcie->pci->dev, "failed to get root port\n");
+		return;
+	}
+	pci_lock_rescan_remove();
+	/* remove bus */
+	pci_stop_and_remove_bus_device(root_port);
+
+	/* reset endpoint */
+	if (pcie->reset_gpio)
+		armada8k_pcie_reset(pcie);
+	else
+	/*
+	 * delay is included in reset ep.
+	 * without reset ep delay needed before resetting mac.
+	 */
+		mdelay(100);
+
+	/* reset mac */
+	regmap_read(sysctrl_base,
+		    UNIT_SOFT_RESET_CONFIG_REG, &reg);
+	reg &= ~pcie->mac_rest_bitmask;
+	regmap_write(sysctrl_base,
+		     UNIT_SOFT_RESET_CONFIG_REG, reg);
+	udelay(1);
+	reg |= pcie->mac_rest_bitmask;
+	regmap_write(sysctrl_base,
+		     UNIT_SOFT_RESET_CONFIG_REG, reg);
+	udelay(1);
+	armada8k_pcie_host_init(pp);
+
+	/* rescan bus */
+	pci_rescan_bus(bus);
+	pci_unlock_rescan_remove();
+}
+
 static irqreturn_t armada8k_pcie_irq_handler(int irq, void *arg)
 {
 	struct armada8k_pcie *pcie = arg;
@@ -200,6 +272,7 @@ static irqreturn_t armada8k_pcie_irq_handler(int irq, void *arg)
 		 * Mask link down interrupts. They can be re-enabled once
 		 * the link is retrained.
 		 */
+
 		reg = dw_pcie_readl_dbi(pci, PCIE_GLOBAL_INT_MASK2_REG);
 		reg &= ~PCIE_INT2_PHY_RST_LINK_DOWN;
 		dw_pcie_writel_dbi(pci, PCIE_GLOBAL_INT_MASK2_REG, reg);
@@ -208,6 +281,9 @@ static irqreturn_t armada8k_pcie_irq_handler(int irq, void *arg)
 		 * initiate a link retrain. If link retrains were
 		 * possible, that is.
 		 */
+
+		if (pcie->sysctrl_base && pcie->mac_rest_bitmask)
+			schedule_work(&pcie->recover_link_work);
 		dev_dbg(pci->dev, "%s: link went down\n", __func__);
 	}
 
@@ -317,24 +393,6 @@ static int armada8k_phy_config(struct platform_device *pdev,
 	return err;
 }
 
-/* armada8k_pcie_reset
- * The function implements the PCIe reset via GPIO.
- * First, pull down the GPIO used for PCIe reset, and wait 200ms;
- * Second, set the GPIO output value with setting from DTS, and wait
- * 200ms for taking effect.
- * Return: void, always success.
- */
-static void armada8k_pcie_reset(struct armada8k_pcie *pcie)
-{
-	/* Set the reset gpio to low first */
-	gpiod_direction_output(pcie->reset_gpio, 0);
-	/* After 200ms to reset pcie */
-	mdelay(200);
-	gpiod_direction_output(pcie->reset_gpio,
-			       (pcie->flags & OF_GPIO_ACTIVE_LOW) ? 0 : 1);
-	mdelay(200);
-}
-
 static void armada8k_phy_deconfig(struct armada8k_pcie *pcie)
 {
 	int i;
@@ -364,8 +422,9 @@ static int armada8k_pcie_probe(struct platform_device *pdev)
 
 	pci->dev = dev;
 	pci->ops = &dw_pcie_ops;
-
 	pcie->pci = pci;
+
+	INIT_WORK(&pcie->recover_link_work, armada8k_pcie_recover_link);
 
 	pcie->clk = devm_clk_get(dev, NULL);
 	if (IS_ERR(pcie->clk))
@@ -391,6 +450,18 @@ static int armada8k_pcie_probe(struct platform_device *pdev)
 	if (gpio_is_valid(reset_gpio)) {
 		pcie->reset_gpio = gpio_to_desc(reset_gpio);
 		armada8k_pcie_reset(pcie);
+	}
+
+	pcie->sysctrl_base =
+		syscon_regmap_lookup_by_phandle(pdev->dev.of_node,
+						"marvell,system-controller");
+
+	ret = of_property_read_u32(pdev->dev.of_node,
+				   "mac-reset-bit-mask",
+				   &pcie->mac_rest_bitmask);
+	if (ret < 0) {
+		dev_err(dev, "couldn't find mac reset bit mask: %d\n", ret);
+		pcie->mac_rest_bitmask = 0x0;
 	}
 
 	ret = armada8k_phy_config(pdev, pcie);
@@ -421,6 +492,8 @@ static int armada8k_pcie_remove(struct platform_device *pdev)
 	struct armada8k_pcie *pcie = platform_get_drvdata(pdev);
 	struct dw_pcie *pci = pcie->pci;
 	struct device *dev = &pdev->dev;
+
+	cancel_work_sync(&pcie->recover_link_work);
 
 	dw_pcie_host_deinit(&pci->pp);
 
