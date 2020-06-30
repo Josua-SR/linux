@@ -747,6 +747,50 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		ERRATA_MIDR_REV_RANGE(MIDR_OCTEON_T83, 0, 1, 2),
 	},
 #endif
+#ifdef CONFIG_MRVL_ERRATUM_38545
+	{
+	/* Cavium ThunderX, T81 all passes */
+		.desc = "Marvell erratum 38545",
+		.capability = ARM64_WORKAROUND_MRVL_38545,
+		ERRATA_MIDR_ALL_VERSIONS(MIDR_OCTEON_T81),
+	},
+	{
+	/* Cavium ThunderX, T83 all passes */
+		.desc = "Marvell erratum 38545",
+		.capability = ARM64_WORKAROUND_MRVL_38545,
+		ERRATA_MIDR_ALL_VERSIONS(MIDR_OCTEON_T83),
+	},
+	{
+	/* Marvell OcteonTX 2, 98xx all passes */
+		.desc = "Marvell erratum 38545",
+		.capability = ARM64_WORKAROUND_MRVL_38545,
+		ERRATA_MIDR_ALL_VERSIONS(MIDR_MRVL_OCTEONTX2_98XX),
+	},
+	{
+	/* Marvell OcteonTX 2, 96xx all passes */
+		.desc = "Marvell erratum 38545",
+		.capability = ARM64_WORKAROUND_MRVL_38545,
+		ERRATA_MIDR_ALL_VERSIONS(MIDR_MRVL_OCTEONTX2_96XX),
+	},
+	{
+	/* Marvell OcteonTX 2, 95xx all passes */
+		.desc = "Marvell erratum 38545",
+		.capability = ARM64_WORKAROUND_MRVL_38545,
+		ERRATA_MIDR_ALL_VERSIONS(MIDR_MRVL_OCTEONTX2_95XX),
+	},
+	{
+	/* Marvell OcteonTX 2, LOKI all passes */
+		.desc = "Marvell erratum 38545",
+		.capability = ARM64_WORKAROUND_MRVL_38545,
+		ERRATA_MIDR_ALL_VERSIONS(MIDR_MRVL_OCTEONTX2_LOKI),
+	},
+	{
+	/* Marvell OcteonTX 2, 95MM all passes */
+		.desc = "Marvell erratum 38545",
+		.capability = ARM64_WORKAROUND_MRVL_38545,
+		ERRATA_MIDR_ALL_VERSIONS(MIDR_MRVL_OCTEONTX2_95MM),
+	},
+#endif
 	{
 		.desc = "Mismatched cache line size",
 		.capability = ARM64_MISMATCHED_CACHE_LINE_SIZE,
