@@ -59,6 +59,12 @@ MODULE_PARM_DESC(disable_idle_d3,
 
 static DEFINE_MUTEX(driver_lock);
 
+static bool enable_sriov;
+#ifdef CONFIG_PCI_IOV
+module_param(enable_sriov, bool, 0644);
+MODULE_PARM_DESC(enable_sriov, "Enable support for SR-IOV configuration.  Enabling SR-IOV on a PF typically requires support of the userspace PF driver, enabling VFs without such support may result in non-functional VFs or PF.");
+#endif
+
 static inline bool vfio_vga_disabled(void)
 {
 #ifdef CONFIG_VFIO_PCI_VGA
@@ -1745,6 +1751,36 @@ static const struct vfio_device_ops vfio_pci_ops = {
 	.match		= vfio_pci_match,
 };
 
+static struct pci_driver vfio_pci_driver;
+
+static int vfio_pci_bus_notifier(struct notifier_block *nb,
+				 unsigned long action, void *data)
+{
+	struct vfio_pci_device *vdev = container_of(nb,
+						    struct vfio_pci_device, nb);
+	struct device *dev = data;
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct pci_dev *physfn = pci_physfn(pdev);
+
+	if (action == BUS_NOTIFY_ADD_DEVICE &&
+	    pdev->is_virtfn && physfn == vdev->pdev) {
+		pci_info(vdev->pdev, "Captured SR-IOV VF %s driver_override\n",
+			 pci_name(pdev));
+		pdev->driver_override = kasprintf(GFP_KERNEL, "%s",
+						  vfio_pci_ops.name);
+	} else if (action == BUS_NOTIFY_BOUND_DRIVER &&
+		   pdev->is_virtfn && physfn == vdev->pdev) {
+		struct pci_driver *drv = pci_dev_driver(pdev);
+
+		if (drv && drv != &vfio_pci_driver)
+			pci_warn(vdev->pdev,
+				 "VF %s bound to driver %s while PF bound to vfio-pci\n",
+				 pci_name(pdev), drv->name);
+	}
+
+	return 0;
+}
+
 static int vfio_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct vfio_pci_device *vdev;
@@ -1787,6 +1823,17 @@ static int vfio_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 			kfree(vdev);
 			return -ENOMEM;
 		}
+
+		vdev->nb.notifier_call = vfio_pci_bus_notifier;
+		ret = bus_register_notifier(&pci_bus_type, &vdev->nb);
+		if (ret) {
+			kfree(vdev->vf_token);
+			vfio_del_group_dev(&pdev->dev);
+			vfio_iommu_group_put(group, &pdev->dev);
+			kfree(vdev);
+			return ret;
+		}
+
 		mutex_init(&vdev->vf_token->lock);
 		uuid_gen(&vdev->vf_token->uuid);
 	}
@@ -1818,9 +1865,14 @@ static void vfio_pci_remove(struct pci_dev *pdev)
 {
 	struct vfio_pci_device *vdev;
 
+	pci_disable_sriov(pdev);
+
 	vdev = vfio_del_group_dev(&pdev->dev);
 	if (!vdev)
 		return;
+
+	if (vdev->nb.notifier_call)
+		bus_unregister_notifier(&pci_bus_type, &vdev->nb);
 
 	if (vdev->vf_token) {
 		WARN_ON(vdev->vf_token->users);
@@ -1871,16 +1923,48 @@ static pci_ers_result_t vfio_pci_aer_err_detected(struct pci_dev *pdev,
 	return PCI_ERS_RESULT_CAN_RECOVER;
 }
 
+static int vfio_pci_sriov_configure(struct pci_dev *pdev, int nr_virtfn)
+{
+	struct vfio_pci_device *vdev;
+	struct vfio_device *device;
+	int ret = 0;
+
+	might_sleep();
+
+	if (!enable_sriov)
+		return -ENOENT;
+
+	device = vfio_device_get_from_dev(&pdev->dev);
+	if (!device)
+		return -ENODEV;
+
+	vdev = vfio_device_data(device);
+	if (!vdev) {
+		vfio_device_put(device);
+		return -ENODEV;
+	}
+
+	if (nr_virtfn == 0)
+		pci_disable_sriov(pdev);
+	else
+		ret = pci_enable_sriov(pdev, nr_virtfn);
+
+	vfio_device_put(device);
+
+	return ret < 0 ? ret : nr_virtfn;
+}
+
 static const struct pci_error_handlers vfio_err_handlers = {
 	.error_detected = vfio_pci_aer_err_detected,
 };
 
 static struct pci_driver vfio_pci_driver = {
-	.name		= "vfio-pci",
-	.id_table	= NULL, /* only dynamic ids */
-	.probe		= vfio_pci_probe,
-	.remove		= vfio_pci_remove,
-	.err_handler	= &vfio_err_handlers,
+	.name			= "vfio-pci",
+	.id_table		= NULL, /* only dynamic ids */
+	.probe			= vfio_pci_probe,
+	.remove			= vfio_pci_remove,
+	.sriov_configure	= vfio_pci_sriov_configure,
+	.err_handler		= &vfio_err_handlers,
 };
 
 static int vfio_pci_get_devs(struct pci_dev *pdev, void *data)
