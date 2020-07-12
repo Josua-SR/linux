@@ -1843,6 +1843,18 @@ static int mvpp2_ethtool_get_mib_cntr_size(void)
 	return i; /* mib_size */
 }
 
+static int mvpp2_ethtool_get_cntr_index(u32 offset)
+{
+	int i = 0;
+
+	while (i < ARRAY_SIZE(mvpp2_ethtool_regs)) {
+		if (mvpp2_ethtool_regs[i].offset == offset)
+			break;
+		i++;
+	}
+	return i;
+}
+
 /* hw_get_stats - update the ethtool_stats accumulator from HW-registers
  * The HW-registers/counters are cleared on read.
  */
@@ -1950,6 +1962,7 @@ static void mvpp2_ethtool_get_stats(struct net_device *dev,
 				    struct ethtool_stats *stats, u64 *data)
 {
 	struct mvpp2_port *port = netdev_priv(dev);
+	int cls_drp, fc_rcv;
 
 	/* Use statistic already accumulated in ethtool_stats by q-work
 	 * and copy under mutex-lock it into given ethtool-data-buffer.
@@ -1958,6 +1971,12 @@ static void mvpp2_ethtool_get_stats(struct net_device *dev,
 	memcpy(data, port->ethtool_stats,
 	       sizeof(u64) * ARRAY_SIZE(mvpp2_ethtool_regs));
 	mutex_unlock(&port->gather_stats_lock);
+
+	/* Do not count flow control receive frames as classifier drops */
+	cls_drp = mvpp2_ethtool_get_cntr_index(MVPP2_CLS_DROP_REG(0));
+	fc_rcv = mvpp2_ethtool_get_cntr_index(MVPP2_MIB_FC_RCVD);
+	data[cls_drp] =
+		data[fc_rcv] > data[cls_drp] ? 0 : data[cls_drp] - data[fc_rcv];
 }
 
 static int mvpp2_ethtool_get_sset_count(struct net_device *dev, int sset)
