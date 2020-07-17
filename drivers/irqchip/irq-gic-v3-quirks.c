@@ -10,6 +10,7 @@
  */
 
 #include <linux/delay.h>
+#include <linux/io.h>
 
 #include <linux/irqchip.h>
 #include <linux/irqchip/arm-gic-common.h>
