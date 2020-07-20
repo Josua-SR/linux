@@ -2021,6 +2021,9 @@ static inline void mvpp2_gmac_max_rx_size_set(struct mvpp2_port *port)
 {
 	u32 val;
 
+	if (port->flags & MVPP22_F_IF_MUSDK)
+		return;
+
 	val = readl(port->base + MVPP2_GMAC_CTRL_0_REG);
 	val &= ~MVPP2_GMAC_MAX_RX_SIZE_MASK;
 	val |= (((port->pkt_size - MVPP2_MH_SIZE) / 2) <<
@@ -2032,6 +2035,9 @@ static inline void mvpp2_gmac_max_rx_size_set(struct mvpp2_port *port)
 static inline void mvpp2_xlg_max_rx_size_set(struct mvpp2_port *port)
 {
 	u32 val;
+
+	if (port->flags & MVPP22_F_IF_MUSDK)
+		return;
 
 	val =  readl(port->base + MVPP22_XLG_CTRL1_REG);
 	val &= ~MVPP22_XLG_CTRL1_FRAMESIZELIMIT_MASK;
