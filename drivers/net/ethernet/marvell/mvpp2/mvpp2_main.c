@@ -1862,10 +1862,12 @@ static void mvpp2_hw_get_stats(struct mvpp2_port *port, u64 *pstats)
 {
 	int i, mib_size, queue, cpu;
 	unsigned int reg_offs;
+	u32 val, cls_drops;
 	u64 *ptmp;
-	u32 val;
 
 	mib_size = mvpp2_ethtool_get_mib_cntr_size();
+
+	cls_drops = mvpp2_read(port->priv, MVPP2_OVERRUN_DROP_REG(port->id));
 
 	for (i = 0; i < mib_size; i++) {
 		if (mvpp2_ethtool_regs[i].offset == MVPP2_MIB_COLLISION) {
@@ -1878,7 +1880,7 @@ static void mvpp2_hw_get_stats(struct mvpp2_port *port, u64 *pstats)
 	}
 
 	/* Extend HW counters */
-	*pstats++ += mvpp2_read(port->priv, MVPP2_OVERRUN_DROP_REG(port->id));
+	*pstats++ += cls_drops;
 	*pstats++ += mvpp2_read(port->priv, MVPP2_CLS_DROP_REG(port->id));
 	ptmp = pstats;
 	queue = port->first_rxq;
