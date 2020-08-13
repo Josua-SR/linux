@@ -506,10 +506,9 @@ struct rvu {
 	/* NPC KPU data */
 	struct npc_kpu_profile_adapter kpu;
 
-	/* DebugFS */
 #ifdef CONFIG_DEBUG_FS
 	struct rvu_debugfs	rvu_dbg;
-#endif /* CONFIG_DEBUG_FS */
+#endif
 
 	char mkex_pfl_name[MKEX_NAME_LEN]; /* Configured MKEX profile name */
 	char kpu_pfl_name[KPU_NAME_LEN]; /* Configured KPU profile name */
@@ -762,7 +761,7 @@ void rvu_dbg_exit(struct rvu *rvu);
 #else
 static inline void rvu_dbg_init(struct rvu *rvu) {}
 static inline void rvu_dbg_exit(struct rvu *rvu) {}
-#endif /* CONFIG_DEBUG_FS*/
+#endif
 
 /* HW workarounds/fixes */
 #include "npc.h"
