@@ -6,6 +6,7 @@
 #include <linux/clk.h>
 #include <linux/component.h>
 #include <linux/module.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/of_graph.h>
 #include <linux/platform_device.h>
 
@@ -64,8 +65,12 @@ static int armada_drm_bind(struct device *dev)
 {
 	struct armada_private *priv;
 	struct resource *mem = NULL;
+	struct reserved_mem *rmem;
+	struct resource rmem_res;
+	struct device_node *mem_np;
 	int ret, n;
 
+	// find framebuffer location in platform data
 	for (n = 0; ; n++) {
 		struct resource *r = platform_get_resource(to_platform_device(dev),
 							   IORESOURCE_MEM, n);
@@ -77,6 +82,28 @@ static int armada_drm_bind(struct device *dev)
 			mem = r;
 		else
 			return -EINVAL;
+	}
+
+	// find framebuffer location in dts, if any
+	if (!mem && dev->of_node) {
+		mem_np = of_parse_phandle(dev->of_node, "memory-region", 0);
+		of_node_put(dev->of_node);
+		if (!mem_np) {
+			dev_err(dev, "no framebuffer memory defined in dts");
+			return -ENXIO;
+		}
+
+		rmem = of_reserved_mem_lookup(mem_np);
+		if(!rmem) {
+			dev_err(dev, "of_reserved_mem_lookup failed");
+			return -ENXIO;
+		}
+
+		// populate a struct resource with memory location
+		rmem_res.start = rmem->base;
+		rmem_res.end = rmem->base + rmem->size - 1;
+		rmem_res.flags = IORESOURCE_MEM;
+		mem = &rmem_res;
 	}
 
 	if (!mem)
