@@ -235,7 +235,7 @@ static int armada_drm_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	int ret;
 
-	ret = drm_of_component_probe(dev, compare_dev_name, &armada_master_ops);
+	ret = drm_of_component_probe(dev, compare_of, &armada_master_ops);
 	if (ret != -EINVAL)
 		return ret;
 
