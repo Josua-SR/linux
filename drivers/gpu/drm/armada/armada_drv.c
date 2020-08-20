@@ -282,11 +282,18 @@ static const struct platform_device_id armada_drm_platform_ids[] = {
 };
 MODULE_DEVICE_TABLE(platform, armada_drm_platform_ids);
 
+static const struct of_device_id armada_drm_dt_ids[] = {
+	{ .compatible = "marvell,dove-display-subsystem", },
+	{ /* sentinel */ },
+};
+MODULE_DEVICE_TABLE(of, armada_drm_dt_ids);
+
 static struct platform_driver armada_drm_platform_driver = {
 	.probe	= armada_drm_probe,
 	.remove	= armada_drm_remove,
 	.driver	= {
 		.name	= "armada-drm",
+		.of_match_table = armada_drm_dt_ids,
 	},
 	.id_table = armada_drm_platform_ids,
 };
