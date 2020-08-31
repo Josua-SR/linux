@@ -46,6 +46,26 @@
 		     "marvell,armada-ap806";
 };
 
+&smmu {
+	status = "okay";
+};
+
+&cp0_sata0 {
+	iommus = <&smmu 0x444>;
+};
+
+&cp0_sdhci0 {
+	iommus = <&smmu 0x445>;
+};
+
+&cp0_usb3_0 {
+	iommus = <&smmu 0x440>;
+};
+
+&cp0_usb3_1 {
+	iommus = <&smmu 0x441>;
+};
+
 &cp0_crypto {
 	status = "okay";
 };
