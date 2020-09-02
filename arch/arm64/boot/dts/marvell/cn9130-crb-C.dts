@@ -32,6 +32,11 @@
 
 };
 
+&smmu {
+	/* Should only be enabled on RC side */
+	status = "disabled";
+};
+
 &dma_xor0 {
 	status = "okay";
 };

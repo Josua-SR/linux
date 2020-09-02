@@ -69,6 +69,11 @@
 	};
 };
 
+&smmu {
+	/* Should only be enabled on RC side */
+	status = "disabled";
+};
+
 &uart0 {
 	status = "okay";
 	pinctrl-0 = <&uart0_pins>;
