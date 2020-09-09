@@ -144,6 +144,7 @@ struct cvm_mmc_host {
 	/* octtx2 specific */
 	unsigned int per_tap_delay; /* per tap delay in pico second */
 	unsigned long delay_logged; /* per-ios.timing bitmask */
+	unsigned int dma_wait_delay;	/* Delay before polling DMA in usecs */
 
 	void (*set_shared_power)(struct cvm_mmc_host *, int);
 	void (*acquire_bus)(struct cvm_mmc_host *);

@@ -732,6 +732,7 @@ static void cleanup_dma(struct cvm_mmc_host *host, u64 rsp_sts)
 		   FIELD_PREP(MIO_EMM_DMA_DAT_NULL, 1);
 	set_bus_id(&emm_dma, get_bus_id(rsp_sts));
 	writeq(emm_dma, host->base + MIO_EMM_DMA(host));
+	udelay(host->dma_wait_delay);
 }
 
 irqreturn_t cvm_mmc_interrupt(int irq, void *dev_id)
@@ -1668,6 +1669,7 @@ static int tune_hs400(struct cvm_mmc_slot *slot)
 			dev_dbg(host->dev, "HS400 testing data in tap %d\n",
 				 tap);
 			mmc_wait_for_req(mmc, &mrq);
+			udelay(host->dma_wait_delay);
 			if (cmd.error | data.error) {
 				err = cmd.error ? cmd.error : data.error;
 				how[tap] = '-';

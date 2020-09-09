@@ -280,6 +280,8 @@ static int thunder_mmc_probe(struct pci_dev *pdev,
 	if (ret)
 		goto error;
 
+	host->dma_wait_delay =
+		of_property_read_u32(node, "marvell,dma-wait-delay", 1);
 	/* Run the calibration to calculate per tap delay that would be
 	 * used to evaluate values. These values would be programmed in
 	 * MIO_EMM_TIMING.
