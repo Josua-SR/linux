@@ -43,6 +43,11 @@ Optional properties:
 				signal in HS400 mode.  The default is 800ps.
  - marvell,data-out-hs400-dly:	Hold time delay in picoseconds for the data
 				signal in HS400 mode.  The default is 400ps.
+ - marvell,dma-wait-delay:      Delay to insert after a failed DMA operation
+                                in microseconds.  Note that this goes into the
+                                slot parent node.  This fixes an issue where
+                                subsequent DMA operations also fail that occur
+                                during tuning.
 
 Deprecated properties:
  - spi-max-frequency : use max-frequency instead
