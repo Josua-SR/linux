@@ -71,6 +71,8 @@
 #define CLK_ON			0
 #define CLK_OFF			1
 
+/* Default delay after a DMA fault */
+#define DEFAULT_DMA_WAIT_DELAY	1000
 
 /* DMA register addresses */
 #define MIO_EMM_DMA_FIFO_CFG(x)	(0x00 + x->reg_off_dma)
