@@ -216,9 +216,9 @@
 			reg-names = "pp", "mspg", "cm3";
 		};
 
-		CP110_LABEL(comphy): phy@120000 {
+		CP110_LABEL(comphy): phy@441000 {
 			compatible = "marvell,comphy-cp110";
-			reg = <0x120000 0x6000>;
+			reg = <0x441000 0xF4>, <0x120000 0x6000>;
 			reg-names = "comphy";
 			marvell,system-controller = <&CP110_LABEL(syscon0)>;
 			#address-cells = <1>;
