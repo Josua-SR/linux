@@ -187,6 +187,7 @@ static void cvm_mmc_set_timing(struct cvm_mmc_slot *slot)
 
 	cvm_mmc_clk_config(host, CLK_OFF);
 	writeq(slot->taps, host->base + MIO_EMM_TIMING(host));
+	udelay(10);
 	cvm_mmc_clk_config(host, CLK_ON);
 }
 
@@ -1382,6 +1383,7 @@ static int adjust_tuning(struct mmc_host *mmc, struct adj *adj, u32 opcode)
 			timing &= ~adj->mask;
 			timing |= (tap << __bf_shf(adj->mask));
 			writeq(timing, host->base + MIO_EMM_TIMING(host));
+			udelay(10);
 
 			cvm_mmc_clk_config(host, CLK_ON);
 			err = adj->test(mmc, NULL, opcode);
@@ -1664,6 +1666,7 @@ static int tune_hs400(struct cvm_mmc_slot *slot)
 			timing = readq(host->base + MIO_EMM_TIMING(host));
 			timing = FIELD_PREP(MIO_EMM_TIMING_DATA_IN, tap);
 			writeq(timing, host->base + MIO_EMM_TIMING(host));
+			udelay(10);
 			cvm_mmc_clk_config(host, CLK_ON);
 
 			dev_dbg(host->dev, "HS400 testing data in tap %d\n",
