@@ -335,6 +335,7 @@
 				msi-parent = <&gic_v2m0>;
 				clocks = <&ap_clk 3>;
 				dma-coherent;
+				iommus = <&smmu 0x1>;
 				status = "disabled";
 			};
 
@@ -345,6 +346,7 @@
 				msi-parent = <&gic_v2m0>;
 				clocks = <&ap_clk 3>;
 				dma-coherent;
+				iommus = <&smmu 0x2>;
 				status = "disabled";
 			};
 
@@ -423,6 +425,7 @@
 				clock-names = "core";
 				clocks = <&ap_clk 4>;
 				dma-coherent;
+				iommus = <&smmu 0x5>;
 				status = "disabled";
 			};
 
