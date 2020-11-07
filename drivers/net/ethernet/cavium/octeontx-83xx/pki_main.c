@@ -504,6 +504,18 @@ static int pki_receive_message(u32 id, u16 domain_id,
 		hdr->res_code = pki_port_vlan_fltr_entry_cfg(vf, hdr->vfid,
 							     mdata);
 		break;
+	case MBOX_PKI_PORT_PCAM_GET:
+		hdr->res_code = pki_port_pcam_get(vf, hdr->vfid, mdata,
+						  &resp->data);
+		break;
+	case MBOX_PKI_PORT_PCAM_ALLOC:
+		hdr->res_code = pki_port_pcam_alloc(vf, hdr->vfid, mdata,
+						    &resp->data);
+		break;
+	case MBOX_PKI_PORT_PCAM_FREE:
+		hdr->res_code = pki_port_pcam_free(vf, hdr->vfid, mdata,
+						   &resp->data);
+		break;
 	}
 
 	mutex_unlock(&octeontx_pki_devices_lock);
@@ -683,7 +695,8 @@ free_irq:
 static int pki_init(struct pki_t *pki)
 {
 	struct pcam *pcam;
-	int res = 0;
+	struct pcam_bank *bank;
+	int res = 0, i;
 	u64 reg;
 	u32 delay;
 
@@ -735,29 +748,27 @@ static int pki_init(struct pki_t *pki)
 		goto err;
 	}
 
-	if ((MAX_PKI_PORTS * RSVD_PCAM_ENTRIES) > pki->max_pcam_ents) {
-		dev_err(&pki->pdev->dev, "Failed to reserve PCAM entries\n");
-		res = -ENODEV;
-		goto err;
-	}
-
 	pcam = &pki->pcam;
-	pcam->rsrc.max = pki->max_pcam_ents;
-	pcam->rsrc.bmap = kcalloc(BITS_TO_LONGS(pcam->rsrc.max),
-				  sizeof(long), GFP_KERNEL);
-	if (!pcam->rsrc.bmap) {
-		res = -ENOMEM;
-		goto err;
-	}
+	for (i = 0; i < 2; i++) {
+		bank = &pcam->bank[i];
+		bank->rsrc.max = pki->max_pcam_ents;
+		bank->rsrc.bmap = kcalloc(BITS_TO_LONGS(bank->rsrc.max),
+					  sizeof(long), GFP_KERNEL);
+		if (!bank->rsrc.bmap) {
+			res = -ENOMEM;
+			goto err;
+		}
 
-	pcam->idx2style = vmalloc(sizeof(*pcam->idx2style) * pcam->rsrc.max);
-	if (!pcam->idx2style) {
-		kfree(pcam->rsrc.bmap);
-		res = -ENOMEM;
-		goto err;
+		bank->idx2style = vmalloc(sizeof(*bank->idx2style) *
+					  bank->rsrc.max);
+		if (!bank->idx2style) {
+			kfree(bank->rsrc.bmap);
+			res = -ENOMEM;
+			goto err;
+		}
+		memset(bank->idx2style, 0, sizeof(*bank->idx2style) *
+						  bank->rsrc.max);
 	}
-	memset(pcam->idx2style, 0, sizeof(*pcam->idx2style) * pcam->rsrc.max);
-
 	mutex_init(&pcam->lock);
 
 	load_ucode(pki);
@@ -889,8 +900,10 @@ static void pki_remove(struct pci_dev *pdev)
 	pki_sriov_configure(pdev, 0);
 	vfree(pki->qpg_domain);
 	vfree(pki->loop_pkind_domain);
-	vfree(pki->pcam.idx2style);
-	kfree(pki->pcam.rsrc.bmap);
+	vfree(pki->pcam.bank[0].idx2style);
+	kfree(pki->pcam.bank[0].rsrc.bmap);
+	vfree(pki->pcam.bank[1].idx2style);
+	kfree(pki->pcam.bank[1].rsrc.bmap);
 	pki_irq_free(pki);
 }
 

@@ -421,9 +421,6 @@ enum PKI_PCAM_TERM_E {
 #define MAX_PKI_PORTS	64
 #define NUM_FRAME_LEN_REG	2
 
-/* Reserved pcam entries per port for VLAN traffic */
-#define RSVD_PCAM_ENTRIES	3
-
 struct pki_port {
 	bool	valid;
 	bool	has_fcs;
@@ -435,7 +432,7 @@ struct pki_port {
 	u64	shared_mask;
 	u16 max_frame_len;
 	u16 min_frame_len;
-	u16	pcam_ent_base;
+	u32	num_pcam_entry[2];
 };
 
 struct pkipf_vf {
@@ -474,18 +471,25 @@ struct rsrc_bmap {
 	u16  max;		/* Max resource count */
 };
 
-union pcam_idx_map {
-	u64	map;
-	struct {
-		u32 style;
-		u32 vlan;
-	} s;
+struct pcam_idx_map {
+	u8 style;
+	u8 term;
+	u32 match;
+	u8 advance;
+	u8 setty;
+	u8 pf;
+	u8 style_add;
+	u8 pmc;
+};
+
+struct pcam_bank {
+	struct rsrc_bmap rsrc;
+	struct pcam_idx_map *idx2style;
 };
 
 struct pcam {
 	struct mutex	 lock;  /* PCAM entries update lock */
-	struct rsrc_bmap rsrc;
-	union pcam_idx_map *idx2style;
+	struct pcam_bank bank[2];
 };
 
 #define PKI_MAX_VF			32
@@ -610,4 +614,11 @@ int pki_port_vlan_fltr_cfg(struct pkipf_vf *vf, u16 vf_id,
 			   struct pki_port_vlan_filter_config *cfg);
 int pki_port_vlan_fltr_entry_cfg(struct pkipf_vf *vf, u16 vf_id,
 				 struct pki_port_vlan_filter_entry_config *cfg);
+int pki_port_pcam_get(struct pkipf_vf *vf, u16 vf_id,
+		      struct mbox_pki_port_pcam_cfg *cfg, u64 *resp_data);
+int pki_port_pcam_alloc(struct pkipf_vf *vf, u16 vf_id,
+			struct mbox_pki_port_pcam_cfg *cfg, u64 *resp_data);
+int pki_port_pcam_free(struct pkipf_vf *vf, u16 vf_id,
+		       struct mbox_pki_port_pcam_cfg *cfg, u64 *resp_data);
+
 #endif

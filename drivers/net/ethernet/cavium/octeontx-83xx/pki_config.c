@@ -44,6 +44,23 @@ static void free_pcam_rsrc(struct rsrc_bmap *rsrc, int id)
 	__clear_bit(id, rsrc->bmap);
 }
 
+static int available_pcam_rsrc_cnt(struct rsrc_bmap *rsrc)
+{
+	int id, cnt;
+
+	if (!rsrc->bmap)
+		return -EINVAL;
+
+	id = find_first_zero_bit(rsrc->bmap, rsrc->max);
+	cnt = 0;
+	while (id < rsrc->max) {
+		cnt++;
+		id = find_next_zero_bit(rsrc->bmap, rsrc->max, id + 1);
+	}
+
+	return cnt;
+}
+
 static int pki_frmlen_reg(struct pki_t *pki, u16 maxlen, u16 minlen)
 {
 	u64 cfg;
@@ -314,6 +331,7 @@ static inline void write_pcam(struct pki_t *pki, int bank, int index,
 	u64 match_reg = 0;
 	u64 term_reg = 0;
 	int i;
+	struct pcam_bank *pbank = &pki->pcam.bank[bank];
 
 	/* Format TERM */
 	set_field(&term_reg,
@@ -366,17 +384,27 @@ static inline void write_pcam(struct pki_t *pki, int bank, int index,
 			      PKI_CLX_PCAMX_TERMX(i, bank, index),
 			      term_reg);
 	}
+
+	pbank->idx2style[index].match = match;
+	pbank->idx2style[index].style = style;
+	pbank->idx2style[index].term = term;
+	pbank->idx2style[index].advance = advance;
+	pbank->idx2style[index].setty = setty;
+	pbank->idx2style[index].pf = pf;
+	pbank->idx2style[index].style_add = style_add;
+	pbank->idx2style[index].pmc = pmc;
 }
 
 static void set_vlan_fltr_cfg(struct pkipf_vf *vf,
 			      struct pki_port *port, u8 enb)
 {
-	u8 style_add, style = port->init_style;
+	u8 style_add = 0, style = port->init_style;
 	u8 field = PKI_PCAM_TERM_ETHTYPE1;
 	struct pki_t *pki = vf->pki;
+	struct pcam_bank *pcam_bank1 = &pki->pcam.bank[1];
 	u8 pmc = 0;
-	int index;
-	int bank;
+	int index, i, bank = 1;
+	u32 vlans[3] = { 0x81000000, 0x88a80000, 0x92000000 };
 
 	if (enb) {
 		/* When VLAN filter is on, set the default pcam entries
@@ -388,49 +416,23 @@ static void set_vlan_fltr_cfg(struct pkipf_vf *vf,
 		 */
 		style_add = 0x100 - style;
 		pmc = 0x3f; /* Skip all parsing */
-	} else {
-		style_add = 0; /* No change in style */
 	}
+	for (i = 0; i < 3; i++) {
+		index = alloc_pcam_rsrc(&pcam_bank1->rsrc);
+		if (index < 0)
+			break;
 
-	index = port->pcam_ent_base;
-	bank = field & 0x01;
-
-	/* Match Ethertype 0x8100 */
-	write_pcam(pki, bank, index, 1,
-		   style, 0xff, /* Match port's init_style */
-		   field, 0xfd, /* Match ETHERTYPE */
-		   0x81000000, 0xffff0000, /* with value 0x8100 */
-		   4, /* advance 4 bytes */
-		   PKI_LTYPE_E_VLAN, /* Identify VLAN presence */
-		   0, /* Don't set parse flags */
-		   style_add,
-		   pmc);
-
-	index++;
-
-	/* Match Ethertype 0x88a8 */
-	write_pcam(pki, bank, index, 1,
-		   style, 0xff, /* Match port's init_style */
-		   field, 0xfd, /* Match ETHERTYPE */
-		   0x88a80000, 0xffff0000, /* with value 0x88a8 */
-		   4, /* advance 4 bytes */
-		   PKI_LTYPE_E_VLAN, /* Identify VLAN presence */
-		   0, /* Don't set parse flags */
-		   style_add,
-		   pmc);
-
-	index++;
-
-	/* Match Ethertype 0x9200 */
-	write_pcam(pki, bank, index, 1,
-		   style, 0xff, /* Match port's init_style */
-		   field, 0xfd, /* Match ETHERTYPE */
-		   0x92000000, 0xffff0000, /* with value 0x9200 */
-		   4, /* advance 4 bytes */
-		   PKI_LTYPE_E_VLAN, /* Identify VLAN presence */
-		   0, /* Don't set parse flags */
-		   style_add,
-		   pmc);
+		write_pcam(pki, bank, index, 1,
+			   style, 0xff, /* Match port's init_style */
+			   field, 0xfd, /* Match ETHERTYPE */
+			   vlans[i], 0xffff0000, /* match vlan value */
+			   4, /* advance 4 bytes */
+			   PKI_LTYPE_E_VLAN, /* Identify VLAN presence */
+			   0, /* Don't set parse flags */
+			   style_add,
+			   pmc);
+		port->num_pcam_entry[bank]++;
+	}
 }
 
 int pki_port_open(struct pkipf_vf *vf, u16 vf_id,
@@ -523,8 +525,9 @@ int pki_port_open(struct pkipf_vf *vf, u16 vf_id,
 	cfg = pki_reg_read(pki, PKI_FRM_LEN_CHKX(0));
 	port->min_frame_len = cfg & 0xff;
 	port->max_frame_len = (cfg >> 15) & 0xff;
+	port->num_pcam_entry[0] = 0;
+	port->num_pcam_entry[1] = 0;
 
-	port->pcam_ent_base = RSVD_PCAM_ENTRIES * vf_id;
 	/* Vlan filter is off by default, set reserved pcam entries(of bank:1)
 	 * to allow all vlan traffic upon port open.
 	 */
@@ -1018,22 +1021,28 @@ int pki_port_stop(struct pkipf_vf *vf, u16 vf_id,
 static void free_port_pcam_entries(struct pki_t *pki, struct pki_port *port)
 {
 	struct pcam *pcam = &pki->pcam;
-	u32 index, style;
+	struct pcam_bank *pcam_bank;
+	u32 index, style, bank;
 
 	style = port->init_style;
 
 	mutex_lock(&pcam->lock);
 
-	for (index = 0; index < pcam->rsrc.max; index++) {
-		if (pcam->idx2style[index].s.style == style) {
-			write_pcam(pki, 0, index, 0, 0, 0, 0,
+	for (bank = 0; bank < 2; bank++) {
+		pcam_bank = &pcam->bank[bank];
+		for (index = 0; index < pcam_bank->rsrc.max; index++) {
+			if (pcam_bank->idx2style[index].style != style)
+				continue;
+
+			write_pcam(pki, bank, index, 0, 0, 0, 0,
 				   0, 0, 0, 0, 0, 0, 0, 0);
 
-			pcam->idx2style[index].map = 0;
-			free_pcam_rsrc(&pcam->rsrc, index);
+			memset(&pcam_bank->idx2style[index], 0,
+			       sizeof(*pcam_bank->idx2style));
+			free_pcam_rsrc(&pcam_bank->rsrc, index);
 		}
+		port->num_pcam_entry[bank] = 0;
 	}
-
 	mutex_unlock(&pcam->lock);
 }
 
@@ -1352,9 +1361,10 @@ int pki_port_vlan_fltr_entry_cfg(struct pkipf_vf *vf, u16 vf_id,
 				 struct pki_port_vlan_filter_entry_config *cfg)
 {
 	int field = PKI_PCAM_TERM_ETHTYPE0;
-	int index, enable, found = -1;
+	int index;
 	struct pki_t *pki = vf->pki;
 	struct pcam *pcam = &pki->pcam;
+	struct pcam_bank *pcam_bank = &pcam->bank[0];
 	struct pki_port *port;
 	u32 style, vlan;
 	int rc = 0;
@@ -1373,50 +1383,247 @@ int pki_port_vlan_fltr_entry_cfg(struct pkipf_vf *vf, u16 vf_id,
 	mutex_lock(&pcam->lock);
 
 	if (cfg->entry_conf) {
-		index = alloc_pcam_rsrc(&pcam->rsrc);
+		index = alloc_pcam_rsrc(&pcam_bank->rsrc);
 		if (index < 0) {
 			dev_err(&pki->pdev->dev, "PCAM entry alloc failure\n");
 			rc = -ENODEV;
 			goto exit;
 		}
-
-		pcam->idx2style[index].s.style = style;
-		pcam->idx2style[index].s.vlan = vlan;
-		enable = 1;
+		write_pcam(pki, 0, index, 1,
+			   style, 0xff, /* Match port's style */
+			   field, 0xfd, /* Match 2 ETHERTYPE fields */
+			   vlan, 0xffffffff, /* Match vlan */
+			   4, /* advance 4 bytes */
+			   PKI_LTYPE_E_VLAN, /* Identify VLAN presence */
+			   0, /* Don't set parse flags */
+			   0, /* Don't change style */
+			   0x0); /* Skip further LA/LB parsing */
+		port->num_pcam_entry[0]++;
 	} else {
-		for (index = 0; index < pcam->rsrc.max; index++) {
-			if (pcam->idx2style[index].s.style == style &&
-			    pcam->idx2style[index].s.vlan == vlan) {
-				found = index;
-				break;
-			}
-		}
+		for (index = 0; index < pcam_bank->rsrc.max; index++) {
+			if (pcam_bank->idx2style[index].style != style ||
+			    pcam_bank->idx2style[index].match != vlan)
+				continue;
 
-		if (found < 0) {
-			dev_err(&pki->pdev->dev, "Invalid VLAN filter entry\n");
-			rc = -EINVAL;
-			goto exit;
+			write_pcam(pki, 0, index, 0, 0, 0, 0, 0,
+				   0, 0, 0, 0, 0, 0, 0);
+			free_pcam_rsrc(&pcam_bank->rsrc, index);
+			port->num_pcam_entry[0]--;
 		}
-
-		pcam->idx2style[index].map = 0;
-		enable = 0;
-		vlan = 0;
 	}
-
-	write_pcam(pki, 0, index, enable,
-		   style, 0xff, /* Match port's style */
-		   field, 0xfd, /* Match 2 ETHERTYPE fields */
-		   vlan, 0xffffffff, /* Match vlan */
-		   4, /* advance 4 bytes */
-		   PKI_LTYPE_E_VLAN, /* Identify VLAN presence */
-		   0, /* Don't set parse flags */
-		   0, /* Don't change style */
-		   0x0); /* Skip further LA/LB parsing */
-
-	if (!cfg->entry_conf)
-		free_pcam_rsrc(&pcam->rsrc, index);
-
 exit:
 	mutex_unlock(&pcam->lock);
 	return rc;
+}
+
+static inline struct pki_port *get_port(struct pkipf_vf *vf, u16 vf_id,
+					u8 port_type)
+{
+	switch (port_type) {
+	case OCTTX_PORT_TYPE_NET:
+		return &vf->bgx_port[vf_id];
+	case OCTTX_PORT_TYPE_PCI:
+		return &vf->sdp_port[vf_id];
+	case OCTTX_PORT_TYPE_INT:
+		return &vf->lbk_port[vf_id];
+	}
+
+	return NULL;
+}
+
+int pki_port_pcam_get(struct pkipf_vf *vf, u16 vf_id,
+		      struct mbox_pki_port_pcam_cfg *cfg, u64 *resp_data)
+{
+	struct pki_t *pki = vf->pki;
+	struct pcam *pcam = &pki->pcam;
+	struct pki_port *port;
+	struct mbox_pki_pcam_entry *pcfg;
+	struct pcam_idx_map *pmap;
+	int index, bank, entry_index;
+	struct pcam_bank *pbank;
+
+	port = get_port(vf, vf_id, cfg->port_type);
+	if (!port)
+		return MBOX_RET_INVALID;
+
+	mutex_lock(&pcam->lock);
+
+	for (bank = 0; bank < 2; bank++) {
+		pbank = &pcam->bank[bank];
+		entry_index = 0;
+		cfg->bank[bank].free_entries =
+			available_pcam_rsrc_cnt(&pbank->rsrc);
+		for (index = 0; index < pbank->rsrc.max; index++) {
+			if (pbank->idx2style[index].style != port->init_style)
+				continue;
+
+			pmap = &pbank->idx2style[index];
+			pcfg = &cfg->bank[bank].entry[entry_index];
+
+			pcfg->style = pmap->style;
+			pcfg->term = pmap->term;
+			pcfg->match = pmap->match;
+			pcfg->advance = pmap->advance;
+			pcfg->setty = pmap->setty;
+			pcfg->pf = pmap->pf;
+			pcfg->style_add = pmap->style_add;
+			pcfg->pmc = pmap->pmc;
+			pcfg->index = index;
+
+			/* dont copy more than max entries */
+			if (++entry_index >= MBOX_PKI_PORT_MAX_PCAM)
+				break;
+		}
+		cfg->bank[bank].num_entries = entry_index;
+	}
+
+	mutex_unlock(&pcam->lock);
+
+	cfg->max_entries = pki->max_pcam_ents;
+	if (resp_data)
+		*resp_data = sizeof(struct mbox_pki_port_pcam_cfg);
+
+	return MBOX_RET_SUCCESS;
+}
+
+int pki_port_pcam_alloc(struct pkipf_vf *vf, u16 vf_id,
+			struct mbox_pki_port_pcam_cfg *cfg, u64 *resp_data)
+{
+	int ncfg, npcam, bank, cls, style_idx, qpg_idx;
+	struct pki_t *pki = vf->pki;
+	struct pcam *pcam = &pki->pcam;
+	struct pki_port *port;
+	struct mbox_pki_pcam_entry *pcfg;
+	int ret = MBOX_RET_INVALID, offset;
+	u64 style_cfg;
+
+	port = get_port(vf, vf_id, cfg->port_type);
+	if (!port)
+		return MBOX_RET_INVALID;
+
+	mutex_lock(&pcam->lock);
+
+	for (bank = 0; bank < pki->max_pcams; bank++) {
+		npcam = available_pcam_rsrc_cnt(&pcam->bank[bank].rsrc);
+
+		if (npcam < cfg->bank[bank].num_entries) {
+			dev_err(&pki->pdev->dev,
+				"Insufficient PCAM%d entries %d\n", bank,
+				npcam);
+			goto unlock_pcam;
+		}
+
+		npcam = port->num_pcam_entry[bank] +
+				cfg->bank[bank].num_entries;
+		if (npcam >= MBOX_PKI_PORT_MAX_PCAM) {
+			dev_err(&pki->pdev->dev,
+				"PCAM%d existing(%d) + new(%d) >= %d\n", bank,
+				npcam, cfg->bank[bank].num_entries,
+				MBOX_PKI_PORT_MAX_PCAM);
+			goto unlock_pcam;
+		}
+	}
+
+	for (bank = 0; bank < pki->max_pcams; bank++) {
+		for (ncfg = 0; ncfg < cfg->bank[bank].num_entries; ncfg++) {
+			npcam = alloc_pcam_rsrc(&pcam->bank[bank].rsrc);
+			pcfg = &cfg->bank[bank].entry[ncfg];
+
+			pcfg->index = npcam;
+			write_pcam(pki, bank, npcam, 1,
+				   port->init_style, 0xff,
+				   pcfg->term, pcfg->term_mask,
+				   pcfg->match, pcfg->match_mask,
+				   pcfg->advance,
+				   pcfg->setty,
+				   pcfg->pf,
+				   pcfg->style_add,
+				   pcfg->pmc);
+			port->num_pcam_entry[bank]++;
+
+			if (!pcfg->style_add)
+				continue;
+
+			/* enable style for new qpg */
+			style_idx = port->init_style + pcfg->style_add;
+			qpg_idx = port->qpg_base + pcfg->style_add;
+			for (cls = 0; cls < pki->max_cls; cls++) {
+				offset = PKI_CLX_STYLEX_CFG(cls, style_idx);
+				style_cfg = pki_reg_read(pki, offset);
+				set_field(&style_cfg,
+					  PKI_STYLE_CFG_QPG_BASE_MASK,
+					  0,
+					  qpg_idx);
+				style_cfg &=
+					~(0x1ULL << PKI_STYLE_CFG_DROP_SHIFT);
+				pki_reg_write(pki, offset, style_cfg);
+				style_cfg = pki_reg_read(pki, offset);
+			}
+		}
+	}
+	ret = MBOX_RET_SUCCESS;
+	if (resp_data)
+		*resp_data = sizeof(struct mbox_pki_port_pcam_cfg);
+
+unlock_pcam:
+	mutex_unlock(&pcam->lock);
+
+	return ret;
+}
+
+int pki_port_pcam_free(struct pkipf_vf *vf, u16 vf_id,
+		       struct mbox_pki_port_pcam_cfg *cfg, u64 *resp_data)
+{
+	int ncfg, bank, cls;
+	struct pki_t *pki = vf->pki;
+	struct pcam *pcam = &pki->pcam;
+	struct pki_port *port;
+	struct mbox_pki_pcam_entry *pcfg;
+	struct pcam_idx_map *pmap;
+	int offset, style_idx, qpg_idx;
+	u64 style_cfg;
+
+	port = get_port(vf, vf_id, cfg->port_type);
+	if (!port)
+		return MBOX_RET_INVALID;
+
+	mutex_lock(&pcam->lock);
+
+	for (bank = 0; bank < pki->max_pcams; bank++) {
+		for (ncfg = 0; ncfg < cfg->bank[bank].num_entries; ncfg++) {
+			pcfg = &cfg->bank[bank].entry[ncfg];
+			pmap = &pcam->bank[bank].idx2style[pcfg->index];
+
+			if (pmap->style != port->init_style)
+				continue;
+
+			write_pcam(pki, bank, pcfg->index, 0, 0, 0, 0, 0,
+				   0, 0, 0, 0, 0, 0, 0);
+			free_pcam_rsrc(&pcam->bank[bank].rsrc, pcfg->index);
+			port->num_pcam_entry[bank]--;
+
+			if (!pcfg->style_add)
+				continue;
+
+			/* disable style for qpg */
+			style_idx = port->init_style + pcfg->style_add;
+			qpg_idx = port->qpg_base + pcfg->style_add;
+			for (cls = 0; cls < pki->max_cls; cls++) {
+				offset = PKI_CLX_STYLEX_CFG(cls, style_idx);
+				style_cfg = pki_reg_read(pki, offset);
+				set_field(&style_cfg,
+					  PKI_STYLE_CFG_QPG_BASE_MASK,
+					  0,
+					  0);
+				style_cfg |=
+					(0x1ULL << PKI_STYLE_CFG_DROP_SHIFT);
+				pki_reg_write(pki, offset, style_cfg);
+				style_cfg = pki_reg_read(pki, offset);
+			}
+		}
+	}
+
+	mutex_unlock(&pcam->lock);
+
+	return MBOX_RET_SUCCESS;
 }

@@ -729,6 +729,9 @@ struct __attribute__((__packed__)) mbox_tim_ring_conf {
 #define MBOX_PKI_SET_PORT_CONFIG		23
 #define MBOX_PKI_PORT_VLAN_FILTER_CONFIG        24
 #define MBOX_PKI_PORT_VLAN_FILTER_ENTRY_CONFIG  25
+#define MBOX_PKI_PORT_PCAM_GET			26
+#define MBOX_PKI_PORT_PCAM_ALLOC		27
+#define MBOX_PKI_PORT_PCAM_FREE			28
 
 /* pki pkind parse mode */
 enum  {
@@ -957,6 +960,46 @@ struct pki_port_vlan_filter_entry_config {
 	u8 entry_conf; /* '1' to add & '0' to remove */
 	u16 vlan_tpid; /* in host byte-order */
 	u16 vlan_id;   /* in host byte-order */
+};
+
+/* pki pcam entry */
+struct mbox_pki_pcam_entry {
+	u8 style;	/* style to compare */
+	u8 style_mask;
+	u8 term;	/* PKI_PCAM_TERM_E */
+	u8 term_mask;
+	u32 match;	/* data to be matched */
+	u32 match_mask;
+	u8 advance;	/* number of bytes to advance */
+	u8 setty;	/* PKI_LTYPE_E to set if pcam match */
+	u8 pf;		/* parse flag to set if pcam match */
+	u8 style_add;	/* style modifier if pcam match */
+	u8 pmc;		/* parse mode change if pcam match */
+	u8 index;	/* index of allocated pcam entry 0-191 */
+};
+
+#define MBOX_PKI_PORT_MAX_PCAM	16
+
+/* pki pcam entries */
+struct mbox_pki_pcam_bank {
+	/* number of allocated entries */
+	u8 num_entries;
+
+	/* available entries in this bank. Valid for MBOX_PKI_PORT_PCAM_GET */
+	u8 free_entries;
+
+	struct mbox_pki_pcam_entry entry[MBOX_PKI_PORT_MAX_PCAM];
+};
+
+struct mbox_pki_port_pcam_cfg {
+	/* Port */
+	u8 port_type;
+
+	/* max entries per bank. Valid for MBOX_PKI_PORT_PCAM_GET */
+	u8 max_entries;
+
+	/* pcam banks */
+	struct mbox_pki_pcam_bank bank[2];
 };
 
 /*----------------------------------------------------------------------------*/
