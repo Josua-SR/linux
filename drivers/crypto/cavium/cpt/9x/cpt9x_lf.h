@@ -14,6 +14,7 @@
 #include "cpt_hw_types.h"
 #include "cpt9x_common.h"
 #include "cpt_reqmgr.h"
+#include "rvu_reg.h"
 
 /*
  * CPT instruction and pending queues user requested length in CPT_INST_S msgs

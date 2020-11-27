@@ -152,9 +152,7 @@
 #define CPT_VFX_PF_MBOXX(b, c)	(0x1000ll | ((b) << 20) | ((c) << 3))
 
 /* 9XXX CPT LF registers */
-#define CPT_LF_CTL                      (0x10ull)
 #define CPT_LF_DONE_WAIT                (0x30ull)
-#define CPT_LF_INPROG                   (0x40ull)
 #define CPT_LF_DONE                     (0x50ull)
 #define CPT_LF_DONE_ACK                 (0x60ull)
 #define CPT_LF_DONE_INT_ENA_W1S         (0x90ull)
@@ -166,7 +164,6 @@
 #define CPT_LF_Q_BASE                   (0xf0ull)
 #define CPT_LF_Q_SIZE                   (0x100ull)
 #define CPT_LF_Q_INST_PTR               (0x110ull)
-#define CPT_LF_Q_GRP_PTR                (0x120ull)
 #define CPT_LF_NQX(a)                   (0x400ull | (u64)(a) << 3)
 
 /**
