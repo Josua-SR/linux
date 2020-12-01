@@ -322,6 +322,11 @@ struct rvu_pfvf {
 	u8	nix_tx_intf; /* NIX0_TX/NIX1_TX interface to NPC */
 	bool	is_sdp0; /* is this PF mapped to SDP0 */
 	bool	is_sdp1; /* is this PF mapped to SDP1 */
+	unsigned long flags;
+};
+
+enum rvu_pfvf_flags {
+	NIXLF_INITIALIZED = 0,
 };
 
 struct nix_txsch {
