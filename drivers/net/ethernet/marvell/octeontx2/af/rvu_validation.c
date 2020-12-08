@@ -392,6 +392,21 @@ int rvu_check_txsch_policy(struct rvu *rvu, struct nix_txsch_alloc_req *req,
 	return 0;
 }
 
+static int rvu_get_cpt_blkaddr(struct rvu *rvu, struct rsrc_attach *req)
+{
+	int blkaddr;
+
+	if (req->hdr.ver < RVU_MULTI_BLK_VER)
+		return rvu_get_blkaddr(rvu, BLKTYPE_CPT, 0);
+
+	blkaddr = req->cpt_blkaddr ? req->cpt_blkaddr : BLKADDR_CPT0;
+
+	if (blkaddr != BLKADDR_CPT0 && blkaddr != BLKADDR_CPT1)
+		return -EINVAL;
+
+	return blkaddr;
+}
+
 int rvu_check_rsrc_policy(struct rvu *rvu, struct rsrc_attach *req,
 			  u16 pcifunc)
 {
@@ -400,6 +415,7 @@ int rvu_check_rsrc_policy(struct rvu *rvu, struct rsrc_attach *req,
 	struct rvu_hwinfo *hw = rvu->hw;
 	int pf = rvu_get_pf(pcifunc);
 	struct rvu_block *block;
+	int blkaddr;
 
 	/* Only one NPA LF can be attached */
 	if (req->npalf) {
@@ -469,7 +485,11 @@ int rvu_check_rsrc_policy(struct rvu *rvu, struct rsrc_attach *req,
 	}
 
 	if (req->cptlfs) {
-		block = &hw->block[BLKADDR_CPT0];
+		blkaddr = rvu_get_cpt_blkaddr(rvu, req);
+		if (blkaddr < 0)
+			return -EINVAL;
+
+		block = &hw->block[blkaddr];
 		mappedlfs = rvu_get_rsrc_mapcount(pfvf, block->addr);
 		free_lfs = rvu_rsrc_free_count(&block->lf);
 		limit = rvu->pf_limits.cpt->a[pf].val;
@@ -798,7 +818,7 @@ int rvu_policy_init(struct rvu *rvu)
 		goto error;
 	}
 
-	max = hw->block[BLKADDR_CPT0].lf.max;
+	max = hw->block[BLKADDR_CPT0].lf.max + hw->block[BLKADDR_CPT1].lf.max;
 	rvu->pf_limits.cpt = quotas_alloc(rvu->hw->total_pfs, max, max,
 					  0, &rvu->rsrc_lock, &pf_limit_ops);
 	if (!rvu->pf_limits.cpt) {
