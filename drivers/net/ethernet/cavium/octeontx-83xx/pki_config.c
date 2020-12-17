@@ -401,7 +401,8 @@ static void set_vlan_fltr_cfg(struct pkipf_vf *vf,
 	u8 style_add = 0, style = port->init_style;
 	u8 field = PKI_PCAM_TERM_ETHTYPE1;
 	struct pki_t *pki = vf->pki;
-	struct pcam_bank *pcam_bank1 = &pki->pcam.bank[1];
+	struct pcam *pcam = &pki->pcam;
+	struct pcam_bank *pcam_bank1 = &pcam->bank[1];
 	u8 pmc = 0;
 	int index, i, bank = 1;
 	u32 vlans[3] = { 0x81000000, 0x88a80000, 0x92000000 };
@@ -417,6 +418,7 @@ static void set_vlan_fltr_cfg(struct pkipf_vf *vf,
 		style_add = 0x100 - style;
 		pmc = 0x3f; /* Skip all parsing */
 	}
+	mutex_lock(&pcam->lock);
 	for (i = 0; i < 3; i++) {
 		index = alloc_pcam_rsrc(&pcam_bank1->rsrc);
 		if (index < 0)
@@ -433,6 +435,7 @@ static void set_vlan_fltr_cfg(struct pkipf_vf *vf,
 			   pmc);
 		port->num_pcam_entry[bank]++;
 	}
+	mutex_unlock(&pcam->lock);
 }
 
 int pki_port_open(struct pkipf_vf *vf, u16 vf_id,
