@@ -651,8 +651,8 @@
 #define MVPP2_TX_FIFO_THRESHOLD_MIN		256 /* Bytes */
 #define MVPP2_TX_FIFO_THRESHOLD(kb)		\
 		(kb * 1024 - MVPP2_TX_FIFO_THRESHOLD_MIN)
-#define MVPP22_TX_FIFO_EXTRA_PARAM_MASK		0xFF
-#define MVPP22_TX_FIFO_EXTRA_PARAM_OFFS(port)	(8 * (port))
+#define MVPP22_TX_FIFO_EXTRA_PARAM_MASK		0xF
+#define MVPP22_TX_FIFO_EXTRA_PARAM_OFFS(port)	(4 * (port))
 #define MVPP22_TX_FIFO_EXTRA_PARAM_SIZE(port, val)		\
 	(((val) >> MVPP22_TX_FIFO_EXTRA_PARAM_OFFS(port)) &	\
 	 MVPP22_TX_FIFO_EXTRA_PARAM_MASK)
@@ -938,6 +938,8 @@ struct mvpp2 {
 
 	/* Spinlocks for CM3 shared memory configuration */
 	spinlock_t mss_spinlock;
+
+	int cp_id;
 };
 
 struct mvpp2_dbgfs_prs_entry {

@@ -7108,13 +7108,15 @@ static void mvpp22_tx_fifo_init_param(struct platform_device *pdev,
 	/* Set TX FIFO size to 0 for inactive ports. */
 	for_each_clear_bit(port, &port_map, MVPP2_LOOPBACK_PORT_INDEX) {
 		mvpp22_tx_fifo_set_hw(priv, port, 0);
-		if (MVPP22_TX_FIFO_EXTRA_PARAM_SIZE(port, tx_fifo_map))
+		if (MVPP22_TX_FIFO_EXTRA_PARAM_SIZE(port + priv->cp_id * MVPP2_MAX_PORTS,
+						    tx_fifo_map))
 			goto error;
 	}
 
 	/* The physical port requires minimum 3kB */
 	for_each_set_bit(port, &port_map, MVPP2_LOOPBACK_PORT_INDEX) {
-		size = MVPP22_TX_FIFO_EXTRA_PARAM_SIZE(port, tx_fifo_map);
+		size = MVPP22_TX_FIFO_EXTRA_PARAM_SIZE(port + priv->cp_id * MVPP2_MAX_PORTS,
+						       tx_fifo_map);
 		if (size < MVPP22_TX_FIFO_DATA_SIZE_MIN ||
 		    size > MVPP22_TX_FIFO_DATA_SIZE_MAX)
 			goto error;
@@ -7123,7 +7125,8 @@ static void mvpp22_tx_fifo_init_param(struct platform_device *pdev,
 	/* Assign remaining TX FIFO space among all active ports. */
 	size_remainder = MVPP22_TX_FIFO_DATA_SIZE_18KB;
 	for (port = 0; port < MVPP2_LOOPBACK_PORT_INDEX; port++) {
-		size = MVPP22_TX_FIFO_EXTRA_PARAM_SIZE(port, tx_fifo_map);
+		size = MVPP22_TX_FIFO_EXTRA_PARAM_SIZE(port + priv->cp_id * MVPP2_MAX_PORTS,
+						       tx_fifo_map);
 		if (!size)
 			continue;
 		size_remainder -= size;
@@ -7314,6 +7317,7 @@ static int mvpp2_get_sram(struct platform_device *pdev,
 
 static int mvpp2_probe(struct platform_device *pdev)
 {
+	static int cp_id;
 	const struct acpi_device_id *acpi_id;
 	struct fwnode_handle *fwnode = pdev->dev.fwnode;
 	struct fwnode_handle *port_fwnode;
@@ -7536,6 +7540,9 @@ static int mvpp2_probe(struct platform_device *pdev)
 
 	/* Init mss lock */
 	spin_lock_init(&priv->mss_spinlock);
+
+	priv->cp_id = cp_id;
+	cp_id++;
 
 	/* Initialize network controller */
 	err = mvpp2_init(pdev, priv);
