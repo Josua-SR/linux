@@ -188,6 +188,8 @@ struct cvm_mmc_slot {
 #define MMC_OUT_TAPS_DELAY_COUNT	((MMC_TIMING_MMC_HS400) + 1)
 	u32 data_out_taps_dly[MMC_OUT_TAPS_DELAY_COUNT];
 	u32 cmd_out_taps_dly[MMC_OUT_TAPS_DELAY_COUNT];
+	u32 cmd_in_taps_dly[MMC_OUT_TAPS_DELAY_COUNT];
+	u32 data_in_taps_dly[MMC_OUT_TAPS_DELAY_COUNT];
 };
 
 struct cvm_mmc_cr_type {

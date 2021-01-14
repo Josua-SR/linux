@@ -161,6 +161,21 @@ static const u32 default_hints_taps_dly[MMC_OUT_TAPS_DELAY_COUNT] = {
 	10  /* HS400 */
 };
 
+static const u32 default_cmd_in_taps_dly[MMC_OUT_TAPS_DELAY_COUNT] = {
+	5000, /* Legacy */
+	3000, /* UHS_SDR12 */
+	2500, /* MMC_HS */
+	2000, /* SD_HS */
+	2000, /* UHS_SDR25 */
+	2000, /* UHS_SDR50 */
+	1500, /* UHS_DDR50 */
+	1500, /* MMC_DDR52 */
+	 800, /* UHS_SDR104 */
+	 800, /* HS200 */
+	 800  /* HS400 */
+};
+
+
 static const char * const mmc_modes_name[] = {
 	"Legacy",
 	"SDR 12",
@@ -301,19 +316,22 @@ static int cvm_mmc_configure_delay(struct cvm_mmc_slot *slot)
 			FIELD_PREP(MIO_EMM_SAMPLE_DAT_CNT, slot->data_cnt);
 		writeq(emm_sample, host->base + MIO_EMM_SAMPLE(host));
 	} else {
-		int half = MAX_NO_OF_TAPS / 2;
-		int cin = FIELD_GET(MIO_EMM_TIMING_CMD_IN, slot->taps);
-		int din = FIELD_GET(MIO_EMM_TIMING_DATA_IN, slot->taps);
-		int cout, dout;
+		int cin, din, cout, dout;
 
-		if (!slot->taps)
-			cin = din = half;
-
-		dev_dbg(host->dev, "%s: mode=%s, cmd=%ups, data=%ups\n",
+		dev_dbg(host->dev,
+			"%s: mode=%s, cmd_in=%ups, data_in=%ups, cmd_out=%ups, data_out=%ups\n",
 			__func__, mmc_modes_name[mmc->ios.timing],
+			slot->cmd_in_taps_dly[mmc->ios.timing],
+			slot->data_in_taps_dly[mmc->ios.timing],
 			slot->cmd_out_taps_dly[mmc->ios.timing],
 			slot->data_out_taps_dly[mmc->ios.timing]);
 		/* Configure timings */
+		cin = tout(slot,
+			   slot->cmd_in_taps_dly[mmc->ios.timing],
+			   MAX_NO_OF_TAPS / 2);
+		din = tout(slot,
+			   slot->data_in_taps_dly[mmc->ios.timing],
+			   MAX_NO_OF_TAPS / 2);
 		cout = tout(slot,
 			    slot->cmd_out_taps_dly[mmc->ios.timing],
 			    default_hints_taps_dly[mmc->ios.timing]);
@@ -1748,6 +1766,7 @@ static int tune_hs400(struct cvm_mmc_slot *slot)
 		best_start + best_run, how);
 	slot->taps &= ~MIO_EMM_TIMING_DATA_IN;
 	slot->taps |= FIELD_PREP(MIO_EMM_TIMING_DATA_IN, tap);
+	slot->data_in_taps_dly[MMC_TIMING_MMC_HS400] = tap * slot->host->per_tap_delay;
 	dev_dbg(host->dev, "HS400 data input tap: %d\n", tap);
 	dev_dbg(host->dev, "%s\n", how);
 	cvm_mmc_set_timing(slot);
@@ -2104,7 +2123,7 @@ static int cvm_mmc_of_parse(struct device *dev, struct cvm_mmc_slot *slot)
 	}
 
 
-	/* Initialize list of bus modes timings and customize it by DT */
+	/* Initialize list of output bus modes timings and customize it by DT */
 	memcpy(slot->cmd_out_taps_dly, default_cmd_out_taps_dly,
 	       sizeof(slot->cmd_out_taps_dly));
 
@@ -2115,7 +2134,14 @@ static int cvm_mmc_of_parse(struct device *dev, struct cvm_mmc_slot *slot)
 			val = DIV_ROUND_UP(val, 2);
 		slot->data_out_taps_dly[i] = val;
 	}
+	/* Initialize input timings for all bus modes, allow to adjust by DT */
+	memcpy(slot->cmd_in_taps_dly, default_cmd_in_taps_dly,
+	       sizeof(slot->cmd_in_taps_dly));
+	/* Input timings for DAT lines are the same as CMD line timings */
+	memcpy(slot->data_in_taps_dly, default_cmd_in_taps_dly,
+	       sizeof(slot->data_in_taps_dly));
 
+	/* Modify the timings using user inputs */
 	of_property_read_u32(node, "marvell,cmd-out-hs200-dly",
 			     &slot->cmd_out_taps_dly[MMC_TIMING_MMC_HS200]);
 	of_property_read_u32(node, "marvell,data-out-hs200-dly",
