@@ -185,11 +185,18 @@ struct cvm_mmc_slot {
 	u32 hs400_tuning_block;		/* Block number used for tuning */
 	bool hs400_tuning_block_present;
 
-#define MMC_OUT_TAPS_DELAY_COUNT	((MMC_TIMING_MMC_HS400) + 1)
-	u32 data_out_taps_dly[MMC_OUT_TAPS_DELAY_COUNT];
-	u32 cmd_out_taps_dly[MMC_OUT_TAPS_DELAY_COUNT];
-	u32 cmd_in_taps_dly[MMC_OUT_TAPS_DELAY_COUNT];
-	u32 data_in_taps_dly[MMC_OUT_TAPS_DELAY_COUNT];
+#define MMC_TIMINGS_COUNT      ((MMC_TIMING_MMC_HS400) + 1)
+	u32 data_out_taps_dly[MMC_TIMINGS_COUNT];
+	u32 cmd_out_taps_dly[MMC_TIMINGS_COUNT];
+	u32 cmd_in_taps_dly[MMC_TIMINGS_COUNT];
+	u32 data_in_taps_dly[MMC_TIMINGS_COUNT];
+	/*
+	 * Flags indicate input timings modified by user.
+	 * Flag is set when cmd-in-XXX or data-in-XXX value is set for given
+	 * mode in DT. They can be used to control behavior of the timings
+	 * tuning alorithm.
+	 */
+	u32 in_timings_ctl;
 };
 
 struct cvm_mmc_cr_type {

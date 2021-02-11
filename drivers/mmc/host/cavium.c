@@ -132,7 +132,7 @@ static struct cvm_mmc_cr_type cvm_mmc_cr_types[] = {
  *
  * Values are expressed in picoseconds (ps)
  */
-static const u32 default_cmd_out_taps_dly[MMC_OUT_TAPS_DELAY_COUNT] = {
+static const u32 default_cmd_out_taps_dly[MMC_TIMINGS_COUNT] = {
 	5000, /* Legacy */
 	2500, /* MMC_HS */
 	2000, /* SD_HS */
@@ -147,7 +147,7 @@ static const u32 default_cmd_out_taps_dly[MMC_OUT_TAPS_DELAY_COUNT] = {
 };
 
 /* Hints are expressed as number of taps (clock cycles) */
-static const u32 default_hints_taps_dly[MMC_OUT_TAPS_DELAY_COUNT] = {
+static const u32 default_hints_taps_dly[MMC_TIMINGS_COUNT] = {
 	39, /* Legacy */
 	32, /* MMC_HS */
 	26, /* SD_HS */
@@ -161,7 +161,7 @@ static const u32 default_hints_taps_dly[MMC_OUT_TAPS_DELAY_COUNT] = {
 	10  /* HS400 */
 };
 
-static const u32 default_cmd_in_taps_dly[MMC_OUT_TAPS_DELAY_COUNT] = {
+static const u32 default_cmd_in_taps_dly[MMC_TIMINGS_COUNT] = {
 	4000, /* Legacy */
 	4000, /* MMC_HS */
 	4000, /* SD_HS */
@@ -176,14 +176,14 @@ static const u32 default_cmd_in_taps_dly[MMC_OUT_TAPS_DELAY_COUNT] = {
 };
 
 
-static const char * const mmc_modes_name[] = {
+static const char * const mmc_modes_name[MMC_TIMINGS_COUNT] = {
 	"Legacy",
 	"MMC HS",
 	"SD HS",
-	"UHS SDR12",
-	"UHS SDR25",
-	"UHS SDR50",
-	"SD UHS104",
+	"SD UHS SDR12",
+	"SD UHS SDR25",
+	"SD UHS SDR50",
+	"SD UHS SDR 104",
 	"SD DDR50",
 	"MMC DDR52",
 	"MMC HS200",
@@ -1306,119 +1306,6 @@ static int cvm_mmc_r1_cmd(struct mmc_host *mmc, u32 opcode, int *statp)
 	return cvm_mrq.cmd->error;
 }
 
-static int cvm_mmc_data_tuning(struct mmc_host *mmc, u32 opcode, int *statp)
-{
-	int err = 0;
-	u8 *ext_csd;
-	static struct mmc_command cmd = {};
-	static struct mmc_data data = {};
-	static struct mmc_request cvm_mrq = {};
-	static struct scatterlist sg;
-	struct cvm_mmc_slot *slot = mmc_priv(mmc);
-	struct mmc_card *card = mmc->card;
-
-	if (!(slot->cached_switch & MIO_EMM_SWITCH_HS400_TIMING)) {
-		int edetail = -EINVAL;
-		int core_opinion;
-
-		core_opinion =
-			mmc_send_tuning(mmc, opcode, &edetail);
-
-		/* only accept mmc/core opinion  when it's happy */
-		if (!core_opinion)
-			return core_opinion;
-	}
-
-	/* EXT_CSD supported only after ver 3 */
-	if (card && card->csd.mmca_vsn <= CSD_SPEC_VER_3)
-		return -EOPNOTSUPP;
-	/*
-	 * As the ext_csd is so large and mostly unused, we don't store the
-	 * raw block in mmc_card.
-	 */
-	ext_csd = kzalloc(BLKSZ_EXT_CSD, GFP_KERNEL);
-	if (!ext_csd)
-		return -ENOMEM;
-
-	cvm_mrq.cmd = &cmd;
-	cvm_mrq.data = &data;
-	cmd.data = &data;
-
-	cmd.opcode = MMC_SEND_EXT_CSD;
-	cmd.arg = 0;
-	cmd.flags = MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_ADTC;
-
-	data.blksz = BLKSZ_EXT_CSD;
-	data.blocks = 1;
-	data.flags = MMC_DATA_READ;
-	data.sg = &sg;
-	data.sg_len = 1;
-
-	sg_init_one(&sg, ext_csd, BLKSZ_EXT_CSD);
-
-	/* set timeout */
-	if (card) {
-		/* SD cards use a 100 multiplier rather than 10 */
-		u32 mult = mmc_card_sd(card) ? 100 : 10;
-
-		data.timeout_ns = card->csd.taac_ns * mult;
-		data.timeout_clks = card->csd.taac_clks * mult;
-	} else {
-		data.timeout_ns = 50 * NSEC_PER_MSEC;
-	}
-
-	init_completion(&cvm_mrq.completion);
-	cvm_mrq.done = cvm_mmc_wait_done;
-
-	cvm_mmc_request(mmc, &cvm_mrq);
-	if (!wait_for_completion_timeout(&cvm_mrq.completion,
-			msecs_to_jiffies(100))) {
-		mmc_abort_tuning(mmc, cmd.opcode);
-		err = -ETIMEDOUT;
-	}
-
-	data.sg_len = 0; /* FIXME: catch over-time completions? */
-
-	if (err)
-		goto out;
-
-	if (statp)
-		*statp = cvm_mrq.cmd->resp[0];
-
-	if (cvm_mrq.cmd->error) {
-		err = cvm_mrq.cmd->error;
-		goto out;
-	}
-
-	if (!card) {
-		dev_dbg(slot->host->dev, "No card detected\n");
-		err = 0;
-		goto out;
-	}
-
-	if (card->ext_csd.raw_partition_support
-		== ext_csd[EXT_CSD_PARTITION_SUPPORT] &&
-	    card->ext_csd.raw_hc_erase_gap_size
-		== ext_csd[EXT_CSD_HC_WP_GRP_SIZE] &&
-	    card->ext_csd.rev
-		== ext_csd[EXT_CSD_REV] &&
-	    card->ext_csd.raw_sectors[0]
-		== ext_csd[EXT_CSD_SEC_CNT + 0] &&
-	    card->ext_csd.raw_sectors[1]
-		== ext_csd[EXT_CSD_SEC_CNT + 1] &&
-	    card->ext_csd.raw_sectors[2]
-		 == ext_csd[EXT_CSD_SEC_CNT + 2] &&
-	    card->ext_csd.raw_sectors[3]
-		 == ext_csd[EXT_CSD_SEC_CNT + 3])
-		err = 0;
-	else
-		err = -EBADMSG;
-
-out:
-	kfree(ext_csd);
-	return err;
-}
-
 /* adjusters for the 4 otx2 delay line taps */
 struct adj {
 	const char *name;
@@ -2184,13 +2071,102 @@ static int cvm_mmc_init_lowlevel(struct cvm_mmc_slot *slot)
 	return 0;
 }
 
+/* Function has side effect. When input timing for cmd or data
+ * is set, then in_timings_ctl value is set. This stops tuning
+ * From being executed. Only input timings are tuned. Output timings
+ * are static values from defaults or are give by user in device tree.
+ */
+static void cvm_mmc_of_parse_timing(const struct device_node *node,
+				    struct cvm_mmc_slot *slot,
+				    const char *prop,
+				    u8 timing,
+				    bool cmd_or_data,
+				    bool inout)
+{
+	u32 prop_val;
+	u32 *timing_val;
+
+	if (cmd_or_data) // cmd = true, in = true
+		timing_val = inout ? &slot->cmd_in_taps_dly[timing] :
+			     &slot->cmd_out_taps_dly[timing];
+	else
+		timing_val = inout ? &slot->data_in_taps_dly[timing] :
+			     &slot->data_out_taps_dly[timing];
+
+	prop_val = -1U;
+	of_property_read_u32(node, prop, &prop_val);
+
+	if (prop_val != -1U) {
+		*timing_val = prop_val;
+		if (inout)
+			slot->in_timings_ctl |= BIT(timing);
+	}
+}
+
+/**
+ * Reads device tree entries for bus timings
+ *
+ * @param node	device tree node for the slot
+ * @param slot  the slot device
+ *
+ */
+static void cvm_mmc_of_parse_timings(const struct device_node *node,
+				     struct cvm_mmc_slot *slot)
+{
+	/* Fetch timings values set by user in DT, start with MMC HS200 mode */
+	cvm_mmc_of_parse_timing(node, slot, "marvell,cmd-in-hs200-dly",
+				MMC_TIMING_MMC_HS200, true, true);
+	cvm_mmc_of_parse_timing(node, slot, "marvell,data-in-hs200-dly",
+				MMC_TIMING_MMC_HS200, false, true);
+	cvm_mmc_of_parse_timing(node, slot, "marvell,cmd-out-hs200-dly",
+				MMC_TIMING_MMC_HS200, true, false);
+	cvm_mmc_of_parse_timing(node, slot, "marvell,data-out-hs200-dly",
+				MMC_TIMING_MMC_HS200, false, false);
+	/* MMC HS 400 mode */
+	cvm_mmc_of_parse_timing(node, slot, "marvell,cmd-in-hs400-dly",
+				MMC_TIMING_MMC_HS400, true, true);
+	cvm_mmc_of_parse_timing(node, slot, "marvell,data-in-hs400-dly",
+				MMC_TIMING_MMC_HS400, false, true);
+	cvm_mmc_of_parse_timing(node, slot, "marvell,cmd-out-hs400-dly",
+				MMC_TIMING_MMC_HS400, true, false);
+	cvm_mmc_of_parse_timing(node, slot, "marvell,data-out-hs400-dly",
+				MMC_TIMING_MMC_HS400, false, false);
+	/* MMC HS mode */
+	cvm_mmc_of_parse_timing(node, slot, "marvell,cmd-in-hs-sdr-dly",
+				MMC_TIMING_MMC_HS, true, true);
+	cvm_mmc_of_parse_timing(node, slot, "marvell,data-in-hs-sdr-dly",
+				MMC_TIMING_MMC_HS, false, true);
+	cvm_mmc_of_parse_timing(node, slot, "marvell,cmd-out-hs-sdr-dly",
+				MMC_TIMING_MMC_HS, true, false);
+	cvm_mmc_of_parse_timing(node, slot, "marvell,data-out-hs-sdr-dly",
+				MMC_TIMING_MMC_HS, false, false);
+	/* MMC HS 52 (DDR) mode */
+	cvm_mmc_of_parse_timing(node, slot, "marvell,cmd-in-hs-ddr-dly",
+				MMC_TIMING_MMC_DDR52, true, true);
+	cvm_mmc_of_parse_timing(node, slot, "marvell,data-in-hs-ddr-dly",
+				MMC_TIMING_MMC_DDR52, false, true);
+	cvm_mmc_of_parse_timing(node, slot, "marvell,cmd-out-hs-ddr-dly",
+				MMC_TIMING_MMC_DDR52, true, false);
+	cvm_mmc_of_parse_timing(node, slot, "marvell,data-out-hs-ddr-dly",
+				MMC_TIMING_MMC_DDR52, false, false);
+	/* Legacy mode */
+	cvm_mmc_of_parse_timing(node, slot, "marvell,cmd-in-legacy-dly",
+				MMC_TIMING_LEGACY, true, true);
+	cvm_mmc_of_parse_timing(node, slot, "marvell,data-in-legacy-dly",
+				MMC_TIMING_LEGACY, false, true);
+	cvm_mmc_of_parse_timing(node, slot, "marvell,cmd-out-legacy-dly",
+				MMC_TIMING_LEGACY, true, false);
+	cvm_mmc_of_parse_timing(node, slot, "marvell,data-out-legacy-dly",
+				MMC_TIMING_LEGACY, false, false);
+}
+
 static int cvm_mmc_of_parse(struct device *dev, struct cvm_mmc_slot *slot)
 {
 	u32 id, cmd_skew = 0, dat_skew = 0, bus_width = 0;
 	struct device_node *node = dev->of_node;
 	struct mmc_host *mmc = slot->mmc;
 	u32 max_frequency, current_drive, clk_slew;
-	int ret, i;
+	int ret;
 
 	ret = of_property_read_u32(node, "reg", &id);
 	if (ret) {
@@ -2236,46 +2212,8 @@ static int cvm_mmc_of_parse(struct device *dev, struct cvm_mmc_slot *slot)
 			mmc->caps |= MMC_CAP_4_BIT_DATA;
 	}
 
-
-	/* Initialize list of output bus modes timings and customize it by DT */
-	memcpy(slot->cmd_out_taps_dly, default_cmd_out_taps_dly,
-	       sizeof(slot->cmd_out_taps_dly));
-
-	for (i = 0; i < MMC_OUT_TAPS_DELAY_COUNT; i++) {
-		u32 val = slot->cmd_out_taps_dly[i];
-
-		if (__cvm_is_mmc_timing_ddr(i))
-			val = DIV_ROUND_UP(val, 2);
-		slot->data_out_taps_dly[i] = val;
-	}
-	/* Initialize input timings for all bus modes, allow to adjust by DT */
-	memcpy(slot->cmd_in_taps_dly, default_cmd_in_taps_dly,
-	       sizeof(slot->cmd_in_taps_dly));
-	/* Input timings for DAT lines are the same as CMD line timings */
-	memcpy(slot->data_in_taps_dly, default_cmd_in_taps_dly,
-	       sizeof(slot->data_in_taps_dly));
-
-	/* Modify the timings using user inputs */
-	of_property_read_u32(node, "marvell,cmd-out-hs200-dly",
-			     &slot->cmd_out_taps_dly[MMC_TIMING_MMC_HS200]);
-	of_property_read_u32(node, "marvell,data-out-hs200-dly",
-			     &slot->data_out_taps_dly[MMC_TIMING_MMC_HS200]);
-	of_property_read_u32(node, "marvell,cmd-out-hs400-dly",
-			     &slot->cmd_out_taps_dly[MMC_TIMING_MMC_HS400]);
-	of_property_read_u32(node, "marvell,data-out-hs400-dly",
-			     &slot->data_out_taps_dly[MMC_TIMING_MMC_HS400]);
-	of_property_read_u32(node, "marvell,cmd-out-hs-sdr-dly",
-			     &slot->cmd_out_taps_dly[MMC_TIMING_MMC_HS]);
-	of_property_read_u32(node, "marvell,data-out-hs-sdr-dly",
-			     &slot->data_out_taps_dly[MMC_TIMING_MMC_HS]);
-	of_property_read_u32(node, "marvell,cmd-out-hs-ddr-dly",
-			     &slot->cmd_out_taps_dly[MMC_TIMING_MMC_DDR52]);
-	of_property_read_u32(node, "marvell,data-out-hs-ddr-dly",
-			     &slot->data_out_taps_dly[MMC_TIMING_MMC_DDR52]);
-	of_property_read_u32(node, "marvell,cmd-out-legacy-dly",
-			     &slot->cmd_out_taps_dly[MMC_TIMING_LEGACY]);
-	of_property_read_u32(node, "marvell,data-out-legacy-dly",
-			     &slot->data_out_taps_dly[MMC_TIMING_LEGACY]);
+	/* Configure bus timings */
+	cvm_mmc_of_parse_timings(node, slot);
 
 	max_frequency = max_supported_frequency(slot->host);
 
@@ -2313,7 +2251,7 @@ int cvm_mmc_of_slot_probe(struct device *dev, struct cvm_mmc_host *host)
 	struct cvm_mmc_slot *slot;
 	struct mmc_host *mmc;
 	struct iommu_domain *dom;
-	int ret, id;
+	int ret, id, i;
 
 	mmc = mmc_alloc_host(sizeof(struct cvm_mmc_slot), dev);
 	if (!mmc)
@@ -2322,6 +2260,27 @@ int cvm_mmc_of_slot_probe(struct device *dev, struct cvm_mmc_host *host)
 	slot = mmc_priv(mmc);
 	slot->mmc = mmc;
 	slot->host = host;
+
+	/*
+	 * Initialize output timings for the bus.
+	 * DAT[0..7] timings are half of CMD line timings in case of DDR mode.
+	 */
+	memcpy(slot->cmd_out_taps_dly, default_cmd_out_taps_dly,
+	       sizeof(slot->cmd_out_taps_dly));
+
+	for (i = 0; i < MMC_TIMINGS_COUNT; i++) {
+		u32 val = slot->cmd_out_taps_dly[i];
+
+		if (__cvm_is_mmc_timing_ddr(i))
+			val = DIV_ROUND_UP(val, 2);
+		slot->data_out_taps_dly[i] = val;
+	}
+	/* Initialize input timings */
+	memcpy(slot->cmd_in_taps_dly, default_cmd_in_taps_dly,
+	       sizeof(slot->cmd_in_taps_dly));
+	/* Input timings for DAT lines are the same as CMD line timings */
+	memcpy(slot->data_in_taps_dly, default_cmd_in_taps_dly,
+	       sizeof(slot->data_in_taps_dly));
 
 	ret = cvm_mmc_of_parse(dev, slot);
 	if (ret < 0)
