@@ -134,14 +134,14 @@ static struct cvm_mmc_cr_type cvm_mmc_cr_types[] = {
  */
 static const u32 default_cmd_out_taps_dly[MMC_OUT_TAPS_DELAY_COUNT] = {
 	5000, /* Legacy */
-	3000, /* UHS_SDR12 */
 	2500, /* MMC_HS */
 	2000, /* SD_HS */
+	3000, /* UHS_SDR12 */
 	2000, /* UHS_SDR25 */
 	2000, /* UHS_SDR50 */
+	 800, /* UHS_SDR104 */
 	1500, /* UHS_DDR50 */
 	1500, /* MMC_DDR52 */
-	 800, /* UHS_SDR104 */
 	 800, /* HS200 */
 	 800  /* HS400 */
 };
@@ -149,43 +149,43 @@ static const u32 default_cmd_out_taps_dly[MMC_OUT_TAPS_DELAY_COUNT] = {
 /* Hints are expressed as number of taps (clock cycles) */
 static const u32 default_hints_taps_dly[MMC_OUT_TAPS_DELAY_COUNT] = {
 	39, /* Legacy */
-	39, /* UHS_SDR12 */
 	32, /* MMC_HS */
 	26, /* SD_HS */
+	39, /* UHS_SDR12 */
 	26, /* UHS_SDR25 */
 	26, /* UHS_SDR50 */
+	10, /* UHS_SDR104 */
 	20, /* UHS_DDR50 */
 	20, /* MMC_DDR52 */
-	10, /* UHS_SDR104 */
 	10, /* HS200 */
 	10  /* HS400 */
 };
 
 static const u32 default_cmd_in_taps_dly[MMC_OUT_TAPS_DELAY_COUNT] = {
-	5000, /* Legacy */
-	3000, /* UHS_SDR12 */
-	2500, /* MMC_HS */
-	2000, /* SD_HS */
-	2000, /* UHS_SDR25 */
-	2000, /* UHS_SDR50 */
-	1500, /* UHS_DDR50 */
-	1500, /* MMC_DDR52 */
-	 800, /* UHS_SDR104 */
-	 800, /* HS200 */
-	 800  /* HS400 */
+	4000, /* Legacy */
+	4000, /* MMC_HS */
+	4000, /* SD_HS */
+	4000, /* UHS_SDR12 */
+	4000, /* UHS_SDR25 */
+	4000, /* UHS_SDR50 */
+	4000, /* UHS_SDR104 */
+	4000, /* UHS_DDR50 */
+	4000, /* MMC_DDR52 */
+	4000, /* HS200 */
+	4000  /* HS400 */
 };
 
 
 static const char * const mmc_modes_name[] = {
 	"Legacy",
-	"SDR 12",
 	"MMC HS",
 	"SD HS",
+	"UHS SDR12",
 	"UHS SDR25",
 	"UHS SDR50",
+	"SD UHS104",
 	"SD DDR50",
 	"MMC DDR52",
-	"SD UHS104",
 	"MMC HS200",
 	"MMC HS400"
 };
