@@ -206,6 +206,9 @@ static bool ddr_cmd_taps;
 module_param(ddr_cmd_taps, bool, 0644);
 MODULE_PARM_DESC(ddr_cmd_taps, "reduce cmd_out_taps in DDR modes, as before");
 
+/* Tuning is used in multiple places in the code */
+static int cvm_execute_tuning(struct mmc_host *mmc, u32 opcode);
+
 static bool __cvm_is_mmc_timing_ddr(unsigned char timing)
 {
 	switch (timing) {
@@ -1271,7 +1274,7 @@ static void cvm_mmc_wait_done(struct mmc_request *cvm_mrq)
 	complete(&cvm_mrq->completion);
 }
 
-static int cvm_mmc_r1_cmd(struct mmc_host *mmc, u32 *statp, u32 opcode)
+static int cvm_mmc_r1_cmd(struct mmc_host *mmc, u32 opcode, int *statp)
 {
 	static struct mmc_command cmd = {};
 	static struct mmc_request cvm_mrq = {};
@@ -1303,7 +1306,7 @@ static int cvm_mmc_r1_cmd(struct mmc_host *mmc, u32 *statp, u32 opcode)
 	return cvm_mrq.cmd->error;
 }
 
-static int cvm_mmc_data_tuning(struct mmc_host *mmc, u32 *statp, u32 opcode)
+static int cvm_mmc_data_tuning(struct mmc_host *mmc, u32 opcode, int *statp)
 {
 	int err = 0;
 	u8 *ext_csd;
@@ -1375,24 +1378,57 @@ static int cvm_mmc_data_tuning(struct mmc_host *mmc, u32 *statp, u32 opcode)
 	}
 
 	data.sg_len = 0; /* FIXME: catch over-time completions? */
-	kfree(ext_csd);
 
 	if (err)
-		return err;
+		goto out;
 
 	if (statp)
 		*statp = cvm_mrq.cmd->resp[0];
 
-	return cvm_mrq.cmd->error;
+	if (cvm_mrq.cmd->error) {
+		err = cvm_mrq.cmd->error;
+		goto out;
+	}
+
+	if (!card) {
+		dev_dbg(slot->host->dev, "No card detected\n");
+		err = 0;
+		goto out;
+	}
+
+	if (card->ext_csd.raw_partition_support
+		== ext_csd[EXT_CSD_PARTITION_SUPPORT] &&
+	    card->ext_csd.raw_hc_erase_gap_size
+		== ext_csd[EXT_CSD_HC_WP_GRP_SIZE] &&
+	    card->ext_csd.rev
+		== ext_csd[EXT_CSD_REV] &&
+	    card->ext_csd.raw_sectors[0]
+		== ext_csd[EXT_CSD_SEC_CNT + 0] &&
+	    card->ext_csd.raw_sectors[1]
+		== ext_csd[EXT_CSD_SEC_CNT + 1] &&
+	    card->ext_csd.raw_sectors[2]
+		 == ext_csd[EXT_CSD_SEC_CNT + 2] &&
+	    card->ext_csd.raw_sectors[3]
+		 == ext_csd[EXT_CSD_SEC_CNT + 3])
+		err = 0;
+	else
+		err = -EBADMSG;
+
+out:
+	kfree(ext_csd);
+	return err;
 }
 
 /* adjusters for the 4 otx2 delay line taps */
 struct adj {
 	const char *name;
 	u64 mask;
-	int (*test)(struct mmc_host *mmc, u32 *statp, u32 opcode);
+	int (*test)(struct mmc_host *mmc, u32 opcode, int *statp);
 	u32 opcode;
 	bool ddr_only;
+	bool hs200_only;
+	bool non_hs200;
+	u32 num_runs;
 };
 
 static int adjust_tuning(struct mmc_host *mmc, struct adj *adj, u32 opcode)
@@ -1404,6 +1440,7 @@ static int adjust_tuning(struct mmc_host *mmc, struct adj *adj, u32 opcode)
 	struct cvm_mmc_slot *slot = mmc_priv(mmc);
 	struct cvm_mmc_host *host = slot->host;
 	char how[MAX_NO_OF_TAPS+1] = "";
+	u32 count;
 
 	/* loop over range+1 to simplify processing */
 	for (tap = 0; tap <= MAX_NO_OF_TAPS; tap++, prev_ok = !err) {
@@ -1416,8 +1453,11 @@ static int adjust_tuning(struct mmc_host *mmc, struct adj *adj, u32 opcode)
 			udelay(10);
 
 			cvm_mmc_clk_config(host, CLK_ON);
-			err = adj->test(mmc, NULL, opcode);
-
+			for (count = 0; count < adj->num_runs; count++) {
+				err = adj->test(mmc, opcode, NULL);
+				if (err)
+					break;
+			}
 			how[tap] = "-+"[!err];
 			if (!err)
 				last_good = tap;
@@ -1451,6 +1491,10 @@ static int adjust_tuning(struct mmc_host *mmc, struct adj *adj, u32 opcode)
 	if (best_start < 0) {
 		dev_warn(host->dev, "%s %lldMHz tuning %s failed\n",
 			mmc_hostname(mmc), slot->clock / 1000000, adj->name);
+		dev_info(host->dev, "%s/%s %d/%lld/%d %s\n",
+			 mmc_hostname(mmc), adj->name,
+			 best_start, tap, best_start + best_run,
+			 how);
 		return -EINVAL;
 	}
 
@@ -1460,10 +1504,10 @@ static int adjust_tuning(struct mmc_host *mmc, struct adj *adj, u32 opcode)
 		tap = last_good - tapdance;
 		how[tap] = 'X';
 	}
-	dev_dbg(host->dev, "%s/%s %d/%lld/%d %s\n",
-		mmc_hostname(mmc), adj->name,
-		best_start, tap, best_start + best_run,
-		how);
+	dev_info(host->dev, "%s/%s %d/%lld/%d %s\n",
+		 mmc_hostname(mmc), adj->name,
+		 best_start, tap, best_start + best_run,
+		 how);
 	slot->taps &= ~adj->mask;
 	slot->taps |= (tap << __bf_shf(adj->mask));
 	cvm_mmc_set_timing(slot);
@@ -1752,6 +1796,9 @@ static int tune_hs400(struct cvm_mmc_slot *slot)
 	if (best_start < 0) {
 		dev_warn(host->dev, "%s %lldMHz tuning HS400 data in failed\n",
 			mmc_hostname(mmc), slot->clock / 1000000);
+		dev_info(host->dev, "%s/HS400 data in %d/%d/%d %s\n",
+			 mmc_hostname(mmc), best_start, tap,
+			 best_start + best_run, how);
 		return -EINVAL;
 	}
 
@@ -1761,9 +1808,9 @@ static int tune_hs400(struct cvm_mmc_slot *slot)
 		tap = last_good - tapdance;
 		how[tap] = 'X';
 	}
-	dev_dbg(host->dev, "%s/HS400 data in %d/%d/%d %s\n",
-		mmc_hostname(mmc), best_start, tap,
-		best_start + best_run, how);
+	dev_info(host->dev, "%s/HS400 data in %d/%d/%d %s\n",
+		 mmc_hostname(mmc), best_start, tap,
+		 best_start + best_run, how);
 	slot->taps &= ~MIO_EMM_TIMING_DATA_IN;
 	slot->taps |= FIELD_PREP(MIO_EMM_TIMING_DATA_IN, tap);
 	slot->data_in_taps_dly[MMC_TIMING_MMC_HS400] = tap * slot->host->per_tap_delay;
@@ -1784,6 +1831,53 @@ static u32 max_supported_frequency(struct cvm_mmc_host *host)
 		max_frequency = host->max_freq;
 
 	return max_frequency;
+}
+
+static void cvm_mmc_tune_mode(struct cvm_mmc_slot *slot, struct mmc_ios *ios)
+{
+	struct mmc_host *host = slot->mmc;
+	u8 timing = ios->timing;
+	int ret = 0;
+
+	/* Only following modes are supported. HS200 goes different path */
+	if (timing != MMC_TIMING_MMC_HS400 &&
+	    timing != MMC_TIMING_MMC_HS &&
+	    timing != MMC_TIMING_MMC_DDR52)
+		return;
+
+	if (slot->in_timings_ctl & BIT(timing)) {
+		dev_info(slot->host->dev,
+			 "mmc%d: Tuning overided by user settings\n",
+			 host->index);
+		return;
+	}
+
+	dev_dbg(slot->host->dev, "mmc%d: Tuning for mode %s\n",
+		host->index, mmc_modes_name[timing]);
+
+	if (timing == MMC_TIMING_MMC_HS400)
+		ret = tune_hs400(slot);
+	else {
+		ret = cvm_execute_tuning(host, MMC_SEND_EXT_CSD);
+		if (!ret) { /* store tuned timings */
+			u32 taps, cmd_timing, data_timing;
+
+			taps = FIELD_GET(MIO_EMM_TIMING_CMD_IN, slot->taps);
+			cmd_timing = taps * slot->host->per_tap_delay;
+
+			taps = FIELD_GET(MIO_EMM_TIMING_DATA_IN, slot->taps);
+			data_timing = taps * slot->host->per_tap_delay;
+
+			slot->cmd_in_taps_dly[timing] = cmd_timing;
+			slot->data_in_taps_dly[timing] = data_timing;
+		}
+	}
+
+	if (ret)
+		dev_info(slot->host->dev,
+			 "mmc%d: Tuning exited early due to errors (%d), running with default timings",
+			 host->index,
+			 ret);
 }
 
 static void cvm_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
@@ -1910,15 +2004,16 @@ out:
 	host->release_bus(host);
 	if (ios->timing == MMC_TIMING_MMC_HS)
 		check_and_write_hs400_tuning_block(slot);
-	else if (ios->timing == MMC_TIMING_MMC_HS400)
-		tune_hs400(slot);
+
+	cvm_mmc_tune_mode(slot, ios);
 }
 
 static struct adj adj[] = {
-	{ "CMD_IN", MIO_EMM_TIMING_CMD_IN,
-		cvm_mmc_r1_cmd, MMC_SEND_STATUS, },
-	{ "DATA_IN", MIO_EMM_TIMING_DATA_IN,
-		cvm_mmc_data_tuning, },
+	{ "CMD_IN(HS200)", MIO_EMM_TIMING_CMD_IN,
+		cvm_mmc_r1_cmd, MMC_SEND_STATUS, false, true, false, 3, },
+	{ "DATA_IN(HS200)", MIO_EMM_TIMING_DATA_IN,
+		mmc_send_tuning, MMC_SEND_TUNING_BLOCK_HS200,
+		false, true, false, 2 },
 	{ NULL, },
 };
 
@@ -1930,6 +2025,11 @@ static int cvm_scan_tuning(struct mmc_host *mmc, u32 opcode)
 
 	for (a = adj; a->name; a++) {
 		if (a->ddr_only && !cvm_is_mmc_timing_ddr(slot))
+			continue;
+		if (a->hs200_only &&
+		    mmc->ios.timing != MMC_TIMING_MMC_HS200)
+			continue;
+		if (a->non_hs200 && mmc->ios.timing == MMC_TIMING_MMC_HS200)
 			continue;
 
 		ret = adjust_tuning(mmc, a,
@@ -1990,6 +2090,20 @@ static int cvm_execute_tuning(struct mmc_host *mmc, u32 opcode)
 	return ret;
 }
 
+static int cvm_prepare_tuning(struct mmc_host *mmc, u32 opcode)
+{
+	struct cvm_mmc_slot *slot = mmc_priv(mmc);
+
+	if (slot->in_timings_ctl & BIT(mmc->ios.timing)) {
+		dev_info(slot->host->dev,
+			 "mmc%d: Tuning overided by user settings\n",
+			 mmc->index);
+		return 0;
+	}
+
+	return cvm_execute_tuning(mmc, opcode);
+}
+
 static int cvm_prepare_hs400_tuning(struct mmc_host *mmc, struct mmc_ios *ios)
 {
 	struct cvm_mmc_slot *slot = mmc_priv(mmc);
@@ -2021,7 +2135,7 @@ static const struct mmc_host_ops cvm_mmc_ops = {
 	.get_ro		= mmc_gpio_get_ro,
 	.get_cd		= mmc_gpio_get_cd,
 	.hw_reset	= cvm_mmc_reset,
-	.execute_tuning = cvm_execute_tuning,
+	.execute_tuning = cvm_prepare_tuning,
 	.prepare_hs400_tuning = cvm_prepare_hs400_tuning,
 };
 
