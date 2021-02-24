@@ -110,7 +110,6 @@ struct vfio_pci_device {
 	struct list_head	dummy_resources_list;
 	struct mutex		vma_lock;
 	struct list_head	vma_list;
-	struct rw_semaphore	memory_lock;
 	struct vfio_pci_vf_token *vf_token;
 	struct notifier_block	nb;
 };
@@ -148,14 +147,6 @@ extern int vfio_pci_register_dev_region(struct vfio_pci_device *vdev,
 					unsigned int type, unsigned int subtype,
 					const struct vfio_pci_regops *ops,
 					size_t size, u32 flags, void *data);
-
-extern bool __vfio_pci_memory_enabled(struct vfio_pci_device *vdev);
-extern void vfio_pci_zap_and_down_write_memory_lock(struct vfio_pci_device
-						    *vdev);
-extern u16 vfio_pci_memory_lock_and_enable(struct vfio_pci_device *vdev);
-extern void vfio_pci_memory_unlock_and_restore(struct vfio_pci_device *vdev,
-					       u16 cmd);
-
 #ifdef CONFIG_VFIO_PCI_IGD
 extern int vfio_pci_igd_init(struct vfio_pci_device *vdev);
 #else
