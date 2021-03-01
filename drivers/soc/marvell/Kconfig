@@ -207,4 +207,10 @@ config OCTEONTX2_LLC
 	  This driver offers cache management interface for
 	  Marvell's OcteonTX2 LLC cache Lock and Unlock operations.
 
+config HW_CSR_ACCESS
+       tristate "Access HW Device Config Space Registers"
+        default m
+	help
+	  provides an interface which enables user space utility to read from or to write
+	  to HW Device Config Space Registers.
 endmenu

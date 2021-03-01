@@ -10,3 +10,4 @@ obj-$(CONFIG_MDIO_DEBUGFS) += mdio_debugfs.o
 obj-$(CONFIG_OCTEONTX2_PCI_CONSOLE) += otx2-pci-console.o
 obj-y		+= octeontx2-ghes/
 obj-y		+= octeontx2-llc/
+obj-y 		+= csr-access/
