@@ -72,8 +72,11 @@
 };
 
 &cp1_i2c0 {
-	pinctrl-names = "default";
+	pinctrl-names = "default", "gpio";
 	pinctrl-0 = <&cp1_i2c0_pins>;
+	pinctrl-1 = <&cp1_i2c0_gpio_pins>;
+	sda-gpios = <&cp1_gpio2 7 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	scl-gpios = <&cp1_gpio2 6 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 	status = "okay";
 	clock-frequency = <100000>;
 };
@@ -144,6 +147,10 @@
 		cp1_i2c0_pins: cp1-i2c-pins-0 {
 			marvell,pins = "mpp37", "mpp38";
 			marvell,function = "i2c0";
+		};
+		cp1_i2c0_gpio_pins: cp1-i2c0-gpio-pins {
+			marvell,pins = "mpp37", "mpp38";
+			marvell,function = "gpio";
 		};
 		cp1_spi0_pins: cp1-spi-pins-0 {
 			marvell,pins = "mpp13", "mpp14", "mpp15", "mpp16";

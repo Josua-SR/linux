@@ -440,6 +440,16 @@
 						marvell,pins = "mpp11", "mpp19";
 						marvell,function = "uart0";
 					};
+
+					i2c0_pins: i2c0-pins {
+						marvell,pins = "mpp4", "mpp5";
+						marvell,function = "i2c0";
+					};
+
+					i2c0_gpio_pins: i2c0-gpio-pins {
+						marvell,pins = "mpp4", "mpp5";
+						marvell,function = "gpio";
+					};
 				};
 
 				ap_gpio: gpio@1040 {

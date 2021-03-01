@@ -54,8 +54,6 @@
 &cp0_i2c1 {
 	status = "okay";
 	clock-frequency = <100000>;
-	pinctrl-names = "default";
-	pinctrl-0 = <&cp0_i2c1_pins>;
 };
 
 &cp0_sdhci0 {
@@ -87,13 +85,6 @@
 		status = "okay";
 		/* Generic PHY, providing serdes lanes */
 		phys = <&cp0_comphy3 1>;
-	};
-};
-
-&cp0_pinctrl {
-	cp0_i2c1_pins: i2c-pins-1 {
-		marvell,pins = "mpp35", "mpp36";
-		marvell,function = "i2c1";
 	};
 };
 

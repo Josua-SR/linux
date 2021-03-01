@@ -73,6 +73,26 @@
 				       "mpp59", "mpp60", "mpp61", "mpp62";
 			marvell,function = "sdio";
 		};
+
+		cp0_i2c0_pins: cp0-i2c0-pins {
+			marvell,pins = "mpp37", "mpp38";
+			marvell,function = "i2c0";
+		};
+
+		cp0_i2c0_gpio_pins: cp0-i2c0-gpio-pins {
+			marvell,pins = "mpp37", "mpp38";
+			marvell,function = "gpio";
+		};
+
+		cp0_i2c1_pins: cp0-i2c1-pins {
+			marvell,pins = "mpp35", "mpp36";
+			marvell,function = "i2c1";
+		};
+
+		cp0_i2c1_gpio_pins: cp0-i2c1-gpio-pins {
+			marvell,pins = "mpp35", "mpp36";
+			marvell,function = "gpio";
+		};
 	};
 };
 
