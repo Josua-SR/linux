@@ -4,4 +4,4 @@
 # Copyright (C) 2018 Marvell International Ltd.
 #
 # commit id of base tag for this branch
-0b46ce3e3423aee80d28d296e1806176cdcec7ad (tag: v4.14.76) Linux 4.14.76
+8961076ed318dfd22aa357b41589f07bf67e73b6 (tag: v4.14.207) Linux 4.14.207
