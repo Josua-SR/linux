@@ -853,6 +853,36 @@ static int ndc_blk_hits_miss_stats(struct seq_file *s, int idx, int blk_addr)
 	return 0;
 }
 
+static int rvu_dbg_nix_ndc_rx_cache_display(struct seq_file *filp, void *unused)
+{
+	struct nix_hw *nix_hw = filp->private;
+	int blkaddr = 0;
+	int ndc_idx = 0;
+
+	blkaddr = (nix_hw->blkaddr == BLKADDR_NIX1 ?
+		   BLKADDR_NDC_NIX1_RX : BLKADDR_NDC_NIX0_RX);
+	ndc_idx = (nix_hw->blkaddr == BLKADDR_NIX1 ? NIX1_RX : NIX0_RX);
+
+	return ndc_blk_cache_stats(filp, ndc_idx, blkaddr);
+}
+
+RVU_DEBUG_SEQ_FOPS(nix_ndc_rx_cache, nix_ndc_rx_cache_display, NULL);
+
+static int rvu_dbg_nix_ndc_tx_cache_display(struct seq_file *filp, void *unused)
+{
+	struct nix_hw *nix_hw = filp->private;
+	int blkaddr = 0;
+	int ndc_idx = 0;
+
+	blkaddr = (nix_hw->blkaddr == BLKADDR_NIX1 ?
+		   BLKADDR_NDC_NIX1_TX : BLKADDR_NDC_NIX0_TX);
+	ndc_idx = (nix_hw->blkaddr == BLKADDR_NIX1 ? NIX1_TX : NIX0_TX);
+
+	return ndc_blk_cache_stats(filp, ndc_idx, blkaddr);
+}
+
+RVU_DEBUG_SEQ_FOPS(nix_ndc_tx_cache, nix_ndc_tx_cache_display, NULL);
+
 static int rvu_dbg_npa_ndc_hits_miss_display(struct seq_file *filp,
 					     void *unused)
 {
@@ -861,179 +891,35 @@ static int rvu_dbg_npa_ndc_hits_miss_display(struct seq_file *filp,
 
 RVU_DEBUG_SEQ_FOPS(npa_ndc_hits_miss, npa_ndc_hits_miss_display, NULL);
 
-static void rvu_dbg_npa_init(struct rvu *rvu)
+static int rvu_dbg_nix_ndc_rx_hits_miss_display(struct seq_file *filp,
+						void *unused)
 {
-	rvu->rvu_dbg.npa = debugfs_create_dir("npa", rvu->rvu_dbg.root);
+	struct nix_hw *nix_hw = filp->private;
+	int ndc_idx = NPA0_U;
+	int blkaddr = 0;
 
-	debugfs_create_file("qsize", 0600, rvu->rvu_dbg.npa, rvu,
-			    &rvu_dbg_npa_qsize_fops);
-	debugfs_create_file("aura_ctx", 0600, rvu->rvu_dbg.npa, rvu,
-			    &rvu_dbg_npa_aura_ctx_fops);
-	debugfs_create_file("pool_ctx", 0600, rvu->rvu_dbg.npa, rvu,
-			    &rvu_dbg_npa_pool_ctx_fops);
-	debugfs_create_file("ndc_cache", 0600, rvu->rvu_dbg.npa, rvu,
-			    &rvu_dbg_npa_ndc_cache_fops);
-	debugfs_create_file("ndc_hits_miss", 0600, rvu->rvu_dbg.npa, rvu,
-			    &rvu_dbg_npa_ndc_hits_miss_fops);
+	blkaddr = (nix_hw->blkaddr == BLKADDR_NIX1 ?
+		   BLKADDR_NDC_NIX1_RX : BLKADDR_NDC_NIX0_RX);
+
+	return ndc_blk_hits_miss_stats(filp, ndc_idx, blkaddr);
 }
 
-#define PRINT_CGX_CUML_NIXRX_STATUS(idx, name)				\
-	({								\
-		u64 cnt;						\
-		err = rvu_cgx_nix_cuml_stats(rvu, cgxd, lmac_id, (idx),	\
-					     NIX_STATS_RX, &(cnt));	\
-		if (!err)						\
-			seq_printf(s, "%s: %llu\n", name, cnt);		\
-		cnt;							\
-	})
+RVU_DEBUG_SEQ_FOPS(nix_ndc_rx_hits_miss, nix_ndc_rx_hits_miss_display, NULL);
 
-#define PRINT_CGX_CUML_NIXTX_STATUS(idx, name)			\
-	({								\
-		u64 cnt;						\
-		err = rvu_cgx_nix_cuml_stats(rvu, cgxd, lmac_id, (idx),	\
-					  NIX_STATS_TX, &(cnt));	\
-		if (!err)						\
-			seq_printf(s, "%s: %llu\n", name, cnt);		\
-		cnt;							\
-	})
-
-static int cgx_print_stats(struct seq_file *s, int lmac_id)
+static int rvu_dbg_nix_ndc_tx_hits_miss_display(struct seq_file *filp,
+						void *unused)
 {
-	struct cgx_link_user_info linfo;
-	void *cgxd = s->private;
-	u64 ucast, mcast, bcast;
-	int stat = 0, err = 0;
-	u64 tx_stat, rx_stat;
-	struct rvu *rvu;
+	struct nix_hw *nix_hw = filp->private;
+	int ndc_idx = NPA0_U;
+	int blkaddr = 0;
 
-	rvu = pci_get_drvdata(pci_get_device(PCI_VENDOR_ID_CAVIUM,
-					     PCI_DEVID_OCTEONTX2_RVU_AF, NULL));
-	if (!rvu)
-		return -ENODEV;
+	blkaddr = (nix_hw->blkaddr == BLKADDR_NIX1 ?
+		   BLKADDR_NDC_NIX1_TX : BLKADDR_NDC_NIX0_TX);
 
-	/* Link status */
-	seq_puts(s, "\n=======Link Status======\n\n");
-	err = cgx_get_link_info(cgxd, lmac_id, &linfo);
-	if (err)
-		seq_puts(s, "Failed to read link status\n");
-	seq_printf(s, "\nLink is %s %d Mbps\n\n",
-		   linfo.link_up ? "UP" : "DOWN", linfo.speed);
-
-	/* Rx stats */
-	seq_puts(s, "\n=======NIX RX_STATS(CGX port level)======\n\n");
-	ucast = PRINT_CGX_CUML_NIXRX_STATUS(RX_UCAST, "rx_ucast_frames");
-	if (err)
-		return err;
-	mcast = PRINT_CGX_CUML_NIXRX_STATUS(RX_MCAST, "rx_mcast_frames");
-	if (err)
-		return err;
-	bcast = PRINT_CGX_CUML_NIXRX_STATUS(RX_BCAST, "rx_bcast_frames");
-	if (err)
-		return err;
-	seq_printf(s, "rx_frames: %llu\n", ucast + mcast + bcast);
-	PRINT_CGX_CUML_NIXRX_STATUS(RX_OCTS, "rx_bytes");
-	if (err)
-		return err;
-	PRINT_CGX_CUML_NIXRX_STATUS(RX_DROP, "rx_drops");
-	if (err)
-		return err;
-	PRINT_CGX_CUML_NIXRX_STATUS(RX_ERR, "rx_errors");
-	if (err)
-		return err;
-
-	/* Tx stats */
-	seq_puts(s, "\n=======NIX TX_STATS(CGX port level)======\n\n");
-	ucast = PRINT_CGX_CUML_NIXTX_STATUS(TX_UCAST, "tx_ucast_frames");
-	if (err)
-		return err;
-	mcast = PRINT_CGX_CUML_NIXTX_STATUS(TX_MCAST, "tx_mcast_frames");
-	if (err)
-		return err;
-	bcast = PRINT_CGX_CUML_NIXTX_STATUS(TX_BCAST, "tx_bcast_frames");
-	if (err)
-		return err;
-	seq_printf(s, "tx_frames: %llu\n", ucast + mcast + bcast);
-	PRINT_CGX_CUML_NIXTX_STATUS(TX_OCTS, "tx_bytes");
-	if (err)
-		return err;
-	PRINT_CGX_CUML_NIXTX_STATUS(TX_DROP, "tx_drops");
-	if (err)
-		return err;
-
-	/* Rx stats */
-	seq_puts(s, "\n=======CGX RX_STATS======\n\n");
-	while (stat < CGX_RX_STATS_COUNT) {
-		err = cgx_get_rx_stats(cgxd, lmac_id, stat, &rx_stat);
-		if (err)
-			return err;
-		seq_printf(s, "%s: %llu\n", cgx_rx_stats_fields[stat], rx_stat);
-		stat++;
-	}
-
-	/* Tx stats */
-	stat = 0;
-	seq_puts(s, "\n=======CGX TX_STATS======\n\n");
-	while (stat < CGX_TX_STATS_COUNT) {
-		err = cgx_get_tx_stats(cgxd, lmac_id, stat, &tx_stat);
-		if (err)
-			return err;
-		seq_printf(s, "%s: %llu\n", cgx_tx_stats_fields[stat], tx_stat);
-		stat++;
-	}
-
-	return err;
+	return ndc_blk_hits_miss_stats(filp, ndc_idx, blkaddr);
 }
 
-static int rvu_dbg_cgx_stat_display(struct seq_file *filp, void *unused)
-{
-	struct dentry *current_dir;
-	int err, lmac_id;
-	char *buf;
-
-	current_dir = filp->file->f_path.dentry->d_parent;
-	buf = strrchr(current_dir->d_name.name, 'c');
-	if (!buf)
-		return -EINVAL;
-
-	err = kstrtoint(buf + 1, 10, &lmac_id);
-	if (!err) {
-		err = cgx_print_stats(filp, lmac_id);
-		if (err)
-			return err;
-	}
-	return err;
-}
-
-RVU_DEBUG_SEQ_FOPS(cgx_stat, cgx_stat_display, NULL);
-
-static void rvu_dbg_cgx_init(struct rvu *rvu)
-{
-	int i, lmac_id;
-	char dname[20];
-	void *cgx;
-
-	rvu->rvu_dbg.cgx_root = debugfs_create_dir("cgx", rvu->rvu_dbg.root);
-
-	for (i = 0; i < cgx_get_cgxcnt_max(); i++) {
-		cgx = rvu_cgx_pdata(i, rvu);
-		if (!cgx)
-			continue;
-		/* cgx debugfs dir */
-		sprintf(dname, "cgx%d", i);
-		rvu->rvu_dbg.cgx = debugfs_create_dir(dname,
-						      rvu->rvu_dbg.cgx_root);
-		for (lmac_id = 0; lmac_id < cgx_get_lmac_cnt(cgx); lmac_id++) {
-			/* lmac debugfs dir */
-			sprintf(dname, "lmac%d", lmac_id);
-			rvu->rvu_dbg.lmac =
-				debugfs_create_dir(dname, rvu->rvu_dbg.cgx);
-
-			debugfs_create_file("stats", 0600, rvu->rvu_dbg.lmac,
-					    cgx, &rvu_dbg_cgx_stat_fops);
-		}
-	}
-	return;
-}
+RVU_DEBUG_SEQ_FOPS(nix_ndc_tx_hits_miss, nix_ndc_tx_hits_miss_display, NULL);
 
 /* Dumps given nix_sq's context */
 static void print_nix_sq_ctx(struct seq_file *m, struct nix_aq_enq_rsp *rsp)
@@ -1102,7 +988,7 @@ static void print_nix_sq_ctx(struct seq_file *m, struct nix_aq_enq_rsp *rsp)
 /* Dumps given nix_rq's context */
 static void print_nix_rq_ctx(struct seq_file *m, struct nix_aq_enq_rsp *rsp)
 {
-	struct  nix_rq_ctx_s *rq_ctx = &rsp->rq;
+	struct nix_rq_ctx_s *rq_ctx = &rsp->rq;
 
 	seq_printf(m, "W0: wqe_aura \t\t\t%d\nW0: substream \t\t\t0x%03x\n",
 		   rq_ctx->wqe_aura, rq_ctx->substream);
@@ -1164,7 +1050,7 @@ static void print_nix_rq_ctx(struct seq_file *m, struct nix_aq_enq_rsp *rsp)
 /* Dumps given nix_cq's context */
 static void print_nix_cq_ctx(struct seq_file *m, struct nix_aq_enq_rsp *rsp)
 {
-	struct  nix_cq_ctx_s *cq_ctx = &rsp->cq;
+	struct nix_cq_ctx_s *cq_ctx = &rsp->cq;
 
 	seq_printf(m, "W0: base \t\t\t%llx\n\n", cq_ctx->base);
 
@@ -1382,7 +1268,8 @@ static ssize_t rvu_dbg_nix_queue_ctx_write(struct file *filp,
 	ret = parse_cmd_buffer_ctx(cmd_buf, &count, buffer,
 				   &nixlf, &id, &all);
 	if (ret < 0) {
-		dev_info(rvu->dev, "Usage: echo <nixlf> [%s number/all] > %s_ctx\n",
+		dev_info(rvu->dev,
+			 "Usage: echo <nixlf> [%s number/all] > %s_ctx\n",
 			 ctype_string, ctype_string);
 		goto done;
 	} else {
@@ -1438,66 +1325,6 @@ static int rvu_dbg_nix_cq_ctx_display(struct seq_file *filp, void *unused)
 }
 
 RVU_DEBUG_SEQ_FOPS(nix_cq_ctx, nix_cq_ctx_display, nix_cq_ctx_write);
-
-static int rvu_dbg_nix_ndc_rx_cache_display(struct seq_file *filp, void *unused)
-{
-	struct nix_hw *nix_hw = filp->private;
-	int blkaddr = 0;
-	int ndc_idx = 0;
-
-	blkaddr = (nix_hw->blkaddr == BLKADDR_NIX1 ?
-		   BLKADDR_NDC_NIX1_RX : BLKADDR_NDC_NIX0_RX);
-	ndc_idx = (nix_hw->blkaddr == BLKADDR_NIX1 ? NIX1_RX : NIX0_RX);
-
-	return ndc_blk_cache_stats(filp, ndc_idx, blkaddr);
-}
-
-RVU_DEBUG_SEQ_FOPS(nix_ndc_rx_cache, nix_ndc_rx_cache_display, NULL);
-
-static int rvu_dbg_nix_ndc_tx_cache_display(struct seq_file *filp, void *unused)
-{
-	struct nix_hw *nix_hw = filp->private;
-	int blkaddr = 0;
-	int ndc_idx = 0;
-
-	blkaddr = (nix_hw->blkaddr == BLKADDR_NIX1 ?
-		   BLKADDR_NDC_NIX1_TX : BLKADDR_NDC_NIX0_TX);
-	ndc_idx = (nix_hw->blkaddr == BLKADDR_NIX1 ? NIX1_TX : NIX0_TX);
-
-	return ndc_blk_cache_stats(filp, ndc_idx, blkaddr);
-}
-
-RVU_DEBUG_SEQ_FOPS(nix_ndc_tx_cache, nix_ndc_tx_cache_display, NULL);
-
-static int rvu_dbg_nix_ndc_rx_hits_miss_display(struct seq_file *filp,
-						void *unused)
-{
-	struct nix_hw *nix_hw = filp->private;
-	int ndc_idx = NPA0_U;
-	int blkaddr = 0;
-
-	blkaddr = (nix_hw->blkaddr == BLKADDR_NIX1 ?
-		   BLKADDR_NDC_NIX1_RX : BLKADDR_NDC_NIX0_RX);
-
-	return ndc_blk_hits_miss_stats(filp, ndc_idx, blkaddr);
-}
-
-RVU_DEBUG_SEQ_FOPS(nix_ndc_rx_hits_miss, nix_ndc_rx_hits_miss_display, NULL);
-
-static int rvu_dbg_nix_ndc_tx_hits_miss_display(struct seq_file *filp,
-						void *unused)
-{
-	struct nix_hw *nix_hw = filp->private;
-	int ndc_idx = NPA0_U;
-	int blkaddr = 0;
-
-	blkaddr = (nix_hw->blkaddr == BLKADDR_NIX1 ?
-		   BLKADDR_NDC_NIX1_TX : BLKADDR_NDC_NIX0_TX);
-
-	return ndc_blk_hits_miss_stats(filp, ndc_idx, blkaddr);
-}
-
-RVU_DEBUG_SEQ_FOPS(nix_ndc_tx_hits_miss, nix_ndc_tx_hits_miss_display, NULL);
 
 static ssize_t rvu_dbg_nix_tx_stall_hwissue_display(struct file *filp,
 						    char __user *buffer,
@@ -1596,6 +1423,179 @@ static void rvu_dbg_nix_init(struct rvu *rvu, int blkaddr)
 		debugfs_create_file("tx_stall_hwissue", 0600,
 				    rvu->rvu_dbg.nix, nix_hw,
 				    &rvu_dbg_nix_tx_stall_hwissue_fops);
+	}
+}
+
+static void rvu_dbg_npa_init(struct rvu *rvu)
+{
+	rvu->rvu_dbg.npa = debugfs_create_dir("npa", rvu->rvu_dbg.root);
+
+	debugfs_create_file("qsize", 0600, rvu->rvu_dbg.npa, rvu,
+			    &rvu_dbg_npa_qsize_fops);
+	debugfs_create_file("aura_ctx", 0600, rvu->rvu_dbg.npa, rvu,
+			    &rvu_dbg_npa_aura_ctx_fops);
+	debugfs_create_file("pool_ctx", 0600, rvu->rvu_dbg.npa, rvu,
+			    &rvu_dbg_npa_pool_ctx_fops);
+	debugfs_create_file("ndc_cache", 0600, rvu->rvu_dbg.npa, rvu,
+			    &rvu_dbg_npa_ndc_cache_fops);
+	debugfs_create_file("ndc_hits_miss", 0600, rvu->rvu_dbg.npa, rvu,
+			    &rvu_dbg_npa_ndc_hits_miss_fops);
+}
+
+#define PRINT_CGX_CUML_NIXRX_STATUS(idx, name)				\
+	({								\
+		u64 cnt;						\
+		err = rvu_cgx_nix_cuml_stats(rvu, cgxd, lmac_id, (idx),	\
+					     NIX_STATS_RX, &(cnt));	\
+		if (!err)						\
+			seq_printf(s, "%s: %llu\n", name, cnt);		\
+		cnt;							\
+	})
+
+#define PRINT_CGX_CUML_NIXTX_STATUS(idx, name)			\
+	({								\
+		u64 cnt;						\
+		err = rvu_cgx_nix_cuml_stats(rvu, cgxd, lmac_id, (idx),	\
+					  NIX_STATS_TX, &(cnt));	\
+		if (!err)						\
+			seq_printf(s, "%s: %llu\n", name, cnt);		\
+		cnt;							\
+	})
+
+static int cgx_print_stats(struct seq_file *s, int lmac_id)
+{
+	struct cgx_link_user_info linfo;
+	void *cgxd = s->private;
+	u64 ucast, mcast, bcast;
+	int stat = 0, err = 0;
+	u64 tx_stat, rx_stat;
+	struct rvu *rvu;
+
+	rvu = pci_get_drvdata(pci_get_device(PCI_VENDOR_ID_CAVIUM,
+					     PCI_DEVID_OCTEONTX2_RVU_AF, NULL));
+	if (!rvu)
+		return -ENODEV;
+
+	/* Link status */
+	seq_puts(s, "\n=======Link Status======\n\n");
+	err = cgx_get_link_info(cgxd, lmac_id, &linfo);
+	if (err)
+		seq_puts(s, "Failed to read link status\n");
+	seq_printf(s, "\nLink is %s %d Mbps\n\n",
+		   linfo.link_up ? "UP" : "DOWN", linfo.speed);
+
+	/* Rx stats */
+	seq_puts(s, "\n=======NIX RX_STATS(CGX port level)======\n\n");
+	ucast = PRINT_CGX_CUML_NIXRX_STATUS(RX_UCAST, "rx_ucast_frames");
+	if (err)
+		return err;
+	mcast = PRINT_CGX_CUML_NIXRX_STATUS(RX_MCAST, "rx_mcast_frames");
+	if (err)
+		return err;
+	bcast = PRINT_CGX_CUML_NIXRX_STATUS(RX_BCAST, "rx_bcast_frames");
+	if (err)
+		return err;
+	seq_printf(s, "rx_frames: %llu\n", ucast + mcast + bcast);
+	PRINT_CGX_CUML_NIXRX_STATUS(RX_OCTS, "rx_bytes");
+	if (err)
+		return err;
+	PRINT_CGX_CUML_NIXRX_STATUS(RX_DROP, "rx_drops");
+	if (err)
+		return err;
+	PRINT_CGX_CUML_NIXRX_STATUS(RX_ERR, "rx_errors");
+	if (err)
+		return err;
+
+	/* Tx stats */
+	seq_puts(s, "\n=======NIX TX_STATS(CGX port level)======\n\n");
+	ucast = PRINT_CGX_CUML_NIXTX_STATUS(TX_UCAST, "tx_ucast_frames");
+	if (err)
+		return err;
+	mcast = PRINT_CGX_CUML_NIXTX_STATUS(TX_MCAST, "tx_mcast_frames");
+	if (err)
+		return err;
+	bcast = PRINT_CGX_CUML_NIXTX_STATUS(TX_BCAST, "tx_bcast_frames");
+	if (err)
+		return err;
+	seq_printf(s, "tx_frames: %llu\n", ucast + mcast + bcast);
+	PRINT_CGX_CUML_NIXTX_STATUS(TX_OCTS, "tx_bytes");
+	if (err)
+		return err;
+	PRINT_CGX_CUML_NIXTX_STATUS(TX_DROP, "tx_drops");
+	if (err)
+		return err;
+
+	/* Rx stats */
+	seq_puts(s, "\n=======CGX RX_STATS======\n\n");
+	while (stat < CGX_RX_STATS_COUNT) {
+		err = cgx_get_rx_stats(cgxd, lmac_id, stat, &rx_stat);
+		if (err)
+			return err;
+		seq_printf(s, "%s: %llu\n", cgx_rx_stats_fields[stat], rx_stat);
+		stat++;
+	}
+
+	/* Tx stats */
+	stat = 0;
+	seq_puts(s, "\n=======CGX TX_STATS======\n\n");
+	while (stat < CGX_TX_STATS_COUNT) {
+		err = cgx_get_tx_stats(cgxd, lmac_id, stat, &tx_stat);
+		if (err)
+			return err;
+		seq_printf(s, "%s: %llu\n", cgx_tx_stats_fields[stat], tx_stat);
+		stat++;
+	}
+
+	return err;
+}
+
+static int rvu_dbg_cgx_stat_display(struct seq_file *filp, void *unused)
+{
+	struct dentry *current_dir;
+	int err, lmac_id;
+	char *buf;
+
+	current_dir = filp->file->f_path.dentry->d_parent;
+	buf = strrchr(current_dir->d_name.name, 'c');
+	if (!buf)
+		return -EINVAL;
+
+	err = kstrtoint(buf + 1, 10, &lmac_id);
+	if (!err) {
+		err = cgx_print_stats(filp, lmac_id);
+		if (err)
+			return err;
+	}
+	return err;
+}
+
+RVU_DEBUG_SEQ_FOPS(cgx_stat, cgx_stat_display, NULL);
+
+static void rvu_dbg_cgx_init(struct rvu *rvu)
+{
+	int i, lmac_id;
+	char dname[20];
+	void *cgx;
+
+	rvu->rvu_dbg.cgx_root = debugfs_create_dir("cgx", rvu->rvu_dbg.root);
+
+	for (i = 0; i < cgx_get_cgxcnt_max(); i++) {
+		cgx = rvu_cgx_pdata(i, rvu);
+		if (!cgx)
+			continue;
+		/* cgx debugfs dir */
+		sprintf(dname, "cgx%d", i);
+		rvu->rvu_dbg.cgx = debugfs_create_dir(dname,
+						      rvu->rvu_dbg.cgx_root);
+		for (lmac_id = 0; lmac_id < cgx_get_lmac_cnt(cgx); lmac_id++) {
+			/* lmac debugfs dir */
+			sprintf(dname, "lmac%d", lmac_id);
+			rvu->rvu_dbg.lmac =
+				debugfs_create_dir(dname, rvu->rvu_dbg.cgx);
+
+			debugfs_create_file("stats", 0600, rvu->rvu_dbg.lmac,
+					    cgx, &rvu_dbg_cgx_stat_fops);
+		}
 	}
 }
 
@@ -2946,4 +2946,5 @@ void rvu_dbg_exit(struct rvu *rvu)
 {
 	debugfs_remove_recursive(rvu->rvu_dbg.root);
 }
+
 #endif /* CONFIG_DEBUG_FS */
