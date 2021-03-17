@@ -1269,7 +1269,7 @@ int phylink_ethtool_set_pauseparam(struct phylink *pl,
 	    !pause->autoneg && pause->rx_pause != pause->tx_pause)
 		return -EINVAL;
 
-	config->pause &= ~(MLO_PAUSE_AN | MLO_PAUSE_TXRX_MASK);
+	config->pause &= ~(MLO_PAUSE_AN | MLO_PAUSE_TXRX_MASK | MLO_PAUSE_SYM | MLO_PAUSE_ASYM);
 
 	if (pause->autoneg)
 		config->pause |= MLO_PAUSE_AN;
@@ -1283,9 +1283,12 @@ int phylink_ethtool_set_pauseparam(struct phylink *pl,
 		phylink_clear(config->advertising, Asym_Pause);
 		if (pause->rx_pause && pause->tx_pause) {
 			phylink_set(config->advertising, Pause);
+			config->pause |= MLO_PAUSE_SYM;
 		} else if (pause->tx_pause) {
 			phylink_set(config->advertising, Asym_Pause);
+			config->pause |= MLO_PAUSE_ASYM;
 		} else if (pause->rx_pause) {
+			config->pause |= (MLO_PAUSE_SYM | MLO_PAUSE_ASYM);
 			phylink_set(config->advertising, Pause);
 			phylink_set(config->advertising, Asym_Pause);
 		}
