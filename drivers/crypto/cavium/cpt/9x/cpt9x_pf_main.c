@@ -15,34 +15,57 @@
 #define DRV_NAME	"octeontx2-cpt"
 #define DRV_VERSION	"1.0"
 
-static void cptpf_enable_vf_flr_intrs(struct cptpf_dev *cptpf)
+static void cptpf_enable_vf_flr_me_intrs(struct cptpf_dev *cptpf)
 {
-	/* Clear interrupt if any */
-	cpt_write64(cptpf->reg_base, BLKADDR_RVUM, 0, RVU_PF_VFFLR_INTX(0),
-		    ~0x0ULL);
-	cpt_write64(cptpf->reg_base, BLKADDR_RVUM, 0, RVU_PF_VFFLR_INTX(1),
-		    ~0x0ULL);
+	int vfs = cptpf->max_vfs;
 
+	/* Clear FLR interrupt if any */
+	cpt_write64(cptpf->reg_base, BLKADDR_RVUM, 0, RVU_PF_VFFLR_INTX(0),
+		    INTR_MASK(vfs));
 	/* Enable VF FLR interrupts */
 	cpt_write64(cptpf->reg_base, BLKADDR_RVUM, 0,
-		    RVU_PF_VFFLR_INT_ENA_W1SX(0), ~0x0ULL);
+		    RVU_PF_VFFLR_INT_ENA_W1SX(0), INTR_MASK(vfs));
+
+	/* Clear ME interrupt if any */
+	cpt_write64(cptpf->reg_base, BLKADDR_RVUM, 0, RVU_PF_VFME_INTX(0),
+		    INTR_MASK(vfs));
+	/* Enable VF ME interrupts */
 	cpt_write64(cptpf->reg_base, BLKADDR_RVUM, 0,
-		    RVU_PF_VFFLR_INT_ENA_W1SX(1), ~0x0ULL);
+		    RVU_PF_VFME_INT_ENA_W1SX(0), INTR_MASK(vfs));
+
+	if (vfs <= 64)
+		return;
+
+	cpt_write64(cptpf->reg_base, BLKADDR_RVUM, 0, RVU_PF_VFFLR_INTX(1),
+		    INTR_MASK(vfs - 64));
+	cpt_write64(cptpf->reg_base, BLKADDR_RVUM, 0,
+		    RVU_PF_VFFLR_INT_ENA_W1SX(1), INTR_MASK(vfs - 64));
+
+	cpt_write64(cptpf->reg_base, BLKADDR_RVUM, 0, RVU_PF_VFME_INTX(1),
+		    INTR_MASK(vfs - 64));
+	cpt_write64(cptpf->reg_base, BLKADDR_RVUM, 0,
+		    RVU_PF_VFME_INT_ENA_W1SX(1), INTR_MASK(vfs - 64));
 }
 
-static void cptpf_disable_vf_flr_intrs(struct cptpf_dev *cptpf)
+static void cptpf_disable_vf_flr_me_intrs(struct cptpf_dev *cptpf)
 {
+	int vfs = cptpf->max_vfs;
+
 	/* Disable VF FLR interrupts */
 	cpt_write64(cptpf->reg_base, BLKADDR_RVUM, 0,
-		    RVU_PF_VFFLR_INT_ENA_W1CX(0), ~0x0ULL);
+		    RVU_PF_VFFLR_INT_ENA_W1CX(0), INTR_MASK(vfs));
+	/* Disable VF ME interrupts */
 	cpt_write64(cptpf->reg_base, BLKADDR_RVUM, 0,
-		    RVU_PF_VFFLR_INT_ENA_W1CX(1), ~0x0ULL);
+		    RVU_PF_VFME_INT_ENA_W1CX(0), INTR_MASK(vfs));
 
-	/* Clear interrupt if any */
-	cpt_write64(cptpf->reg_base, BLKADDR_RVUM, 0, RVU_PF_VFFLR_INTX(0),
-		    ~0x0ULL);
-	cpt_write64(cptpf->reg_base, BLKADDR_RVUM, 0, RVU_PF_VFFLR_INTX(1),
-		    ~0x0ULL);
+	if (vfs <= 64)
+		return;
+
+	cpt_write64(cptpf->reg_base, BLKADDR_RVUM, 0,
+		    RVU_PF_VFFLR_INT_ENA_W1CX(1), INTR_MASK(vfs - 64));
+
+	cpt_write64(cptpf->reg_base, BLKADDR_RVUM, 0,
+		    RVU_PF_VFME_INT_ENA_W1CX(1), INTR_MASK(vfs - 64));
 }
 
 static void cptpf_enable_afpf_mbox_intrs(struct cptpf_dev *cptpf)
@@ -176,6 +199,33 @@ static irqreturn_t cptpf_vf_flr_intr(int __always_unused irq, void *arg)
 	return IRQ_HANDLED;
 }
 
+static irqreturn_t cptpf_vf_me_intr(int __always_unused irq, void *arg)
+{
+	struct cptpf_dev *cptpf = arg;
+	int reg, vf, num_reg = 1;
+	u64 intr;
+
+	if (cptpf->max_vfs > 64)
+		num_reg = 2;
+
+	for (reg = 0; reg < num_reg; reg++) {
+		intr = cpt_read64(cptpf->reg_base, BLKADDR_RVUM, 0,
+				  RVU_PF_VFME_INTX(reg));
+		if (!intr)
+			continue;
+		for (vf = 0; vf < 64; vf++) {
+			if (!(intr & BIT_ULL(vf)))
+				continue;
+			cpt_write64(cptpf->reg_base, BLKADDR_RVUM, 0,
+				    RVU_PF_VFTRPENDX(reg), BIT_ULL(vf));
+			/* Clear interrupt */
+			cpt_write64(cptpf->reg_base, BLKADDR_RVUM, 0,
+				    RVU_PF_VFME_INTX(reg), BIT_ULL(vf));
+		}
+	}
+	return IRQ_HANDLED;
+}
+
 static void cptpf_unregister_interrupts(struct cptpf_dev *cptpf)
 {
 	int i;
@@ -219,6 +269,21 @@ static int cptpf_register_interrupts(struct cptpf_dev *cptpf)
 	if (ret)
 		goto err;
 	cptpf->irq_registered[RVU_PF_INT_VEC_VFFLR1] = true;
+
+	/* Register VF ME interrupt handler */
+	ret = request_irq(pci_irq_vector(cptpf->pdev,
+			  RVU_PF_INT_VEC_VFME0), cptpf_vf_me_intr, 0,
+			  "CPTPF ME0", cptpf);
+	if (ret)
+		goto err;
+	cptpf->irq_registered[RVU_PF_INT_VEC_VFME0] = true;
+
+	ret = request_irq(pci_irq_vector(cptpf->pdev,
+			  RVU_PF_INT_VEC_VFME1), cptpf_vf_me_intr, 0,
+			  "CPTPF ME1", cptpf);
+	if (ret)
+		goto err;
+	cptpf->irq_registered[RVU_PF_INT_VEC_VFME1] = true;
 
 	/* Register AF-PF mailbox interrupt handler */
 	ret = request_irq(pci_irq_vector(cptpf->pdev,
@@ -783,7 +848,7 @@ static int cptpf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto destroy_flr;
 
 	/* Enable VF FLR interrupts */
-	cptpf_enable_vf_flr_intrs(cptpf);
+	cptpf_enable_vf_flr_me_intrs(cptpf);
 
 	/* Enable AF-PF mailbox interrupts */
 	cptpf_enable_afpf_mbox_intrs(cptpf);
@@ -822,7 +887,7 @@ cpt_err_cleanup_eng_grps:
 cpt_err_unregister_interrupts:
 	cptpf_disable_vfpf_mbox_intrs(cptpf);
 	cptpf_disable_afpf_mbox_intrs(cptpf);
-	cptpf_disable_vf_flr_intrs(cptpf);
+	cptpf_disable_vf_flr_me_intrs(cptpf);
 	cptpf_unregister_interrupts(cptpf);
 destroy_flr:
 	cptpf_flr_wq_destroy(cptpf);
@@ -861,7 +926,7 @@ static void cptpf_remove(struct pci_dev *pdev)
 	/* Disable AF-PF mailbox interrupt */
 	cptpf_disable_afpf_mbox_intrs(cptpf);
 	/* Disable VF FLR interrupts */
-	cptpf_disable_vf_flr_intrs(cptpf);
+	cptpf_disable_vf_flr_me_intrs(cptpf);
 	/* Unregister CPT interrupts */
 	cptpf_unregister_interrupts(cptpf);
 	/* Destroy FLR work queue */
