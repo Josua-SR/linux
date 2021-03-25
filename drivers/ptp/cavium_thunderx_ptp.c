@@ -191,7 +191,7 @@ static void thunder_ptp_remove(struct pci_dev *pdev)
 
 /* Supported devices */
 static const struct pci_device_id thunder_ptp_id_table[] = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_THUNDER_PTP) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_CAVIUM, 0xFFF0) },
 	{ 0, }  /* end of table */
 };
 
