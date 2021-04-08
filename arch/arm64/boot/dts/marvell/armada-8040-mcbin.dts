@@ -418,7 +418,7 @@
 	status = "okay";
 	/* Generic PHY, providing serdes lanes */
 	phys = <&cp1_utmi1>, <&cp1_comphy2 0>;
-	phy-names = "usb2", "usb3";
+	phy-names = "usb", "usb3";
 };
 
 &cp0_crypto {

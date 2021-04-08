@@ -98,8 +98,8 @@
 };
 
 &cp0_usb3_0 {
-	phys = <&cp0_utmi0>, <&cp0_comphy1 1>;
-	phy-names = "usb2", "usb3";
+	phys = <&cp0_utmi0>, <&cp0_comphy1 0>;
+	phy-names = "usb", "usb3";
 	status = "okay";
 };
 
@@ -109,7 +109,7 @@
 
 &cp0_usb3_1 {
 	phys = <&cp0_utmi1>, <&cp0_comphy4 1>;
-	phy-names = "usb2", "usb3";
+	phy-names = "usb", "usb3";
 	status = "okay";
 };
 
