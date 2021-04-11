@@ -8,6 +8,7 @@
  */
 #define MODULE_NAME "armada-pcie-ep"
 
+#include <linux/armada-pcie-ep.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
@@ -21,7 +22,6 @@
 #include <linux/resource.h>
 #include <linux/of_pci.h>
 #include <linux/of_irq.h>
-#include <linux/pcie-ep.h>
 #include <uapi/linux/pci_regs.h>
 #include <linux/memory.h>
 

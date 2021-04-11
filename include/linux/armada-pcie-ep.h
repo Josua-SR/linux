@@ -3,8 +3,8 @@
  * Armada PCIe EP
  * Copyright (c) 2019, Marvell Semiconductor.
  */
-#ifndef _PCIE_EP_
-#define _PCIE_EP_
+#ifndef _ARMADA_PCIE_EP_
+#define _ARMADA_PCIE_EP_
 
 #include <linux/msi.h>
 
@@ -51,4 +51,4 @@ void armada_pcie_ep_write_header(void *ep, int func_id,
 				struct pci_epf_header *hdr);
 void *armada_pcie_ep_get(void);
 
-#endif
+#endif /* _ARMADA_PCIE_EP_ */

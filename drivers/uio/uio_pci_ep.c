@@ -9,6 +9,7 @@
  * in the future it will use the standard PCI EP stack
  */
 
+#include <linux/armada-pcie-ep.h>
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/string.h>
@@ -17,7 +18,6 @@
 #include <linux/uio_driver.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
-#include <linux/pcie-ep.h>
 #include <linux/pci_ids.h>
 #include <linux/pci_regs.h>
 #include <linux/mm.h>
