@@ -241,9 +241,7 @@ static int check_attach_rsrcs_req(struct cptpf_dev *cptpf,
 
 	mutex_lock(&cptpf->vf_limits.lock);
 
-	if (rsrc_req->sso > 0 || rsrc_req->ssow > 0 || rsrc_req->npalf > 0 ||
-	    rsrc_req->timlfs > 0 || rsrc_req->nixlf > 0 ||
-	    rsrc_req->cptlfs > cptpf->vf_limits.cpt->a[vf->vf_id].val) {
+	if (rsrc_req->cptlfs > cptpf->vf_limits.cpt->a[vf->vf_id].val) {
 		dev_err(&cptpf->pdev->dev,
 			"Invalid ATTACH_RESOURCES request from %s\n",
 			dev_name(&vf->vf_dev->dev));
