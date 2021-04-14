@@ -1508,7 +1508,11 @@ int genphy_read_status(struct phy_device *phydev)
 	 * one.
 	 */
 
-	if (phydev->interface == PHY_INTERFACE_MODE_2500BASEX) {
+	if (phydev->interface == PHY_INTERFACE_MODE_10GKR) {
+		phydev->speed = SPEED_10000;
+		phydev->duplex = DUPLEX_FULL;
+		phydev->link = 1;
+	} else if (phydev->interface == PHY_INTERFACE_MODE_2500BASEX) {
 		phydev->speed = SPEED_2500;
 		phydev->duplex = DUPLEX_FULL;
 		phydev->link = 1;
@@ -1628,7 +1632,9 @@ int genphy_config_init(struct phy_device *phydev)
 	 * one.
 	 */
 
-	if (phydev->interface == PHY_INTERFACE_MODE_2500BASEX) {
+	if (phydev->interface == PHY_INTERFACE_MODE_10GKR) {
+		features |= SUPPORTED_10000baseKR_Full;
+	} else if (phydev->interface == PHY_INTERFACE_MODE_2500BASEX) {
 		features |= SUPPORTED_2500baseX_Full;
 	} else {
 		/* Do we support autonegotiation? */
