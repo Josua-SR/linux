@@ -51,6 +51,8 @@
 #define MV88E6390_PORT_MAC_CTL_FORCE_SPEED		0x2000
 #define MV88E6390_PORT_MAC_CTL_ALTSPEED			0x1000
 #define MV88E6352_PORT_MAC_CTL_200BASE			0x1000
+#define MV88E6XXX_PORT_MAC_CTL_EEEVALUE			0x0200
+#define MV88E6XXX_PORT_MAC_CTL_FORCEEEE			0x0100
 #define MV88E6XXX_PORT_MAC_CTL_FC			0x0080
 #define MV88E6XXX_PORT_MAC_CTL_FORCE_FC			0x0040
 #define MV88E6XXX_PORT_MAC_CTL_LINK_UP			0x0020
@@ -317,5 +319,5 @@ int mv88e6095_port_set_upstream_port(struct mv88e6xxx_chip *chip, int port,
 				     int upstream_port);
 int mv88e6xxx_port_disable_learn_limit(struct mv88e6xxx_chip *chip, int port);
 int mv88e6xxx_port_disable_pri_override(struct mv88e6xxx_chip *chip, int port);
-
+int mv88e6393x_port_set_eee(struct mv88e6xxx_chip *chip, int port, bool enable);
 #endif /* _MV88E6XXX_PORT_H */

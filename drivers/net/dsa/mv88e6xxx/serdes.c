@@ -156,6 +156,8 @@ static int mv88e6390_serdes_lower(struct mv88e6xxx_chip *chip, u8 cmode,
 static int mv88e6390_serdes_port9(struct mv88e6xxx_chip *chip, u8 cmode,
 				  bool on)
 {
+	int err = 0;
+
 	switch (cmode) {
 	case MV88E6XXX_PORT_STS_CMODE_1000BASE_X:
 	case MV88E6XXX_PORT_STS_CMODE_SGMII:
@@ -163,15 +165,31 @@ static int mv88e6390_serdes_port9(struct mv88e6xxx_chip *chip, u8 cmode,
 	case MV88E6XXX_PORT_STS_CMODE_XAUI:
 	case MV88E6XXX_PORT_STS_CMODE_RXAUI:
 	case MV88E6XXX_PORT_STS_CMODE_2500BASEX:
-		return mv88e6390_serdes_10g(chip, MV88E6390_PORT9_LANE0, on);
-	}
+		/* In all SerDes opeartion EEE is disabled, it does not save
+		 * power and can cause anomalies. Its enabled on the copper
+		 * ports only. To disable it, it's recommneded to first turn
+		 * off the serdes, configure EEE and power on serdes.
+		 */
+		if (on) {
+			/* Make sure serdes is poered off */
+			err = mv88e6390_serdes_10g(chip, MV88E6390_PORT9_LANE0, false);
+			if (err)
+				return err;
 
-	return 0;
+			/* Disable EEE on port 9 */
+			mv88e6393x_port_set_eee(chip, MV88E6390_PORT9_LANE0, false);
+		}
+		/* Power on/off serdes */
+		err = mv88e6390_serdes_10g(chip, MV88E6390_PORT9_LANE0, on);
+	}
+	return err;
 }
 
 static int mv88e6390_serdes_port10(struct mv88e6xxx_chip *chip, u8 cmode,
 				   bool on)
 {
+	int err = 0;
+
 	switch (cmode) {
 	case MV88E6XXX_PORT_STS_CMODE_SGMII:
 		return mv88e6390_serdes_sgmii(chip, MV88E6390_PORT10_LANE0, on);
@@ -179,10 +197,24 @@ static int mv88e6390_serdes_port10(struct mv88e6xxx_chip *chip, u8 cmode,
 	case MV88E6XXX_PORT_STS_CMODE_RXAUI:
 	case MV88E6XXX_PORT_STS_CMODE_1000BASE_X:
 	case MV88E6XXX_PORT_STS_CMODE_2500BASEX:
-		return mv88e6390_serdes_10g(chip, MV88E6390_PORT10_LANE0, on);
-	}
+		/* In all SerDes opeartion EEE is disabled, it does not save
+		 * power and can cause anomalies. Its enabled on the copper
+		 * ports only. To disable it, it's recommneded to first turn
+		 * off the serdes, configure EEE and power on serdes.
+		 */
+		if (on) {
+			/* power off serdes */
+			err = mv88e6390_serdes_10g(chip, MV88E6390_PORT10_LANE0, false);
+			if (err)
+				return err;
 
-	return 0;
+			/* Disable EEE on port 10 */
+			mv88e6393x_port_set_eee(chip, MV88E6390_PORT10_LANE0, false);
+		}
+		/* power on/off serdes */
+		err = mv88e6390_serdes_10g(chip, MV88E6390_PORT10_LANE0, on);
+	}
+	return err;
 }
 
 int mv88e6390_serdes_power(struct mv88e6xxx_chip *chip, int port, bool on)
