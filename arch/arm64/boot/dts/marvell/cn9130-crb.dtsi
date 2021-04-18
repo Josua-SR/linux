@@ -106,8 +106,11 @@
 };
 
 &cp0_i2c0 {
-	pinctrl-names = "default";
+	pinctrl-names = "default", "gpio";
 	pinctrl-0 = <&cp0_i2c0_pins>;
+	pinctrl-1 = <&cp0_i2c0_gpio_pins>;
+	sda-gpios = <&cp0_gpio2 7 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	scl-gpios = <&cp0_gpio2 6 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 	status = "okay";
 	clock-frequency = <100000>;
 	expander0: mcp23x17@20 {
