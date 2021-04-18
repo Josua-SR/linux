@@ -152,11 +152,6 @@
 };
 
 &cp0_i2c0 {
-	pinctrl-names = "default", "gpio";
-	pinctrl-0 = <&cp0_i2c0_pins>;
-	pinctrl-1 = <&cp0_i2c0_gpio_pins>;
-	sda-gpios = <&cp0_gpio2 7 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	scl-gpios = <&cp0_gpio2 6 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 	clock-frequency = <100000>;
 
 	/* U31 */
@@ -189,14 +184,6 @@
 		pagesize = <0x20>;
 	};
 
-};
-
-&cp0_i2c1 {
-	pinctrl-names = "default", "gpio";
-	pinctrl-0 = <&cp0_i2c1_pins>;
-	pinctrl-1 = <&cp0_i2c1_gpio_pins>;
-	sda-gpios = <&cp0_gpio2 4 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	scl-gpios = <&cp0_gpio2 5 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 };
 
 &cp0_sdhci0 {

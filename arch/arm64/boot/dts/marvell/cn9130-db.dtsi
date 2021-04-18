@@ -84,11 +84,6 @@
  * CP0
  */
 &cp0_i2c0 {
-	pinctrl-names = "default", "gpio";
-	pinctrl-0 = <&cp0_i2c0_pins>;
-	pinctrl-1 = <&cp0_i2c0_gpio_pins>;
-	sda-gpios = <&cp0_gpio2 7 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	scl-gpios = <&cp0_gpio2 6 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 	clock-frequency = <100000>;
 
 	/* U36 */
@@ -117,8 +112,6 @@
 };
 
 &cp0_i2c1 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&cp0_i2c1_pins>;
 	clock-frequency = <100000>;
 
 	/* SLM-1521-V2 - U3 */

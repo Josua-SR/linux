@@ -92,14 +92,6 @@
 	non-removable;
 };
 
-&i2c0 {
-	pinctrl-names = "default", "gpio";
-	pinctrl-0 = <&i2c0_pins>;
-	pinctrl-1 = <&i2c0_gpio_pins>;
-	sda-gpios = <&ap_gpio 4 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	scl-gpios = <&ap_gpio 5 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-};
-
 &cp0_config_space {
 	ranges = /* internal regs */
 		 <0x0 0x0 0xf2000000 0x2000000>,
@@ -108,12 +100,6 @@
 };
 
 &cp0_i2c0 {
-	pinctrl-names = "default", "gpio";
-	pinctrl-0 = <&cp0_i2c0_pins>;
-	pinctrl-1 = <&cp0_i2c0_gpio_pins>;
-	sda-gpios = <&cp0_gpio2 7 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	scl-gpios = <&cp0_gpio2 6 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-
 	expander0: pca9555@21 {
 		compatible = "nxp,pca9555";
 		pinctrl-names = "default";
@@ -133,14 +119,6 @@
 		reg = <0x57>;
 		pagesize = <0x20>;
 	};
-};
-
-&cp0_i2c1 {
-	pinctrl-names = "default", "gpio";
-	pinctrl-0 = <&cp0_i2c1_pins>;
-	pinctrl-1 = <&cp0_i2c1_gpio_pins>;
-	sda-gpios = <&cp0_gpio2 4 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	scl-gpios = <&cp0_gpio2 5 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 };
 
 &cp0_nand_controller {
