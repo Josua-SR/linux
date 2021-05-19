@@ -207,6 +207,7 @@ int cpt_attach_rscrs_msg(struct pci_dev *pdev)
 	req->hdr.pcifunc = RVU_PFFUNC(get_pf_id(pdev), get_vf_id(pdev));
 	req->cptlfs = lfs->lfs_num;
 	req->cpt_blkaddr = blkaddr;
+	req->modify = 1;
 	ret = cpt_send_mbox_msg(pdev);
 	if (ret)
 		goto error;
@@ -236,6 +237,7 @@ int cpt_detach_rscrs_msg(struct pci_dev *pdev)
 	req->hdr.id = MBOX_MSG_DETACH_RESOURCES;
 	req->hdr.sig = OTX2_MBOX_REQ_SIG;
 	req->hdr.pcifunc = RVU_PFFUNC(get_pf_id(pdev), get_vf_id(pdev));
+	req->cptlfs = 1;
 	ret = cpt_send_mbox_msg(pdev);
 	if (ret)
 		goto error;

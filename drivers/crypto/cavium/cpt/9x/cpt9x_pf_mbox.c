@@ -149,6 +149,9 @@ int cptpf_lf_init(struct cptpf_dev *cptpf, u8 eng_grp_mask, int pri,
 	struct pci_dev *pdev = cptpf->pdev;
 	int ret, slot;
 
+	if (cptpf->blkaddr == BLKADDR_CPT1)
+		lfs = &cptpf->cpt1_lfs;
+
 	lfs->reg_base = cptpf->reg_base;
 	lfs->lfs_num = lfs_num;
 	lfs->pdev = pdev;
@@ -315,10 +318,35 @@ static int reply_eng_grp_num_msg(struct cptpf_dev *cptpf,
 	return 0;
 }
 
-static int rx_inline_ipsec_lf_cfg(struct cptpf_dev *cptpf, u8 egrp,
-				  u16 sso_pf_func, bool enable)
+static int send_inline_ipsec_inbound_msg(struct cptpf_dev *cptpf,
+					 int sso_pf_func, u8 slot)
 {
 	struct cpt_inline_ipsec_cfg_msg *req;
+	struct pci_dev *pdev = cptpf->pdev;
+
+	req = (struct cpt_inline_ipsec_cfg_msg *)
+	      otx2_mbox_alloc_msg_rsp(&cptpf->afpf_mbox, 0, sizeof(*req),
+				      sizeof(struct msg_rsp));
+	if (req == NULL) {
+		dev_err(&pdev->dev, "RVU MBOX failed to get message.\n");
+		return -EFAULT;
+	}
+	memset(req, 0, sizeof(*req));
+	req->hdr.id = MBOX_MSG_CPT_INLINE_IPSEC_CFG;
+	req->hdr.sig = OTX2_MBOX_REQ_SIG;
+	req->hdr.pcifunc = RVU_PFFUNC(cptpf->pf_id, 0);
+	req->dir = CPT_INLINE_INBOUND;
+	req->slot = slot;
+	req->sso_pf_func_ovrd = cptpf->sso_pf_func_ovrd;
+	req->sso_pf_func = sso_pf_func;
+	req->enable = 1;
+
+	return cpt_send_mbox_msg(pdev);
+}
+
+static int rx_inline_ipsec_lf_cfg(struct cptpf_dev *cptpf, u8 egrp,
+				  struct rx_inline_lf_cfg *req)
+{
 	struct nix_inline_ipsec_cfg *nix_req;
 	struct pci_dev *pdev = cptpf->pdev;
 	int ret;
@@ -334,36 +362,24 @@ static int rx_inline_ipsec_lf_cfg(struct cptpf_dev *cptpf, u8 egrp,
 	memset(nix_req, 0, sizeof(*nix_req));
 	nix_req->hdr.id = MBOX_MSG_NIX_INLINE_IPSEC_CFG;
 	nix_req->hdr.sig = OTX2_MBOX_REQ_SIG;
-	nix_req->enable = enable;
+	nix_req->enable = 1;
 	nix_req->cpt_credit = CPT_INST_QLEN_MSGS - 1;
 	nix_req->gen_cfg.egrp = egrp;
 	nix_req->gen_cfg.opcode = CPT_INLINE_RX_OPCODE;
+	nix_req->gen_cfg.param1 = req->param1;
+	nix_req->gen_cfg.param2 = req->param2;
 	nix_req->inst_qsel.cpt_pf_func = RVU_PFFUNC(cptpf->pf_id, 0);
 	nix_req->inst_qsel.cpt_slot = 0;
 	ret = cpt_send_mbox_msg(pdev);
 	if (ret)
 		return ret;
 
-	req = (struct cpt_inline_ipsec_cfg_msg *)
-			otx2_mbox_alloc_msg_rsp(&cptpf->afpf_mbox, 0,
-						sizeof(*req),
-						sizeof(struct msg_rsp));
-	if (req == NULL) {
-		dev_err(&pdev->dev, "RVU MBOX failed to get message.\n");
-		return -EFAULT;
+	if (cptpf->cpt1_implemented) {
+		ret = send_inline_ipsec_inbound_msg(cptpf, req->sso_pf_func, 1);
+		if (ret)
+			return ret;
 	}
-	memset(req, 0, sizeof(*req));
-	req->hdr.id = MBOX_MSG_CPT_INLINE_IPSEC_CFG;
-	req->hdr.sig = OTX2_MBOX_REQ_SIG;
-	req->hdr.pcifunc = RVU_PFFUNC(cptpf->pf_id, 0);
-	req->dir = CPT_INLINE_INBOUND;
-	req->slot = 0;
-	req->sso_pf_func_ovrd = cptpf->sso_pf_func_ovrd;
-	req->sso_pf_func = sso_pf_func;
-	req->enable = enable;
-	ret = cpt_send_mbox_msg(pdev);
-
-	return ret;
+	return send_inline_ipsec_inbound_msg(cptpf, req->sso_pf_func, 0);
 }
 
 static int rx_inline_ipsec_lf_enable(struct cptpf_dev *cptpf,
@@ -389,12 +405,21 @@ static int rx_inline_ipsec_lf_enable(struct cptpf_dev *cptpf,
 	if (ret)
 		goto cpt_err;
 
-	ret = rx_inline_ipsec_lf_cfg(cptpf, egrp, cfg_req->sso_pf_func, true);
+	if (cptpf->cpt1_implemented) {
+		cptpf->blkaddr = BLKADDR_CPT1;
+		ret = cptpf_lf_init(cptpf, 1 << egrp, QUEUE_HI_PRIO, 1);
+		if (ret)
+			goto cpt_err_lf_cleanup;
+	}
+
+	ret = rx_inline_ipsec_lf_cfg(cptpf, egrp, cfg_req);
 	if (ret)
-		goto cpt_err_lf_cleanup;
+		goto cpt_err_lf1_cleanup;
 
 	return ret;
 
+cpt_err_lf1_cleanup:
+	cptpf_lf_cleanup(&cptpf->cpt1_lfs);
 cpt_err_lf_cleanup:
 	cptpf_lf_cleanup(&cptpf->lfs);
 cpt_err:
@@ -539,6 +564,7 @@ void cptpf_afpf_mbox_handler(struct work_struct *work)
 	struct mbox_msghdr *msg;
 	struct mbox_msghdr *fwd;
 	struct cptpf_dev *cptpf;
+	struct cptlfs_info *lfs;
 	int offset, size;
 	int vf_id, i;
 
@@ -553,6 +579,11 @@ void cptpf_afpf_mbox_handler(struct work_struct *work)
 	if (rsp_hdr->num_msgs == 0)
 		return;
 	offset = ALIGN(sizeof(struct mbox_hdr), MBOX_MSG_ALIGN);
+
+	if (cptpf->blkaddr == BLKADDR_CPT1)
+		lfs = &cptpf->cpt1_lfs;
+	else
+		lfs = &cptpf->lfs;
 
 	for (i = 0; i < rsp_hdr->num_msgs; i++) {
 		msg = (struct mbox_msghdr *)(afpf_mbox->dev->mbase +
@@ -631,12 +662,12 @@ void cptpf_afpf_mbox_handler(struct work_struct *work)
 
 			case MBOX_MSG_ATTACH_RESOURCES:
 				if (!msg->rc)
-					cptpf->lfs.are_lfs_attached = 1;
+					lfs->are_lfs_attached = 1;
 				break;
 
 			case MBOX_MSG_DETACH_RESOURCES:
 				if (!msg->rc)
-					cptpf->lfs.are_lfs_attached = 0;
+					lfs->are_lfs_attached = 0;
 				break;
 			case MBOX_MSG_CPT_INLINE_IPSEC_CFG:
 			case MBOX_MSG_NIX_INLINE_IPSEC_CFG:

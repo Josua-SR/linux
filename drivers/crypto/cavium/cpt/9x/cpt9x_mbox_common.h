@@ -43,6 +43,9 @@ struct eng_grp_num_rsp {
 struct rx_inline_lf_cfg {
 	struct mbox_msghdr hdr;
 	u16 sso_pf_func;
+	u16 param1;
+	u16 param2;
+	u16 reserved;
 };
 
 /*
@@ -68,6 +71,9 @@ static inline struct cptlfs_info *get_lfs_info(struct pci_dev *pdev)
 
 	if (pdev->is_physfn) {
 		cptpf = (struct cptpf_dev *) pci_get_drvdata(pdev);
+		if (cptpf->blkaddr == BLKADDR_CPT1)
+			return &cptpf->cpt1_lfs;
+
 		return &cptpf->lfs;
 	}
 

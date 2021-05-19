@@ -65,6 +65,7 @@ struct cptpf_dev {
 	struct pci_dev *pdev;		/* PCI device handle */
 	struct cptvf_info vf[CPT_9X_MAX_VFS_NUM];
 	struct cptlfs_info lfs;		/* CPT LFs attached to this PF */
+	struct cptlfs_info cpt1_lfs;	/* CPT1 LFs attached to this PF */
 	struct free_rsrcs_rsp limits;   /* Maximum limits for all VFs and PF */
 	struct cpt_limits vf_limits;	/* Limits for each VF */
 	struct engine_groups eng_grps;	/* Engine groups information */
