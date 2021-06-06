@@ -1280,6 +1280,9 @@ int dsa_slave_create(struct dsa_port *port, const char *name)
 		return -ENOMEM;
 
 	slave_dev->features = master->vlan_features | NETIF_F_HW_TC;
+
+	/* VLAN acceleration not supported DSA slave */
+	slave_dev->features &= ~NETIF_F_HW_VLAN_CTAG_FILTER;
 	slave_dev->hw_features |= NETIF_F_HW_TC;
 	slave_dev->ethtool_ops = &dsa_slave_ethtool_ops;
 	eth_hw_addr_inherit(slave_dev, master);
