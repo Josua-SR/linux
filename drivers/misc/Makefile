@@ -58,6 +58,8 @@ obj-$(CONFIG_ASPEED_LPC_SNOOP)	+= aspeed-lpc-snoop.o
 obj-$(CONFIG_PCI_ENDPOINT_TEST)	+= pci_endpoint_test.o
 obj-$(CONFIG_CAVIUM_TDM)	+= cavium-tdm.o
 obj-$(CONFIG_MARVELL_OTX_BPHY_CTR)	+= otx_bphy_ctr.o
+rsmu-objs			:= rsmu_cdev.o rsmu_cm.o rsmu_sabre.o
+obj-$(CONFIG_RSMU)		+= rsmu.o
 
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_core.o
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_bugs.o
