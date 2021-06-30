@@ -18,8 +18,35 @@
 #include <clocksource/arm_arch_timer.h>
 #include <linux/compiler.h>
 #include <linux/kvm_host.h>
+#include <linux/delay.h>
 
 #include <asm/kvm_hyp.h>
+
+#ifdef CONFIG_MARVELL_ERRATUM_38627
+/* Workaround is to ensure maximum 2us of time gap between timer expiry
+ * and timer programming which can de-assert timer interrupt.
+ * Time calculation below is based on 100MHz as timer frequency is fixed
+ * to 100MHz on all affected parts.
+ */
+static void apply_mrvl_erratum_38627(void)
+{
+	int32_t tval;
+
+	tval = read_sysreg(cntv_tval_el0);
+
+	/* Timer already expired, wait for (2 - expired time)us */
+	if ((tval > -200) && (tval < 0))
+		udelay(2 + tval/100);
+
+	/* Timer is about to expire, wait for 2us + time to expire */
+	if (tval >= 0 && tval < 200)
+		udelay(3 + tval/100);
+}
+#else
+static void apply_mrvl_erratum_38627(void)
+{
+}
+#endif
 
 /* vcpu is already in the HYP VA space */
 void __hyp_text __timer_save_state(struct kvm_vcpu *vcpu)
@@ -29,6 +56,7 @@ void __hyp_text __timer_save_state(struct kvm_vcpu *vcpu)
 	u64 val;
 
 	if (timer->enabled) {
+		apply_mrvl_erratum_38627();
 		vtimer->cnt_ctl = read_sysreg_el0(cntv_ctl);
 		vtimer->cnt_cval = read_sysreg_el0(cntv_cval);
 	}
