@@ -1063,8 +1063,11 @@ struct mvpp2_port {
 	struct device_node *of_node;
 
 	phy_interface_t phy_interface;
+	phy_interface_t of_phy_interface;
 	struct phylink *phylink;
 	struct phy *comphy;
+
+	bool phy_exist;
 
 	struct mvpp2_bm_pool *pool_long;
 	struct mvpp2_bm_pool *pool_short;

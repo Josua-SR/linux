@@ -6167,7 +6167,7 @@ static void mvpp2_phylink_validate(struct net_device *dev,
 	phylink_set(mask, Pause);
 	phylink_set(mask, Asym_Pause);
 
-	switch (state->interface) {
+	switch (port->of_phy_interface) {
 	case PHY_INTERFACE_MODE_10GKR:
 	case PHY_INTERFACE_MODE_RXAUI:
 	case PHY_INTERFACE_MODE_NA:
@@ -6185,6 +6185,11 @@ static void mvpp2_phylink_validate(struct net_device *dev,
 	case PHY_INTERFACE_MODE_5GKR:
 		if (port->has_xlg_mac)
 			phylink_set(mask, 5000baseT_Full);
+		if (!port->phy_exist) {
+			phylink_set(mask, 2500baseX_Full);
+			phylink_set(mask, 1000baseX_Full);
+			break;
+		};
 		/* Fall-through */
 	case PHY_INTERFACE_MODE_2500BASET:
 		phylink_set(mask, 2500baseT_Full);
@@ -6203,16 +6208,17 @@ static void mvpp2_phylink_validate(struct net_device *dev,
 		phylink_set(mask, 100baseT_Half);
 		phylink_set(mask, 100baseT_Full);
 		break;
-	case PHY_INTERFACE_MODE_1000BASEX:
 	case PHY_INTERFACE_MODE_2500BASEX:
-		phylink_set(mask, 1000baseX_Full);
 		phylink_set(mask, 2500baseX_Full);
+		/* Fall-through */
+	case PHY_INTERFACE_MODE_1000BASEX:
+		phylink_set(mask, 1000baseX_Full);
 		break;
 	default:
 		goto empty_set;
 	}
 
-	bitmap_and(supported, supported, mask, __ETHTOOL_LINK_MODE_MASK_NBITS);
+	bitmap_copy(supported, mask, __ETHTOOL_LINK_MODE_MASK_NBITS);
 	bitmap_and(state->advertising, state->advertising, mask,
 		   __ETHTOOL_LINK_MODE_MASK_NBITS);
 	return;
@@ -6748,7 +6754,13 @@ static int mvpp2_port_probe(struct platform_device *pdev,
 
 	port->of_node = port_node;
 	port->phy_interface = phy_mode;
+	port->of_phy_interface = phy_mode;
 	port->comphy = comphy;
+
+	if (of_phy_find_device(port_node))
+		port->phy_exist = true;
+	else
+		port->phy_exist = false;
 
 	if ((port->id == 0 && port->priv->hw_version != MVPP21) ||
 	    (port->id == 1 && port->priv->hw_version == MVPP23))
