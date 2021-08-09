@@ -168,6 +168,12 @@ enum mvpp2_prs_flow {
 	MVPP2_FL_LAST,
 };
 
+enum mvpp2_cls_lu_type {
+	MVPP2_CLS_LU_ALL = 0,
+};
+
+#define MVPP2_N_FLOWS		(MVPP2_FL_LAST - MVPP2_FL_START)
+
 struct mvpp2_cls_flow {
 	/* The L2-L4 traffic flow type */
 	int flow_type;
@@ -182,7 +188,6 @@ struct mvpp2_cls_flow {
 	struct mvpp2_prs_result_info prs_ri;
 };
 
-#define MVPP2_N_FLOWS	52
 
 #define MVPP2_ENTRIES_PER_FLOW			(MVPP2_MAX_PORTS + 1)
 #define MVPP2_FLOW_C2_ENTRY(id)			((((id) - MVPP2_FL_START) * \

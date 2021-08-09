@@ -551,7 +551,7 @@ static int mvpp2_dbgfs_flow_init(struct dentry *parent, struct mvpp2 *priv)
 	if (!flow_dir)
 		return -ENOMEM;
 
-	for (i = 0; i < MVPP2_N_FLOWS; i++) {
+	for (i = 0; i < MVPP2_N_PRS_FLOWS; i++) {
 		ret = mvpp2_dbgfs_flow_entry_init(flow_dir, priv, i);
 		if (ret)
 			return ret;
@@ -661,7 +661,7 @@ void mvpp2_dbgfs_cleanup(struct mvpp2 *priv)
 	for (i = 0; i < MVPP2_PRS_TCAM_SRAM_SIZE; i++)
 		kfree(priv->dbgfs_prs_entry[i]);
 
-	for (i = 0; i < MVPP2_N_FLOWS; i++)
+	for (i = 0; i < MVPP2_N_PRS_FLOWS; i++)
 		kfree(priv->dbgfs_flow_entry[i]);
 
 	debugfs_remove_recursive(priv->dbgfs_dir);

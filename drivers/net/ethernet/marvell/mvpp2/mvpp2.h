@@ -693,6 +693,8 @@
 #define MVPP2_BIT_TO_WORD(bit)		((bit) / 32)
 #define MVPP2_BIT_IN_WORD(bit)		((bit) % 32)
 
+#define MVPP2_N_PRS_FLOWS		52
+
 /* RSS constants */
 #define MVPP22_RSS_TABLE_ENTRIES	32
 
@@ -857,7 +859,6 @@ enum mvpp2_prs_l3_cast {
 #define MSS_FC_MAX_TIMEOUT	5000
 
 #define MVPP2_PRS_TCAM_SRAM_SIZE        256
-#define MVPP2_N_FLOWS   52
 
 /* Buffer header info bits */
 #define MVPP2_B_HDR_INFO_MC_ID_MASK	0xfff
@@ -935,7 +936,7 @@ struct mvpp2 {
 	/* Debugfs root entry */
 	struct dentry *dbgfs_dir;
 	struct mvpp2_dbgfs_prs_entry *dbgfs_prs_entry[MVPP2_PRS_TCAM_SRAM_SIZE];
-	struct mvpp2_dbgfs_flow_entry *dbgfs_flow_entry[MVPP2_N_FLOWS];
+	struct mvpp2_dbgfs_flow_entry *dbgfs_flow_entry[MVPP2_N_PRS_FLOWS];
 
 	/* CM3 SRAM pool */
 	struct gen_pool *sram_pool;
