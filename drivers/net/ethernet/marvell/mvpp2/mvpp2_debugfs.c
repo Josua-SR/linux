@@ -16,7 +16,7 @@
 static int mvpp2_dbgfs_flow_flt_hits_show(struct seq_file *s, void *unused)
 {
 	struct mvpp2_dbgfs_flow_entry *entry = s->private;
-	int id = MVPP2_FLOW_C2_ENTRY(entry->flow);
+	int id = MVPP2_CLS_FLT_C2_RSS_ENTRY(entry->flow);
 
 	u32 hits = mvpp2_cls_flow_hits(entry->priv, id);
 
