@@ -500,7 +500,15 @@ static void mvpp2_cls_flow_lkp_init(struct mvpp2 *priv,
 static void mvpp2_cls_c2_write(struct mvpp2 *priv,
 			       struct mvpp2_cls_c2_entry *c2)
 {
+	u32 val;
 	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_IDX, c2->index);
+
+	val = mvpp2_read(priv, MVPP22_CLS_C2_TCAM_INV);
+	if (c2->valid)
+		val &= ~MVPP22_CLS_C2_TCAM_INV_BIT;
+	else
+		val |= MVPP22_CLS_C2_TCAM_INV_BIT;
+	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_INV, val);
 
 	mvpp2_write(priv, MVPP22_CLS_C2_ACT, c2->act);
 
@@ -508,10 +516,6 @@ static void mvpp2_cls_c2_write(struct mvpp2 *priv,
 	mvpp2_write(priv, MVPP22_CLS_C2_ATTR1, c2->attr[1]);
 	mvpp2_write(priv, MVPP22_CLS_C2_ATTR2, c2->attr[2]);
 	mvpp2_write(priv, MVPP22_CLS_C2_ATTR3, c2->attr[3]);
-
-	/* write valid bit*/
-	mvpp2_write(priv, MVPP2_CLS2_TCAM_INV_REG,
-		    (0 << MVPP2_CLS2_TCAM_INV_INVALID));
 
 	/* Write TCAM */
 	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_DATA0, c2->tcam[0]);
@@ -524,6 +528,7 @@ static void mvpp2_cls_c2_write(struct mvpp2 *priv,
 void mvpp2_cls_c2_read(struct mvpp2 *priv, int index,
 		       struct mvpp2_cls_c2_entry *c2)
 {
+	u32 val;
 	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_IDX, index);
 
 	c2->index = index;
@@ -540,6 +545,9 @@ void mvpp2_cls_c2_read(struct mvpp2 *priv, int index,
 	c2->attr[1] = mvpp2_read(priv, MVPP22_CLS_C2_ATTR1);
 	c2->attr[2] = mvpp2_read(priv, MVPP22_CLS_C2_ATTR2);
 	c2->attr[3] = mvpp2_read(priv, MVPP22_CLS_C2_ATTR3);
+
+	val = mvpp2_read(priv, MVPP22_CLS_C2_TCAM_INV);
+	c2->valid = !(val & MVPP22_CLS_C2_TCAM_INV_BIT);
 }
 
 /* Initialize the flow table entries for the given flow */
@@ -608,8 +616,8 @@ static void mvpp2_cls_c2_inv_set(struct mvpp2 *priv,
 	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_IDX, index);
 
 	/* set invalid bit */
-	mvpp2_write(priv, MVPP2_CLS2_TCAM_INV_REG,
-		    (1 << MVPP2_CLS2_TCAM_INV_INVALID));
+	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_INV,
+		    MVPP22_CLS_C2_TCAM_INV_BIT);
 
 	/* trigger */
 	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_DATA4, 0);
@@ -877,6 +885,8 @@ static void mvpp2_port_c2_cls_init(struct mvpp2_port *port)
 	c2.attr[0] = MVPP22_CLS_C2_ATTR0_QHIGH(qh) |
 		      MVPP22_CLS_C2_ATTR0_QLOW(ql);
 
+	c2.valid = true;
+
 	mvpp2_cls_c2_write(port->priv, &c2);
 }
 
@@ -898,6 +908,7 @@ void mvpp2_cls_init(struct mvpp2 *priv)
 {
 	struct mvpp2_cls_lookup_entry le;
 	struct mvpp2_cls_flow_entry fe;
+	struct mvpp2_cls_c2_entry c2;
 	int index;
 
 	/* Enable classifier */
@@ -919,6 +930,14 @@ void mvpp2_cls_init(struct mvpp2 *priv)
 
 		le.way = 1;
 		mvpp2_cls_lookup_write(priv, &le);
+	}
+
+	/* Clear C2 TCAM engine table */
+	memset(&c2, 0, sizeof(c2));
+	c2.valid = false;
+	for (index = 0; index < MVPP22_CLS_C2_N_ENTRIES; index++) {
+		c2.index = index;
+		mvpp2_cls_c2_write(priv, &c2);
 	}
 
 	/* Clear CLS_SWFWD_PCTRL register - value of QueueHigh is defined by
