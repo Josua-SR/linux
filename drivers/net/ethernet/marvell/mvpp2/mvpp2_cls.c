@@ -885,7 +885,7 @@ static void mvpp2_cls_port_init_flows(struct mvpp2 *priv)
 static void mvpp2_port_c2_cls_init(struct mvpp2_port *port)
 {
 	struct mvpp2_cls_c2_entry c2;
-	u8 qh, ql, pmap;
+	u8 qh, ql, pmap, queue;
 
 	memset(&c2, 0, sizeof(c2));
 
@@ -911,8 +911,9 @@ static void mvpp2_port_c2_cls_init(struct mvpp2_port *port)
 	c2.act |= MVPP22_CLS_C2_ACT_QHIGH(MVPP22_C2_UPD) |
 		   MVPP22_CLS_C2_ACT_QLOW(MVPP22_C2_UPD);
 
-	qh = (port->first_rxq >> 3) & MVPP22_CLS_C2_ATTR0_QHIGH_MASK;
-	ql = port->first_rxq & MVPP22_CLS_C2_ATTR0_QLOW_MASK;
+	queue = port->first_rxq + port->tc_cfg.default_tc;
+	qh = (queue >> 3) & MVPP22_CLS_C2_ATTR0_QHIGH_MASK;
+	ql = queue & MVPP22_CLS_C2_ATTR0_QLOW_MASK;
 
 	c2.attr[0] = MVPP22_CLS_C2_ATTR0_QHIGH(qh) |
 		      MVPP22_CLS_C2_ATTR0_QLOW(ql);
@@ -1185,7 +1186,7 @@ void mvpp22_port_rss_init(struct mvpp2_port *port)
 	mvpp2_write(priv, MVPP22_RSS_INDEX, MVPP22_RSS_INDEX_TABLE(port->id));
 	mvpp2_write(priv, MVPP22_RSS_WIDTH, 8);
 
-	if (port->num_tc_queues > 1) {
+	if (port->tc_cfg.num_tc_queues > 1) {
 		int rxq;
 		u32 tc_width;
 		int tc_mask;
@@ -1214,7 +1215,7 @@ void mvpp22_port_rss_init(struct mvpp2_port *port)
 	for (i = 0; i < MVPP22_RSS_TABLE_ENTRIES; i++)
 		port->indir[i] = ethtool_rxfh_indir_default(i, port->nrxqs);
 
-	if (port->num_tc_queues > 1)
+	if (port->tc_cfg.num_tc_queues > 1)
 		mvpp22_rss_fill_table_per_tc(port);
 	else
 		mvpp22_rss_fill_table(port, port->id);

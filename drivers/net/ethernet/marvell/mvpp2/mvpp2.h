@@ -1028,6 +1028,11 @@ struct mvpp2_queue_vector {
 	struct cpumask *mask;
 };
 
+struct mvpp2_tc_cfg {
+	u16 num_tc_queues;
+	u16 default_tc;
+};
+
 struct mvpp2_port {
 	u8 id;
 
@@ -1057,7 +1062,7 @@ struct mvpp2_port {
 	struct net_device *dev;
 
 	int pkt_size;
-	u32 num_tc_queues;
+	struct mvpp2_tc_cfg tc_cfg;
 
 	/* Per-CPU port control */
 	struct mvpp2_port_pcpu __percpu *pcpu;

@@ -78,6 +78,7 @@
 #define MVPP2_RECYCLE_FULL_SKB	(NAPI_POLL_WEIGHT * 5)
 
 #define MVPP2_NUM_OF_TC		1
+#define MVPP2_DEFAULT_TC	(MVPP2_NUM_OF_TC / 2)
 
 struct mvpp2_recycle_pool {
 	void *pbuf[MVPP2_RECYCLE_FULL_SKB];
@@ -786,7 +787,7 @@ void mvpp2_rxq_enable_fc(struct mvpp2_port *port)
 		if (queue_mode == MVPP2_QDIST_SINGLE_MODE)
 			host_id = mvpp22_calc_shared_addr_space(port);
 		else if (queue_mode == MVPP2_QDIST_MULTI_MODE)
-			host_id = q / port->num_tc_queues;
+			host_id = q / port->tc_cfg.num_tc_queues;
 		else
 			host_id = 0;
 
@@ -5675,7 +5676,7 @@ static u32 mvpp2_get_cpu_width(struct mvpp2_port *port)
 
 u32 mvpp2_get_tc_width(struct mvpp2_port *port)
 {
-	return ilog2(roundup_pow_of_two(port->num_tc_queues));
+	return ilog2(roundup_pow_of_two(port->tc_cfg.num_tc_queues));
 }
 
 int  mvpp22_rss_fill_table_per_tc(struct mvpp2_port *port)
@@ -5683,7 +5684,7 @@ int  mvpp22_rss_fill_table_per_tc(struct mvpp2_port *port)
 	struct mvpp2_rss_tbl_entry rss_entry;
 	int rss_tbl, entry_idx;
 	u32 tc_width = 0, cpu_width = 0, cpu_id = 0;
-	int rss_tbl_needed = port->num_tc_queues;
+	int rss_tbl_needed = port->tc_cfg.num_tc_queues;
 
 	if (queue_mode == MVPP2_QDIST_SINGLE_MODE)
 		return -1;
@@ -5736,7 +5737,7 @@ static int mvpp2_ethtool_set_rxfh(struct net_device *dev, const u32 *indir,
 	if (indir) {
 		memcpy(port->indir, indir,
 		       ARRAY_SIZE(port->indir) * sizeof(port->indir[0]));
-		if (port->num_tc_queues > 1)
+		if (port->tc_cfg.num_tc_queues > 1)
 			mvpp22_rss_fill_table_per_tc(port);
 		else
 			mvpp22_rss_fill_table(port, port->id);
@@ -5966,8 +5967,8 @@ static int mvpp2_multi_queue_vectors_init(struct mvpp2_port *port,
 			snprintf(irqname, sizeof(irqname), "hif%d", i);
 
 		if (queue_mode == MVPP2_QDIST_MULTI_MODE) {
-			v->first_rxq = port->num_tc_queues * i;
-			v->nrxqs = port->num_tc_queues;
+			v->first_rxq = port->tc_cfg.num_tc_queues * i;
+			v->nrxqs = port->tc_cfg.num_tc_queues;
 		} else if (queue_mode == MVPP2_QDIST_SINGLE_MODE &&
 			   i == (port->nqvecs - 1)) {
 			v->first_rxq = 0;
@@ -6863,7 +6864,8 @@ static int mvpp2_port_probe(struct platform_device *pdev,
 	port->dev = dev;
 	port->fwnode = port_fwnode;
 	port->has_phy = !!of_find_property(port_node, "phy", NULL);
-	port->num_tc_queues = cpu_nrxqs;
+	port->tc_cfg.num_tc_queues = cpu_nrxqs;
+	port->tc_cfg.default_tc = MVPP2_DEFAULT_TC;
 	if (port->has_phy && phy_mode == PHY_INTERFACE_MODE_INTERNAL) {
 		err = -EINVAL;
 		dev_err(&pdev->dev, "internal mode doesn't work with phy\n");
