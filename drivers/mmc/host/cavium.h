@@ -148,6 +148,11 @@ struct cvm_mmc_host {
 	unsigned long delay_logged; /* per-ios.timing bitmask */
 	unsigned int dma_wait_delay;	/* Delay before polling DMA in usecs */
 
+	/* Clock halt mechanism */
+	bool has_threaded_irq; /* Enabler for the feature. It can't be done without threaded irqs */
+	atomic_t clock_op_lock;  /* Lock clock state at current value */
+	void (*set_clock_state)(struct cvm_mmc_host *host, bool is_on);
+
 	void (*set_shared_power)(struct cvm_mmc_host *, int);
 	void (*acquire_bus)(struct cvm_mmc_host *);
 	void (*release_bus)(struct cvm_mmc_host *);
@@ -324,8 +329,10 @@ struct cvm_mmc_cr_mods {
 #define MIO_EMM_DEBUG_CLK_DIS		BIT_ULL(20)
 #define MIO_EMM_DEBUG_RDSYNC		BIT_ULL(21)
 
+
 /* Protoypes */
 irqreturn_t cvm_mmc_interrupt(int irq, void *dev_id);
+irqreturn_t cvm_mmc_interrupt_thread(int irq, void *dev_id);
 int cvm_mmc_of_slot_probe(struct device *dev, struct cvm_mmc_host *host);
 int cvm_mmc_of_slot_remove(struct cvm_mmc_slot *slot);
 
@@ -337,6 +344,77 @@ static inline bool is_mmc_8xxx(struct cvm_mmc_host *host)
 	u32 chip_id = (pdev->subsystem_device >> 12) & 0xF;
 
 	return (chip_id == PCI_SUBSYS_DEVID_8XXX);
+}
+
+/**
+ * Sets eMMC bus clock on through additional gate
+ *
+ * The host is common structure for all card slots in the system.
+ * Hence, the clock switch is global.
+ *
+ * @param	host	host structure handle
+ *
+ */
+static inline void cvm_mmc_host_clock_on(struct cvm_mmc_host *host)
+{
+	if (host && host->set_clock_state) {
+		if (!atomic_read(&host->clock_op_lock))
+			host->set_clock_state(host, true);
+	}
+}
+
+/**
+ * Sets eMMC bus clock off through additional gate
+ *
+ * The host is common structure for all card slots in the system.
+ * Hence, the clock switch is global.
+ *
+ * @param	host	host structure handle
+ *
+ */
+static inline void cvm_mmc_host_clock_off(struct cvm_mmc_host *host)
+{
+	if (host && host->set_clock_state) {
+		if (!atomic_read(&host->clock_op_lock))
+			host->set_clock_state(host, false);
+	}
+}
+
+/**
+ * Locks eMMC bus clock in current state, prevents the state change
+ *
+ * The clock is kept in current state (ON or OFF). Calls to
+ * cvm_mmc_host_clock_on() or cvm_mmc_host_clock_off() are ignored
+ * until cvm_mmc_host_clock_unlock() is called.
+ *
+ * @param	host	host structure handle
+ *
+ */
+static inline void cvm_mmc_host_clock_lock(struct cvm_mmc_host *host)
+{
+	if (host)
+		atomic_set(&host->clock_op_lock, 1);
+}
+
+/**
+ * Unlocks eMMC bus clock, the state change is possible
+ *
+ * The clock is kept in current state (ON or OFF). Calls to
+ * cvm_mmc_host_clock_on() or cvm_mmc_host_clock_off() are changing the state of the clock.
+ *
+ * @param	host	host structure handle
+ *
+ */
+static inline void cvm_mmc_host_clock_unlock(struct cvm_mmc_host *host)
+{
+	if (host)
+		atomic_set(&host->clock_op_lock, 0);
+}
+
+static inline void cvm_mmc_set_clock_state_init(struct cvm_mmc_host *host)
+{
+	if (host)
+		atomic_set(&host->clock_op_lock, 0);
 }
 
 #endif

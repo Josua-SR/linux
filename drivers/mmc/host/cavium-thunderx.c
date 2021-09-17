@@ -37,6 +37,30 @@ static void thunder_mmc_int_enable(struct cvm_mmc_host *host, u64 val)
 		host->dma_base + MIO_EMM_DMA_INT(host));
 }
 
+static void thunder_mmc_set_clock_state(struct cvm_mmc_host *host, bool is_on)
+{
+	u64 reg_emm_debug;
+
+	if (is_on) {
+		/* To enable clock, the bit has to be cleared */
+		reg_emm_debug = readq(host->base + MIO_EMM_DEBUG(host));
+		reg_emm_debug &= ~MIO_EMM_DEBUG_RDSYNC;
+		writeq(reg_emm_debug, host->base + MIO_EMM_DEBUG(host));
+		udelay(1);
+		reg_emm_debug = readq(host->base + MIO_EMM_DEBUG(host));
+		reg_emm_debug &= ~MIO_EMM_DEBUG_CLK_DIS;
+		writeq(reg_emm_debug, host->base + MIO_EMM_DEBUG(host));
+	} else {
+		reg_emm_debug = readq(host->base + MIO_EMM_DEBUG(host));
+		reg_emm_debug |= MIO_EMM_DEBUG_CLK_DIS;
+		writeq(reg_emm_debug, host->base + MIO_EMM_DEBUG(host));
+		udelay(1);
+		reg_emm_debug = readq(host->base + MIO_EMM_DEBUG(host));
+		reg_emm_debug |= MIO_EMM_DEBUG_RDSYNC;
+		writeq(reg_emm_debug, host->base + MIO_EMM_DEBUG(host));
+	}
+}
+
 static int thunder_mmc_register_interrupts(struct cvm_mmc_host *host,
 					   struct pci_dev *pdev)
 {
@@ -48,12 +72,23 @@ static int thunder_mmc_register_interrupts(struct cvm_mmc_host *host,
 
 	/* register interrupts */
 	for (i = 0; i < nvec; i++) {
-		ret = devm_request_irq(&pdev->dev, pci_irq_vector(pdev, i),
-				       cvm_mmc_interrupt, IRQF_NO_THREAD,
-				       cvm_mmc_irq_names[i], host);
+		if (host->has_threaded_irq)
+			ret = devm_request_threaded_irq(&pdev->dev,
+							pci_irq_vector(pdev, i),
+							cvm_mmc_interrupt,
+							cvm_mmc_interrupt_thread,
+							0, cvm_mmc_irq_names[i],
+							host);
+
+		else
+			ret = devm_request_irq(&pdev->dev,
+					       pci_irq_vector(pdev, i),
+					       cvm_mmc_interrupt, IRQF_NO_THREAD,
+					       cvm_mmc_irq_names[i], host);
 		if (ret)
 			return ret;
 	}
+
 	return 0;
 }
 
@@ -220,6 +255,11 @@ static int thunder_mmc_probe(struct pci_dev *pdev,
 	host->acquire_bus = thunder_mmc_acquire_bus;
 	host->release_bus = thunder_mmc_release_bus;
 	host->int_enable = thunder_mmc_int_enable;
+
+	/* Configure clock management system */
+	host->set_clock_state = thunder_mmc_set_clock_state;
+	cvm_mmc_set_clock_state_init(host);
+	host->has_threaded_irq = true;
 
 	host->use_sg = true;
 	host->big_dma_addr = true;

@@ -229,32 +229,14 @@ bool cvm_is_mmc_timing_ddr(struct cvm_mmc_slot *slot)
 
 static void cvm_mmc_clk_config(struct cvm_mmc_host *host, bool flag)
 {
-	u64 emm_debug;
-
 	if (!host->tap_requires_noclk)
 		return;
 
 	/* Turn off the clock */
-	if (flag) {
-		emm_debug = readq(host->base + MIO_EMM_DEBUG(host));
-		emm_debug |= MIO_EMM_DEBUG_CLK_DIS;
-		writeq(emm_debug, host->base + MIO_EMM_DEBUG(host));
-		udelay(1);
-		emm_debug = readq(host->base + MIO_EMM_DEBUG(host));
-		emm_debug |= MIO_EMM_DEBUG_RDSYNC;
-		writeq(emm_debug, host->base + MIO_EMM_DEBUG(host));
-		udelay(1);
-	} else {
-		/* Turn on the clock */
-		emm_debug = readq(host->base + MIO_EMM_DEBUG(host));
-		emm_debug &= MIO_EMM_DEBUG_RDSYNC;
-		writeq(emm_debug, host->base + MIO_EMM_DEBUG(host));
-		udelay(1);
-		emm_debug = readq(host->base + MIO_EMM_DEBUG(host));
-		emm_debug &= MIO_EMM_DEBUG_CLK_DIS;
-		writeq(emm_debug, host->base + MIO_EMM_DEBUG(host));
-		udelay(1);
-	}
+	if (flag)
+		cvm_mmc_host_clock_off(host);
+	else
+		cvm_mmc_host_clock_on(host);
 }
 
 static void cvm_mmc_set_timing(struct cvm_mmc_slot *slot)
@@ -418,7 +400,7 @@ static void check_switch_errors(struct cvm_mmc_host *host)
 
 static inline void clear_bus_id(u64 *reg)
 {
-	u64 bus_id_mask = GENMASK_ULL(61, 60);
+	u64 bus_id_mask = MIO_EMM_CMD_BUS_ID;
 
 	*reg &= ~bus_id_mask;
 }
@@ -426,12 +408,12 @@ static inline void clear_bus_id(u64 *reg)
 static inline void set_bus_id(u64 *reg, int bus_id)
 {
 	clear_bus_id(reg);
-	*reg |= FIELD_PREP(GENMASK(61, 60), bus_id);
+	*reg |= FIELD_PREP(MIO_EMM_CMD_BUS_ID, bus_id);
 }
 
 static int get_bus_id(u64 reg)
 {
-	return FIELD_GET(GENMASK_ULL(61, 60), reg);
+	return FIELD_GET(MIO_EMM_CMD_BUS_ID, reg);
 }
 
 /* save old slot details, switch power */
@@ -791,6 +773,11 @@ irqreturn_t cvm_mmc_interrupt(int irq, void *dev_id)
 	if (slot)
 		req = slot->current_req;
 
+	if (host->last_slot != bus_id)
+		dev_warn(mmc_classdev(slot->mmc),
+			 "Answer bus_id(%d) != last_slot(%d)?\n",
+			 bus_id, host->last_slot);
+
 	/* Clear interrupt bits (write 1 clears ). */
 	emm_int = readq(host->base + MIO_EMM_INT(host));
 	writeq(emm_int, host->base + MIO_EMM_INT(host));
@@ -864,20 +851,54 @@ irqreturn_t cvm_mmc_interrupt(int irq, void *dev_id)
 		}
 	}
 
-	slot->current_req = NULL;
-	req->done(req);
+	/* Finish request handling in the thread */
+	if (!host->has_threaded_irq) {
+		slot->current_req = NULL;
+		req->done(req);
+	} else {
+		if (host->need_irq_handler_lock)
+			spin_unlock_irqrestore(&host->irq_handler_lock, flags);
+		else
+			__release(&host->irq_handler_lock);
+
+		return IRQ_WAKE_THREAD;
+	}
 
 no_req_done:
 	if (host->dmar_fixup_done)
 		host->dmar_fixup_done(host);
-	if (host_done)
+	if (host_done) {
+		/* Disable emmc bus clock */
+		cvm_mmc_host_clock_off(host);
 		host->release_bus(host);
+	}
 out:
 	if (host->need_irq_handler_lock)
 		spin_unlock_irqrestore(&host->irq_handler_lock, flags);
 	else
 		__release(&host->irq_handler_lock);
+
 	return IRQ_RETVAL(emm_int != 0);
+}
+
+irqreturn_t cvm_mmc_interrupt_thread(int irq, void *dev_id)
+{
+	struct cvm_mmc_host *host = (struct cvm_mmc_host *)dev_id;
+	struct cvm_mmc_slot *slot = host->slot[host->last_slot];
+	struct mmc_request *req = slot->current_req;
+
+	slot->current_req = NULL;
+	if (host->dmar_fixup_done)
+		host->dmar_fixup_done(host);
+
+	/* Needs extra delay ? */
+	cvm_mmc_host_clock_off(host);
+
+	host->release_bus(host);
+	mmc_request_done(slot->mmc, req);
+
+
+	return IRQ_HANDLED;
 }
 
 /*
@@ -1017,57 +1038,59 @@ static u64 prepare_ext_dma(struct mmc_host *mmc, struct mmc_request *mrq)
 	return emm_dma;
 }
 
-static void cvm_mmc_dma_request(struct mmc_host *mmc,
+static int _cvm_mmc_dma_request(struct cvm_mmc_host *host, struct cvm_mmc_slot *slot,
 				struct mmc_request *mrq)
 {
-	struct cvm_mmc_slot *slot = mmc_priv(mmc);
-	struct cvm_mmc_host *host = slot->host;
-	struct mmc_data *data;
+	struct mmc_command *cmd = mrq->cmd;
+	struct mmc_data *data = mrq->data;
 	u64 emm_dma, addr, int_enable_mask = 0;
 	int seg;
 
 	/* cleared by successful termination */
 	mrq->cmd->error = -EINVAL;
 
-	if (!mrq->data || !mrq->data->sg || !mrq->data->sg_len ||
+	if (!mrq->data || !data->sg || !data->sg_len ||
 	    !mrq->stop || mrq->stop->opcode != MMC_STOP_TRANSMISSION) {
-		dev_err(&mmc->card->dev,
+		dev_err(mmc_classdev(slot->mmc),
 			"Error: cmv_mmc_dma_request no data\n");
-		goto error;
+		return cmd->error;
 	}
 
 	/* unaligned multi-block DMA has problems, so forbid all unaligned */
-	for (seg = 0; seg < mrq->data->sg_len; seg++) {
-		struct scatterlist *sg = &mrq->data->sg[seg];
+	for (seg = 0; seg < data->sg_len; seg++) {
+		struct scatterlist *sg = &data->sg[seg];
 		u64 align = (sg->offset | sg->length | sg->dma_address);
 
 		if (!(align & 7))
 			continue;
-		dev_info(&mmc->card->dev,
+		dev_info(mmc_classdev(slot->mmc),
 			"Error:64bit alignment required\n");
-		goto error;
+		return cmd->error;
 	}
 
+	/* Assign current request to the slot */
+	mrq->host = slot->mmc;
+	slot->current_req = mrq;
+	slot->dma_active = true;
+
+	/* Select a slot to execute command */
 	cvm_mmc_switch_to(slot);
 
-	data = mrq->data;
+	dev_dbg(mmc_classdev(slot->mmc),
+		"DMA request  blocks: %d  block_size: %d  total_size: %d\n",
+		data->blocks, data->blksz, data->blocks * data->blksz);
 
-	pr_debug("DMA request  blocks: %d  block_size: %d  total_size: %d\n",
-		 data->blocks, data->blksz, data->blocks * data->blksz);
 	if (data->timeout_ns)
 		set_wdog(slot, data->timeout_ns);
 
-	emm_dma = prepare_ext_dma(mmc, mrq);
+	emm_dma = prepare_ext_dma(slot->mmc, mrq);
 	addr = prepare_dma(host, data);
 	if (!addr) {
 		dev_err(host->dev, "prepare_dma failed\n");
-		goto error;
+		cmd->error = -EFAULT;
+		/* TODO: extra roll out of changes needed? */
+		return cmd->error;
 	}
-
-	mrq->host = mmc;
-	WARN_ON(slot->current_req);
-	slot->current_req = mrq;
-	slot->dma_active = true;
 
 	int_enable_mask = MIO_EMM_INT_CMD_ERR | MIO_EMM_INT_DMA_DONE |
 			MIO_EMM_INT_DMA_ERR;
@@ -1089,17 +1112,13 @@ static void cvm_mmc_dma_request(struct mmc_host *mmc,
 	 * bit mask to check for CRC errors and timeouts only.
 	 * Otherwise, use the default power reset value.
 	 */
-	if (mmc_card_sd(mmc->card))
+	if (mmc_card_sd(slot->mmc->card))
 		writeq(0x00b00000ull, host->base + MIO_EMM_STS_MASK(host));
 	else
 		writeq(0xe4390080ull, host->base + MIO_EMM_STS_MASK(host));
 	writeq(emm_dma, host->base + MIO_EMM_DMA(host));
-	return;
 
-error:
-	if (mrq->done)
-		mrq->done(mrq);
-	host->release_bus(host);
+	return 0;
 }
 
 static void do_read_request(struct cvm_mmc_slot *slot, struct mmc_request *mrq)
@@ -1191,14 +1210,106 @@ static void cvm_mmc_track_switch(struct cvm_mmc_slot *slot, u32 cmd_arg)
 	slot->cmd6_pending = true;
 }
 
+#define MMC_REQUEST_RETRIES	100
+
+static int _cvm_mmc_request(struct cvm_mmc_host *host, struct cvm_mmc_slot *slot,
+			    struct mmc_request *mrq)
+{
+	u64 reg_emm_cmd, reg_emm_rsp_sts;
+	struct cvm_mmc_cr_mods mods;
+	struct mmc_command *cmd = mrq->cmd;
+	int retries = MMC_REQUEST_RETRIES;
+
+	/* Flags to check command in progress */
+	const u64 cmd_in_progress_flags = MIO_EMM_RSP_STS_DMA_VAL |
+		MIO_EMM_RSP_STS_CMD_VAL | MIO_EMM_RSP_STS_SWITCH_VAL |
+		MIO_EMM_RSP_STS_DMA_PEND;
+
+	/*
+	 * Code assumes that bus lock is set on host side.
+	 * Only one request should be active at that moment.
+	 */
+	mrq->host = slot->mmc;
+	slot->current_req = mrq;
+	slot->dma_active = false;
+
+	/* Select a slot to execute the command */
+	cvm_mmc_switch_to(slot);
+
+	/* Default watchdog value is 0, when no data are involved */
+	set_wdog(slot, 0);
+
+	/* Is a data to be send with request? */
+	if (cmd->data) {
+		if (cmd->data->flags & MMC_DATA_READ)
+			do_read_request(slot, mrq);
+		else
+			do_write_request(slot, mrq);
+
+		if (cmd->data->timeout_ns)
+			set_wdog(slot, cmd->data->timeout_ns);
+	}
+
+	/* Set DMA status and enable interrupt for operation */
+	host->int_enable(host, MIO_EMM_INT_CMD_DONE | MIO_EMM_INT_CMD_ERR);
+
+	/* Check for switch operation */
+	if (cmd->opcode == MMC_SWITCH)
+		cvm_mmc_track_switch(slot, cmd->arg);
+
+	/* Do Command/Response Type override */
+	mods = cvm_mmc_get_cr_mods(cmd);
+
+	/* Set Command register fields */
+	reg_emm_cmd = FIELD_PREP(MIO_EMM_CMD_VAL, 1) |
+		      FIELD_PREP(MIO_EMM_CMD_CTYPE_XOR, mods.ctype_xor) |
+		      FIELD_PREP(MIO_EMM_CMD_RTYPE_XOR, mods.rtype_xor) |
+		      FIELD_PREP(MIO_EMM_CMD_IDX, cmd->opcode) |
+		      FIELD_PREP(MIO_EMM_CMD_ARG, cmd->arg);
+	set_bus_id(&reg_emm_cmd, slot->bus_id);
+
+	/* Check for command type, point to point data transfer commands */
+	if (cmd->data && mmc_cmd_type(cmd) == MMC_CMD_ADTC)
+		reg_emm_cmd |= FIELD_PREP(MIO_EMM_CMD_OFFSET,
+				64 - ((cmd->data->blocks * cmd->data->blksz) / 8));
+
+	/* Don't use any card response bits to set value of response bad status */
+	writeq(0, host->base + MIO_EMM_STS_MASK(host));
+
+	/* Check whenever previous command has been executed already */
+	while ((reg_emm_rsp_sts = readq(host->base + MIO_EMM_RSP_STS(host))) &
+		cmd_in_progress_flags) {
+		udelay(10);
+		retries--;
+
+		if (!retries) {
+			dev_err(host->dev,
+				"Command status not cleared before CMD%u rsp_sts = %llx\n",
+				cmd->opcode, reg_emm_rsp_sts);
+			cmd->error = -ETIMEDOUT;
+			return cmd->error;
+		}
+	}
+
+	/* Execute command */
+	writeq(reg_emm_cmd, host->base + MIO_EMM_CMD(host));
+
+	return 0;
+}
+
+
 static void cvm_mmc_request(struct mmc_host *mmc, struct mmc_request *mrq)
 {
+	int ret;
 	struct cvm_mmc_slot *slot = mmc_priv(mmc);
 	struct cvm_mmc_host *host = slot->host;
-	struct mmc_command *cmd = mrq->cmd;
-	struct cvm_mmc_cr_mods mods;
-	u64 emm_cmd, rsp_sts;
-	int retries = 100;
+	struct mmc_command *cmd = mrq ? mrq->cmd : NULL;
+
+	if (!mrq) {
+		dev_err(mmc_classdev(mmc), "Empty request?!\n");
+		ret = -EINVAL;
+		goto error;
+	}
 
 	/*
 	 * Note about locking:
@@ -1211,62 +1322,37 @@ static void cvm_mmc_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	 */
 	host->acquire_bus(host);
 
+	/* There should be no other request stil executing */
+	if (slot->current_req) {
+		dev_err(mmc_classdev(mmc), "Previous request is still running\n");
+		cmd->error = -EBUSY;
+		ret = cmd->error;
+		goto error;
+	}
+
+	/* Enable clock to perform request */
+	cvm_mmc_host_clock_on(host);
+
 	if (cmd->opcode == MMC_READ_MULTIPLE_BLOCK ||
 	    cmd->opcode == MMC_WRITE_MULTIPLE_BLOCK)
-		return cvm_mmc_dma_request(mmc, mrq);
+		ret = _cvm_mmc_dma_request(host, slot, mrq);
+	else
+		ret = _cvm_mmc_request(host, slot, mrq);
 
-	cvm_mmc_switch_to(slot);
+	/* Clock should be disabled by threaded irq handler after transaction */
+	if (!ret)
+		return;
 
-	mods = cvm_mmc_get_cr_mods(cmd);
-
-	WARN_ON(slot->current_req);
-	mrq->host = mmc;
-	slot->current_req = mrq;
-
-	if (cmd->data) {
-		if (cmd->data->flags & MMC_DATA_READ)
-			do_read_request(slot, mrq);
-		else
-			do_write_request(slot, mrq);
-
-		if (cmd->data->timeout_ns)
-			set_wdog(slot, cmd->data->timeout_ns);
-	} else
-		set_wdog(slot, 0);
-
-	slot->dma_active = false;
-	host->int_enable(host, MIO_EMM_INT_CMD_DONE | MIO_EMM_INT_CMD_ERR);
-
-	if (cmd->opcode == MMC_SWITCH)
-		cvm_mmc_track_switch(slot, cmd->arg);
-
-	emm_cmd = FIELD_PREP(MIO_EMM_CMD_VAL, 1) |
-		  FIELD_PREP(MIO_EMM_CMD_CTYPE_XOR, mods.ctype_xor) |
-		  FIELD_PREP(MIO_EMM_CMD_RTYPE_XOR, mods.rtype_xor) |
-		  FIELD_PREP(MIO_EMM_CMD_IDX, cmd->opcode) |
-		  FIELD_PREP(MIO_EMM_CMD_ARG, cmd->arg);
-	set_bus_id(&emm_cmd, slot->bus_id);
-	if (cmd->data && mmc_cmd_type(cmd) == MMC_CMD_ADTC)
-		emm_cmd |= FIELD_PREP(MIO_EMM_CMD_OFFSET,
-				64 - ((cmd->data->blocks * cmd->data->blksz) / 8));
-
-	writeq(0, host->base + MIO_EMM_STS_MASK(host));
-
-retry:
-	rsp_sts = readq(host->base + MIO_EMM_RSP_STS(host));
-	if (rsp_sts & MIO_EMM_RSP_STS_DMA_VAL ||
-	    rsp_sts & MIO_EMM_RSP_STS_CMD_VAL ||
-	    rsp_sts & MIO_EMM_RSP_STS_SWITCH_VAL ||
-	    rsp_sts & MIO_EMM_RSP_STS_DMA_PEND) {
-		udelay(10);
-		if (--retries)
-			goto retry;
-	}
-	if (!retries)
-		dev_err(host->dev, "Bad status: %llx before command write\n", rsp_sts);
-	writeq(emm_cmd, host->base + MIO_EMM_CMD(host));
-	if (cmd->opcode == MMC_SWITCH)
-		udelay(1300);
+	/* Handle all kind of errors */
+error:
+	dev_err(mmc_classdev(mmc), "Can't do request CMD%u, err=%d\n",
+		cmd->opcode, ret);
+	/* Disable emmc bus clock */
+	cvm_mmc_host_clock_off(host);
+	host->release_bus(host);
+	if (slot->current_req == mrq)
+		slot->current_req = NULL;
+	mmc_request_done(mmc, mrq);
 }
 
 static void cvm_mmc_wait_done(struct mmc_request *cvm_mrq)
@@ -1790,6 +1876,9 @@ static void cvm_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	}
 
 	host->acquire_bus(host);
+	/* Enable clock to be able to handle switch command */
+	cvm_mmc_host_clock_on(host);
+
 	cvm_mmc_switch_to(slot);
 
 	if (ios->power_mode == MMC_POWER_UP) {
@@ -1888,6 +1977,7 @@ static void cvm_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	host->powered = true;
 	cvm_mmc_configure_delay(slot);
 out:
+	cvm_mmc_host_clock_off(host);
 	host->release_bus(host);
 	if (ios->timing == MMC_TIMING_MMC_HS)
 		check_and_write_hs400_tuning_block(slot);
@@ -2337,10 +2427,19 @@ int cvm_mmc_of_slot_probe(struct device *dev, struct cvm_mmc_host *host)
 	slot->cached_rca = 1;
 
 	host->acquire_bus(host);
+	/* Enable and lock emmc bus clock until initialization is done */
+	cvm_mmc_host_clock_on(host);
+	cvm_mmc_host_clock_lock(host);
+
 	host->slot[id] = slot;
 	host->use_vqmmc |= !IS_ERR_OR_NULL(slot->mmc->supply.vqmmc);
 	cvm_mmc_init_lowlevel(slot);
 	cvm_mmc_switch_to(slot);
+
+	/* Unlock and disable emmc bus clock after initialization */
+	cvm_mmc_host_clock_unlock(host);
+	cvm_mmc_host_clock_off(host);
+
 	host->release_bus(host);
 
 	ret = mmc_add_host(mmc);
