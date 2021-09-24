@@ -255,23 +255,35 @@ static int zip_pf_sriov_init(struct zip_pf_device *pf, int num_vf)
 static int zip_pf_init(struct zip_pf_device *pf)
 {
 	union zip_quex_sbuf_ctl sbuf_ctl;
+	union zip_constants constants;
 	union zip_quex_map map;
 	union zip_cmd_ctl cmd_ctl;
 	int q;
 
 	/* Reset ZIP subsystem */
 	cmd_ctl.u = zip_pf_reg_read(pf, ZIP_PF_CMD_CTL);
-	cmd_ctl.s.reset = 1;
+	if (pf->dev_id == PCI_DEVICE_ID_OCTEONTX2_ZIP_PF)
+		cmd_ctl.s9x.reset = 1;
+	else
+		cmd_ctl.s.reset = 1;
+
 	zip_pf_reg_write(pf, ZIP_PF_CMD_CTL, cmd_ctl.u & 0xFF);
 
 	udelay(5);
 
+	constants.u = zip_pf_reg_read(pf, ZIP_CONSTANTS);
 	for (q = 0; q < ZIP_MAX_VFS; q++) {
 		sbuf_ctl.u = 0ull;
-		sbuf_ctl.s.size = ZIP_CMD_QBUF_SIZE / sizeof(u64);
-		sbuf_ctl.s.inst_be = 0;
-		sbuf_ctl.s.stream_id = q + 1;
-		sbuf_ctl.s.inst_free = 0;
+		if (pf->dev_id == PCI_DEVICE_ID_OCTEONTX2_ZIP_PF) {
+			sbuf_ctl.s9x.size = ZIP_CMD_QBUF_SIZE / sizeof(u64);
+			sbuf_ctl.s9x.inst_be = 0;
+			sbuf_ctl.s9x.stream_id = q + 1;
+		} else {
+			sbuf_ctl.s.size = ZIP_CMD_QBUF_SIZE / sizeof(u64);
+			sbuf_ctl.s.inst_be = 0;
+			sbuf_ctl.s.stream_id = q + 1;
+			sbuf_ctl.s.inst_free = 0;
+		}
 		zip_pf_reg_write(pf, ZIP_PF_QUEX_SBUF_CTL(q), sbuf_ctl.u);
 
 		/*
@@ -280,7 +292,13 @@ static int zip_pf_init(struct zip_pf_device *pf)
 		 * equivalent to the ZIP core being disabled.
 		 */
 		map.u = 0ull;
-		map.s.zce = 0x3F;
+		switch (constants.s.nexec) {
+		case ZIP_OCTEONTX2_MAX_ENGS:
+			map.s9x.zce = ZIP_OCTEONTX2_ENGS_MASK;
+			break;
+		default:
+			map.s.zce = ZIP_OCTEONTX_ENGS_MASK;
+		}
 		zip_pf_reg_write(pf, ZIP_PF_QUEX_MAP(q), map.u);
 	}
 

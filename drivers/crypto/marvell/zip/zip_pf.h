@@ -33,6 +33,11 @@
 /* Maximum number of VFs supported */
 #define ZIP_MAX_VFS 8
 
+/* Max ZIP Engines */
+#define ZIP_OCTEONTX2_MAX_ENGS     12
+#define ZIP_OCTEONTX2_ENGS_MASK    0xFFF
+#define ZIP_OCTEONTX_ENGS_MASK     0x3F
+
 /* MSIX count for OcteonTX */
 #define ZIP_PF_OCTEONTX_MSIX_COUNT 3
 
@@ -50,6 +55,7 @@ struct zip_pf_device {
 
 /* ZIP PF Register Offsets */
 #define ZIP_PF_CMD_CTL          0x0
+#define ZIP_CONSTANTS           0xA0
 #define ZIP_PF_QUEX_GMCTL(x)    (0x800  | ((x) << 20))
 #define ZIP_PF_QUEX_SBUF_CTL(x) (0x1200 | ((x) << 3))
 #define ZIP_PF_QUEX_MAP(x)      (0x1400 | ((x) << 3))
@@ -80,6 +86,11 @@ union zip_quex_map {
 		u64 zce                   : 6;
 		u64 reserved_6_63         : 58;
 	} s;
+	struct zip_quex_map_s9x {
+	/* Word 0 - Little Endian */
+		u64 zce                   : 12;
+		u64 reserved_12_63        : 52;
+	} s9x;
 };
 
 /**
@@ -105,6 +116,16 @@ union zip_quex_sbuf_ctl {
 		u64 size                  : 13;
 		u64 reserved_45_63        : 19;
 	} s;
+
+	struct zip_quex_sbuf_ctl_s9x {
+	/* Word 0 - Little Endian */
+		u64 reserved_0_15         : 16;
+		u64 stream_id             : 8;
+		u64 reserved_24_30        : 7;
+		u64 inst_be               : 1;
+		u64 size                  : 13;
+		u64 reserved_45_63        : 19;
+	} s9x;
 };
 
 /**
@@ -120,6 +141,38 @@ union zip_cmd_ctl {
 		u64 reset                 : 1;
 		u64 forceclk              : 1;
 		u64 reserved_2_63         : 62;
+	} s;
+
+	struct zip_cmd_ctl_s9x {
+	/* Word 0 - Little Endian */
+		u64 reset                 : 1;
+		u64 forceclk              : 1;
+		u64 ctl_forceclk          : 1;
+		u64 reserved_3_31         : 29;
+		u64 eng_forceclk          : 12;
+		u64 reserved_44_63        : 20;
+	} s9x;
+};
+
+/**
+ * Register (NCB) zip_constants
+ *
+ * ZIP Constants Register
+ * This register contains implementation related parameters of the ZIP core.
+ */
+union zip_constants {
+	u64 u;
+	struct zip_constants_s {
+	/* Word 0 - Little Endian */
+		u64 disabled              : 1;
+		u64 reserved_1_7          : 7;
+		u64 ctxsize               : 12;
+		u64 onfsize               : 12;
+		u64 depth                 : 16;
+		u64 syncflush_capable     : 1;
+		u64 hash                  : 1;
+		u64 reserved_50_55        : 6;
+		u64 nexec                 : 8;
 	} s;
 };
 
