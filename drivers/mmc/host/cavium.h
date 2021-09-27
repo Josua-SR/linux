@@ -113,6 +113,12 @@
 #define MIO_EMM_BUF_IDX(x)	(0xe0 + x->reg_off)
 #define MIO_EMM_BUF_DAT(x)	(0xe8 + x->reg_off)
 
+#if defined(CONFIG_DEBUG_FS)
+
+/* Forward definition for clock logger feature, used only with clock switching */
+struct clk_logger;
+#endif
+
 struct cvm_mmc_host {
 	struct device *dev;
 	void __iomem *base;
@@ -202,6 +208,10 @@ struct cvm_mmc_slot {
 	 * tuning alorithm.
 	 */
 	u32 in_timings_ctl;
+
+#if defined(CONFIG_DEBUG_FS)
+	struct clk_logger *logger;
+#endif
 };
 
 struct cvm_mmc_cr_type {
@@ -354,13 +364,18 @@ static inline bool is_mmc_8xxx(struct cvm_mmc_host *host)
  *
  * @param	host	host structure handle
  *
+ * @return	true when clock operation was done, false otherwise
  */
-static inline void cvm_mmc_host_clock_on(struct cvm_mmc_host *host)
+static inline bool cvm_mmc_host_clock_on(struct cvm_mmc_host *host)
 {
 	if (host && host->set_clock_state) {
-		if (!atomic_read(&host->clock_op_lock))
+		if (!atomic_read(&host->clock_op_lock)) {
 			host->set_clock_state(host, true);
+			return true;
+		}
 	}
+
+	return false;
 }
 
 /**
@@ -371,13 +386,18 @@ static inline void cvm_mmc_host_clock_on(struct cvm_mmc_host *host)
  *
  * @param	host	host structure handle
  *
+ * @return	true when clock operation was done, false otherwise
  */
-static inline void cvm_mmc_host_clock_off(struct cvm_mmc_host *host)
+static inline bool cvm_mmc_host_clock_off(struct cvm_mmc_host *host)
 {
 	if (host && host->set_clock_state) {
-		if (!atomic_read(&host->clock_op_lock))
+		if (!atomic_read(&host->clock_op_lock)) {
 			host->set_clock_state(host, false);
+			return true;
+		}
 	}
+
+	return false;
 }
 
 /**

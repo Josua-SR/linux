@@ -27,6 +27,10 @@
 #include <linux/time.h>
 #include <linux/iommu.h>
 #include <linux/swiotlb.h>
+#include <linux/fs.h>
+#include <linux/debugfs.h>
+#include <linux/seq_file.h>
+#include <linux/ptr_ring.h>
 
 #include "cavium.h"
 
@@ -205,6 +209,238 @@ MODULE_PARM_DESC(fixed_timing, "use fixed data_/cmd_out taps");
 static bool ddr_cmd_taps;
 module_param(ddr_cmd_taps, bool, 0644);
 MODULE_PARM_DESC(ddr_cmd_taps, "reduce cmd_out_taps in DDR modes, as before");
+
+
+#if defined(CONFIG_DEBUG_FS)
+
+/** Logger entry used by clk logger to keep ON/OFF information
+ *
+ *  This structure is never shared between producer and consumer, thus no locking
+ */
+struct clk_logger_entry {
+	/* Handle for entries free list */
+	struct list_head list;
+	/* Keep lock to be sure the item is not overwritten */
+	spinlock_t entry_lock;
+	/* Clock transition timestamp */
+	struct timespec64 at;
+	/* Store transition type */
+#define CLK_LOGGER_STATE_ON	1
+#define CLK_LOGGER_STATE_OFF	0
+	u32 transition_type;
+	/* Current clock frequency used by eMMC bus */
+	u64 freq;
+};
+
+#define TO_CLK_LOGGER_ENTRY_PTR(p)	((struct clk_logger_entry *)(p))
+
+#define CLK_LOGGER_ITEMS	2048  /* Keep value as power of two */
+
+/*
+ * Locking for the clk_logger can be limited due to eMMC bus locking mechanism
+ * that exists.
+ */
+struct clk_logger {
+	struct ptr_ring ring;  /** ptr_ring interface */
+	struct list_head free_list; /* Keeps simple free list of enties to be used */
+
+	/* Pre-allocate entries buffer with logger */
+	struct clk_logger_entry entries[CLK_LOGGER_ITEMS];  /** Actual entries in the log */
+};
+
+static int cvm_mmc_clk_logger_init(struct cvm_mmc_slot *slot)
+{
+	struct clk_logger_entry *e;
+	struct clk_logger *logger;
+
+	slot->logger = devm_kzalloc(mmc_classdev(slot->mmc),
+				    sizeof(struct clk_logger), GFP_KERNEL);
+	if (!slot->logger)
+		return -ENOMEM;
+
+	logger = slot->logger;
+
+	if (ptr_ring_init(&logger->ring, CLK_LOGGER_ITEMS, GFP_KERNEL))
+		return -ENOMEM;
+
+	INIT_LIST_HEAD(&logger->free_list);
+
+	/* Initialize all structures, add structures onto free list */
+	for (e = &logger->entries[0]; e != &logger->entries[CLK_LOGGER_ITEMS]; e++) {
+		list_add_tail(&e->list, &logger->free_list);
+		e->transition_type = 0xcafebabe;
+	}
+
+	return 0;
+}
+
+static bool cvm_mmc_clk_logger_produce(struct clk_logger *logger, u32 state,
+				       u64 freq)
+{
+	struct clk_logger_entry *e = NULL;
+	int ret;
+
+	/* Take element from free list */
+	e = list_first_entry_or_null(&logger->free_list,
+				     struct clk_logger_entry, list);
+	if (!e)
+		return false;
+
+	/* Remove element from the list. show() method returns the item on free list */
+	list_del(&e->list);
+
+	ktime_get_ts64(&e->at);
+	e->transition_type = state;
+	e->freq = freq;
+
+	ret = ptr_ring_produce(&logger->ring, e);
+	if (ret) {
+		e->transition_type = 0xcafebabe;
+		list_add_tail(&e->list, &logger->free_list);
+
+		return false;
+	}
+
+	return true;
+}
+
+static bool cvm_mmc_clk_logger_consume(struct clk_logger *logger,
+				   struct clk_logger_entry **entry)
+{
+	struct clk_logger_entry *e = NULL;
+
+	e = TO_CLK_LOGGER_ENTRY_PTR(ptr_ring_consume(&logger->ring));
+	if (!e)
+		return false;
+
+	*entry = e;
+
+	return true;
+}
+
+static void cvm_mmc_clk_logger_return(struct clk_logger *logger,
+				      struct clk_logger_entry *entry)
+{
+	entry->transition_type = 0xcafebabe;
+	list_add(&entry->list, &logger->free_list);
+}
+
+/* clk_logger wrapper for ON/OFF functions */
+static inline void cvm_mmc_clk_logger_clk_on(struct cvm_mmc_slot *slot)
+{
+	if (cvm_mmc_host_clock_on(slot->host))
+		cvm_mmc_clk_logger_produce(slot->logger, CLK_LOGGER_STATE_ON,
+					   slot->clock);
+}
+
+static inline void cvm_mmc_clk_logger_clk_off(struct cvm_mmc_slot *slot)
+{
+	if (cvm_mmc_host_clock_off(slot->host))
+		cvm_mmc_clk_logger_produce(slot->logger, CLK_LOGGER_STATE_OFF,
+					   slot->clock);
+}
+
+static void *clk_logger_start(struct seq_file *s, loff_t *pos)
+{
+	struct cvm_mmc_slot *slot = s->private;
+	struct clk_logger *logger = slot->logger;
+	struct clk_logger_entry *e;
+
+	/* Check for empty log */
+	if (cvm_mmc_clk_logger_consume(logger, &e))
+		return e;
+
+	return NULL;
+}
+
+static void *clk_logger_next(struct seq_file *s, void *v, loff_t *pos)
+{
+	struct cvm_mmc_slot *slot = s->private;
+	struct clk_logger *logger = slot->logger;
+	struct clk_logger_entry *e;
+
+	/* Check for empty log */
+	if (cvm_mmc_clk_logger_consume(logger, &e))
+		return e;
+
+	return NULL;
+}
+
+static void clk_logger_stop(struct seq_file *s, void *v)
+{
+	/* Nothing to done */
+}
+
+static int clk_logger_show(struct seq_file *s, void *v)
+{
+	struct cvm_mmc_slot *slot = s->private;
+	struct clk_logger *logger = slot->logger;
+	struct clk_logger_entry *e = v;
+
+	seq_printf(s, "%ld.%ld: %s @ %llu\n",
+		   e->at.tv_sec, e->at.tv_nsec,
+		   e->transition_type == CLK_LOGGER_STATE_ON ? "ON" : "OFF",
+		   e->freq);
+	cvm_mmc_clk_logger_return(logger, e);
+
+	return 0;
+}
+
+static const struct seq_operations emmc_bus_clk_logger_ops = {
+	.start = clk_logger_start,
+	.next = clk_logger_next,
+	.stop = clk_logger_stop,
+	.show = clk_logger_show
+};
+
+static int emmc_bus_clk_open(struct inode *node, struct file *filep)
+{
+	int ret = seq_open(filep, &emmc_bus_clk_logger_ops);
+	struct seq_file *s;
+
+	if (ret)
+		return ret;
+
+	/* Pass slot instance from inode private to seq_file private field */
+	s = filep->private_data;
+	s->private = node->i_private;
+
+	return 0;
+}
+
+static const struct file_operations cvm_mmc_emmc_bus_clk_fops = {
+	.owner = THIS_MODULE,
+	.open = emmc_bus_clk_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release
+};
+
+static void cvm_mmc_add_clock_debugfs(struct cvm_mmc_slot *slot)
+{
+	struct mmc_host *mmc = slot->mmc;
+
+	if (!mmc->debugfs_root) {
+		dev_info(mmc_classdev(mmc), "No debugfs found!\n");
+		return;
+	}
+
+	if (!debugfs_create_file("emmc_bus_clk", 0400, mmc->debugfs_root,
+				 slot, &cvm_mmc_emmc_bus_clk_fops)) {
+		dev_info(mmc_classdev(mmc),
+			 "Can't create emmc bus clock debugfs entry\n");
+	}
+}
+
+#else
+
+#define cvm_mmc_clk_logger_init(slot)	(0)	/* Always success */
+#define cvm_mmc_clk_logger_add_debugfs(slot)	((void)slot)
+#define cvm_mmc_clk_logger_clk_on(slot)	cvm_mmc_host_clock_on((slot)->host)
+#define cvm_mmc_clk_logger_clk_off(slot)	cvm_mmc_host_clock_off((slot)->host)
+
+#endif /* defined(CONFIG_DEBUG_FS) */
+
 
 /* Tuning is used in multiple places in the code */
 static int cvm_execute_tuning(struct mmc_host *mmc, u32 opcode);
@@ -869,7 +1105,7 @@ no_req_done:
 		host->dmar_fixup_done(host);
 	if (host_done) {
 		/* Disable emmc bus clock */
-		cvm_mmc_host_clock_off(host);
+		cvm_mmc_clk_logger_clk_off(slot);
 		host->release_bus(host);
 	}
 out:
@@ -892,7 +1128,7 @@ irqreturn_t cvm_mmc_interrupt_thread(int irq, void *dev_id)
 		host->dmar_fixup_done(host);
 
 	/* Needs extra delay ? */
-	cvm_mmc_host_clock_off(host);
+	cvm_mmc_clk_logger_clk_off(slot);
 
 	host->release_bus(host);
 	mmc_request_done(slot->mmc, req);
@@ -1331,7 +1567,7 @@ static void cvm_mmc_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	}
 
 	/* Enable clock to perform request */
-	cvm_mmc_host_clock_on(host);
+	cvm_mmc_clk_logger_clk_on(slot);
 
 	if (cmd->opcode == MMC_READ_MULTIPLE_BLOCK ||
 	    cmd->opcode == MMC_WRITE_MULTIPLE_BLOCK)
@@ -1348,7 +1584,7 @@ error:
 	dev_err(mmc_classdev(mmc), "Can't do request CMD%u, err=%d\n",
 		cmd->opcode, ret);
 	/* Disable emmc bus clock */
-	cvm_mmc_host_clock_off(host);
+	cvm_mmc_clk_logger_clk_off(slot);
 	host->release_bus(host);
 	if (slot->current_req == mrq)
 		slot->current_req = NULL;
@@ -1877,7 +2113,7 @@ static void cvm_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	host->acquire_bus(host);
 	/* Enable clock to be able to handle switch command */
-	cvm_mmc_host_clock_on(host);
+	cvm_mmc_clk_logger_clk_on(slot);
 
 	cvm_mmc_switch_to(slot);
 
@@ -1977,7 +2213,7 @@ static void cvm_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	host->powered = true;
 	cvm_mmc_configure_delay(slot);
 out:
-	cvm_mmc_host_clock_off(host);
+	cvm_mmc_clk_logger_clk_off(slot);
 	host->release_bus(host);
 	if (ios->timing == MMC_TIMING_MMC_HS)
 		check_and_write_hs400_tuning_block(slot);
@@ -2341,7 +2577,7 @@ int cvm_mmc_of_slot_probe(struct device *dev, struct cvm_mmc_host *host)
 	struct cvm_mmc_slot *slot;
 	struct mmc_host *mmc;
 	struct iommu_domain *dom;
-	int ret, id, i;
+	int ret, id, i, ret_logger;
 
 	mmc = mmc_alloc_host(sizeof(struct cvm_mmc_slot), dev);
 	if (!mmc)
@@ -2422,13 +2658,22 @@ int cvm_mmc_of_slot_probe(struct device *dev, struct cvm_mmc_host *host)
 
 	mmc_can_retune(mmc);
 
+	/*
+	 * Logging has to be enabled separately, before debugfs is established.
+	 * Otherwise kernel crashes (first produce comes before debugfs is available).
+	 */
+	ret_logger = cvm_mmc_clk_logger_init(slot);
+	if (ret_logger)
+		dev_info(mmc_classdev(slot->mmc),
+			 "Can't initialize clk logger! No logs available.\n");
+
 	slot->clock = mmc->f_min;
 	slot->bus_id = id;
 	slot->cached_rca = 1;
 
 	host->acquire_bus(host);
 	/* Enable and lock emmc bus clock until initialization is done */
-	cvm_mmc_host_clock_on(host);
+	cvm_mmc_clk_logger_clk_on(slot);
 	cvm_mmc_host_clock_lock(host);
 
 	host->slot[id] = slot;
@@ -2438,7 +2683,7 @@ int cvm_mmc_of_slot_probe(struct device *dev, struct cvm_mmc_host *host)
 
 	/* Unlock and disable emmc bus clock after initialization */
 	cvm_mmc_host_clock_unlock(host);
-	cvm_mmc_host_clock_off(host);
+	cvm_mmc_clk_logger_clk_off(slot);
 
 	host->release_bus(host);
 
@@ -2448,6 +2693,11 @@ int cvm_mmc_of_slot_probe(struct device *dev, struct cvm_mmc_host *host)
 		slot->host->slot[id] = NULL;
 		goto error;
 	}
+
+	/* If logger hasn't started, don't start debugfs entries */
+	if (!ret_logger)
+		cvm_mmc_add_clock_debugfs(slot);
+
 	return 0;
 
 error:
