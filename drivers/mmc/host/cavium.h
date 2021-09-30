@@ -368,6 +368,10 @@ static inline bool is_mmc_8xxx(struct cvm_mmc_host *host)
  */
 static inline bool cvm_mmc_host_clock_on(struct cvm_mmc_host *host)
 {
+	/* This feature is not implemented for T8xxx chips */
+	if (is_mmc_8xxx(host))
+		return;
+
 	if (host && host->set_clock_state) {
 		if (!atomic_read(&host->clock_op_lock)) {
 			host->set_clock_state(host, true);
@@ -390,6 +394,10 @@ static inline bool cvm_mmc_host_clock_on(struct cvm_mmc_host *host)
  */
 static inline bool cvm_mmc_host_clock_off(struct cvm_mmc_host *host)
 {
+	/* This feature is not implemented for T8xxx chips */
+	if (is_mmc_8xxx(host))
+		return;
+
 	if (host && host->set_clock_state) {
 		if (!atomic_read(&host->clock_op_lock)) {
 			host->set_clock_state(host, false);
@@ -412,6 +420,10 @@ static inline bool cvm_mmc_host_clock_off(struct cvm_mmc_host *host)
  */
 static inline void cvm_mmc_host_clock_lock(struct cvm_mmc_host *host)
 {
+	/* This feature is not implemented for T8xxx chips */
+	if (is_mmc_8xxx(host))
+		return;
+
 	if (host)
 		atomic_set(&host->clock_op_lock, 1);
 }
@@ -427,6 +439,10 @@ static inline void cvm_mmc_host_clock_lock(struct cvm_mmc_host *host)
  */
 static inline void cvm_mmc_host_clock_unlock(struct cvm_mmc_host *host)
 {
+	/* This feature is not implemented for T8xxx chips */
+	if (is_mmc_8xxx(host))
+		return;
+
 	if (host)
 		atomic_set(&host->clock_op_lock, 0);
 }

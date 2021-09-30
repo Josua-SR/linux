@@ -259,7 +259,12 @@ static int thunder_mmc_probe(struct pci_dev *pdev,
 	/* Configure clock management system */
 	host->set_clock_state = thunder_mmc_set_clock_state;
 	cvm_mmc_set_clock_state_init(host);
-	host->has_threaded_irq = true;
+
+	/* This feature is not implemented for T8xxx chips */
+	if (is_mmc_8xxx(host))
+		host->has_threaded_irq = false;
+	else
+		host->has_threaded_irq = true;
 
 	host->use_sg = true;
 	host->big_dma_addr = true;
