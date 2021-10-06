@@ -932,7 +932,7 @@ static void mvpp2_cls_c2_init(struct mvpp2 *priv)
 		    MVPP2_CLS2_TCAM_CTRL_BYPASS_FIFO_STAGES);
 
 	/* Invalidate all C2 entries */
-	for (index = 0; index < MVPP22_CLS_C2_N_ENTRIES; index++)
+	for (index = 0; index < MVPP22_CLS_C2_MAX_ENTRIES; index++)
 		mvpp2_cls_c2_inv_set(priv, index);
 }
 
