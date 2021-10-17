@@ -144,30 +144,6 @@ static void octeon_mmc_dmar_fixup_done(struct cvm_mmc_host *host)
 	host->n_minus_one = 0;
 }
 
-static void octeon_mmc_set_clock_state(struct cvm_mmc_host *, bool is_on)
-{
-	u64 reg_emm_debug;
-
-	if (is_on) {
-		/* To enable clock, the bit has to be cleared */
-		reg_emm_debug = readq(host->base + MIO_EMM_DEBUG(host));
-		reg_emm_debug &= ~MIO_EMM_DEBUG_RDSYNC;
-		writeq(reg_emm_debug, host->base + MIO_EMM_DEBUG(host));
-		udelay(1);
-		reg_emm_debug = read(host->base + MIO_EMM_DEBUG(host));
-		reg_emm_debug &= ~MIO_EMM_DEBUG_CLK_DIS;
-		writeq(reg_emm_debug, host->base + MIO_EMM_DEBUG(host));
-	} else {
-		reg_emm_debug = read(host->base + MIO_EMM_DEBUG(host));
-		reg_emm_debug |= MIO_EMM_DEBUG_CLK_DIS;
-		writeq(reg_emm_debug, host->base + MIO_EMM_DEBUG(host));
-		udelay(1);
-		reg_emm_debug = readq(host->base + MIO_EMM_DEBUG(host));
-		reg_emm_debug |= MIO_EMM_DEBUG_RDSYNC;
-		writeq(reg_emm_debug, host->base + MIO_EMM_DEBUG(host));
-	}
-}
-
 static int octeon_mmc_probe(struct platform_device *pdev)
 {
 	struct device_node *cn, *node = pdev->dev.of_node;
@@ -195,9 +171,10 @@ static int octeon_mmc_probe(struct platform_device *pdev)
 		host->dmar_fixup = octeon_mmc_dmar_fixup;
 		host->dmar_fixup_done = octeon_mmc_dmar_fixup_done;
 	}
-	host->set_clock_state = octeon_mmc_set_clock_state;
+
+	/* Octeon platform doesn't support required interfaces */
+	host->set_clock_state = NULL;
 	cvm_mmc_set_clock_state_init(host);
-	host->has_threaded_irq = false;
 
 	host->max_freq = MHZ_52;
 	host->sys_freq = octeon_get_io_clock_rate();

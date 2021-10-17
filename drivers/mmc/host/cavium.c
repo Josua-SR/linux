@@ -1087,18 +1087,8 @@ irqreturn_t cvm_mmc_interrupt(int irq, void *dev_id)
 		}
 	}
 
-	/* Finish request handling in the thread */
-	if (!host->has_threaded_irq) {
-		slot->current_req = NULL;
-		req->done(req);
-	} else {
-		if (host->need_irq_handler_lock)
-			spin_unlock_irqrestore(&host->irq_handler_lock, flags);
-		else
-			__release(&host->irq_handler_lock);
-
-		return IRQ_WAKE_THREAD;
-	}
+	slot->current_req = NULL;
+	req->done(req);
 
 no_req_done:
 	if (host->dmar_fixup_done)
@@ -1115,26 +1105,6 @@ out:
 		__release(&host->irq_handler_lock);
 
 	return IRQ_RETVAL(emm_int != 0);
-}
-
-irqreturn_t cvm_mmc_interrupt_thread(int irq, void *dev_id)
-{
-	struct cvm_mmc_host *host = (struct cvm_mmc_host *)dev_id;
-	struct cvm_mmc_slot *slot = host->slot[host->last_slot];
-	struct mmc_request *req = slot->current_req;
-
-	slot->current_req = NULL;
-	if (host->dmar_fixup_done)
-		host->dmar_fixup_done(host);
-
-	/* Needs extra delay ? */
-	cvm_mmc_clk_logger_clk_off(slot);
-
-	host->release_bus(host);
-	mmc_request_done(slot->mmc, req);
-
-
-	return IRQ_HANDLED;
 }
 
 /*

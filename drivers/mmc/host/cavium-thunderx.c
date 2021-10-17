@@ -72,19 +72,10 @@ static int thunder_mmc_register_interrupts(struct cvm_mmc_host *host,
 
 	/* register interrupts */
 	for (i = 0; i < nvec; i++) {
-		if (host->has_threaded_irq)
-			ret = devm_request_threaded_irq(&pdev->dev,
-							pci_irq_vector(pdev, i),
-							cvm_mmc_interrupt,
-							cvm_mmc_interrupt_thread,
-							0, cvm_mmc_irq_names[i],
-							host);
-
-		else
-			ret = devm_request_irq(&pdev->dev,
-					       pci_irq_vector(pdev, i),
-					       cvm_mmc_interrupt, IRQF_NO_THREAD,
-					       cvm_mmc_irq_names[i], host);
+		ret = devm_request_irq(&pdev->dev,
+				       pci_irq_vector(pdev, i),
+				       cvm_mmc_interrupt, IRQF_NO_THREAD,
+				       cvm_mmc_irq_names[i], host);
 		if (ret)
 			return ret;
 	}
@@ -259,12 +250,6 @@ static int thunder_mmc_probe(struct pci_dev *pdev,
 	/* Configure clock management system */
 	host->set_clock_state = thunder_mmc_set_clock_state;
 	cvm_mmc_set_clock_state_init(host);
-
-	/* This feature is not implemented for T8xxx chips */
-	if (is_mmc_8xxx(host))
-		host->has_threaded_irq = false;
-	else
-		host->has_threaded_irq = true;
 
 	host->use_sg = true;
 	host->big_dma_addr = true;

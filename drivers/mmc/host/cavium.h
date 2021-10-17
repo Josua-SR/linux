@@ -155,7 +155,6 @@ struct cvm_mmc_host {
 	unsigned int dma_wait_delay;	/* Delay before polling DMA in usecs */
 
 	/* Clock halt mechanism */
-	bool has_threaded_irq; /* Enabler for the feature. It can't be done without threaded irqs */
 	atomic_t clock_op_lock;  /* Lock clock state at current value */
 	void (*set_clock_state)(struct cvm_mmc_host *host, bool is_on);
 
@@ -370,7 +369,7 @@ static inline bool cvm_mmc_host_clock_on(struct cvm_mmc_host *host)
 {
 	/* This feature is not implemented for T8xxx chips */
 	if (is_mmc_8xxx(host))
-		return;
+		return false;
 
 	if (host && host->set_clock_state) {
 		if (!atomic_read(&host->clock_op_lock)) {
@@ -396,7 +395,7 @@ static inline bool cvm_mmc_host_clock_off(struct cvm_mmc_host *host)
 {
 	/* This feature is not implemented for T8xxx chips */
 	if (is_mmc_8xxx(host))
-		return;
+		return false;
 
 	if (host && host->set_clock_state) {
 		if (!atomic_read(&host->clock_op_lock)) {
