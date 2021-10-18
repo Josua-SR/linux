@@ -241,6 +241,8 @@ struct clk_logger_entry {
  * that exists.
  */
 struct clk_logger {
+	struct cvm_mmc_slot *slot;
+	bool overflow;
 	struct ptr_ring ring;  /** ptr_ring interface */
 	struct list_head free_list; /* Keeps simple free list of enties to be used */
 
@@ -259,6 +261,8 @@ static int cvm_mmc_clk_logger_init(struct cvm_mmc_slot *slot)
 		return -ENOMEM;
 
 	logger = slot->logger;
+	logger->slot = slot;
+	logger->overflow = false;
 
 	if (ptr_ring_init(&logger->ring, CLK_LOGGER_ITEMS, GFP_KERNEL))
 		return -ENOMEM;
@@ -284,7 +288,7 @@ static bool cvm_mmc_clk_logger_produce(struct clk_logger *logger, u32 state,
 	e = list_first_entry_or_null(&logger->free_list,
 				     struct clk_logger_entry, list);
 	if (!e)
-		return false;
+		goto no_space;
 
 	/* Remove element from the list. show() method returns the item on free list */
 	list_del(&e->list);
@@ -298,10 +302,21 @@ static bool cvm_mmc_clk_logger_produce(struct clk_logger *logger, u32 state,
 		e->transition_type = 0xcafebabe;
 		list_add_tail(&e->list, &logger->free_list);
 
-		return false;
+		goto no_space;
 	}
 
+	/* Ensure that overflow is not set */
+	logger->overflow = false;
+
 	return true;
+
+no_space:
+	if (!logger->overflow) {
+		dev_info(mmc_classdev(logger->slot->mmc),
+			 "clock logger buffer overflow\n");
+		logger->overflow = true;
+	}
+	return false;
 }
 
 static bool cvm_mmc_clk_logger_consume(struct clk_logger *logger,
