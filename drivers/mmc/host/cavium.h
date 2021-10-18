@@ -194,6 +194,11 @@ struct cvm_mmc_slot {
 	u64 want_switch;
 	u32 hs400_tuning_block;		/* Block number used for tuning */
 	bool hs400_tuning_block_present;
+	/*
+	 * The tuning is time consuming routine.
+	 * To avoid bus congestion te delay between steps is required.
+	 */
+	uint32_t tuning_step_delay;
 
 #define MMC_TIMINGS_COUNT      ((MMC_TIMING_MMC_HS400) + 1)
 	u32 data_out_taps_dly[MMC_TIMINGS_COUNT];

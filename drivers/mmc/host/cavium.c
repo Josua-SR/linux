@@ -1636,6 +1636,7 @@ static int adjust_tuning(struct mmc_host *mmc, struct adj *adj, u32 opcode)
 				err = adj->test(mmc, opcode, NULL);
 				if (err)
 					break;
+				udelay(slot->tuning_step_delay);
 			}
 			how[tap] = "-+"[!err];
 			if (!err)
@@ -1925,7 +1926,7 @@ static int tune_hs400(struct cvm_mmc_slot *slot)
 			dev_dbg(host->dev, "HS400 testing data in tap %d\n",
 				 tap);
 			mmc_wait_for_req(mmc, &mrq);
-			udelay(host->dma_wait_delay);
+			udelay(slot->tuning_step_delay);
 			if (cmd.error | data.error) {
 				err = cmd.error ? cmd.error : data.error;
 				how[tap] = '-';
@@ -2015,7 +2016,7 @@ static u32 max_supported_frequency(struct cvm_mmc_host *host)
 static void cvm_mmc_tune_mode(struct cvm_mmc_slot *slot, struct mmc_ios *ios)
 {
 	struct mmc_host *host = slot->mmc;
-	u8 timing = ios->timing;
+	u8 timing = ACCESS_ONCE(ios->timing);
 	int ret = 0;
 
 	/* Only following modes are supported. HS200 goes different path */
@@ -2499,6 +2500,12 @@ static int cvm_mmc_of_parse(struct device *dev, struct cvm_mmc_slot *slot)
 	slot->hs400_tuning_block = -1U;
 	of_property_read_u32(node, "marvell,hs400-tuning-block",
 			     &slot->hs400_tuning_block);
+
+	/* Set Tuning step delay for adjust_tuning */
+	slot->tuning_step_delay = 30; /* Default value of 30us is reasonable */
+	of_property_read_u32(node, "marvell,tuning-step-delay",
+			     &slot->tuning_step_delay);
+
 	/* Set bus width from obsolete properties, if unset */
 	if (!(mmc->caps & (MMC_CAP_8_BIT_DATA | MMC_CAP_4_BIT_DATA))) {
 		of_property_read_u32(node, "cavium,bus-max-width", &bus_width);
