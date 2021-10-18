@@ -251,6 +251,10 @@ static int thunder_mmc_probe(struct pci_dev *pdev,
 	host->set_clock_state = thunder_mmc_set_clock_state;
 	cvm_mmc_set_clock_state_init(host);
 
+	/* Initialize serialization mechanism for bus accesses */
+	host->use_mmc_bus_lock = true; /* Can be overridden by devicetree */
+	cvm_mmc_host_bus_init(host);
+
 	host->use_sg = true;
 	host->big_dma_addr = true;
 	host->need_irq_handler_lock = true;
@@ -313,6 +317,12 @@ static int thunder_mmc_probe(struct pci_dev *pdev,
 	host->dma_wait_delay = DEFAULT_DMA_WAIT_DELAY;
 	of_property_read_u32(node, "marvell,dma-wait-delay",
 			     &host->dma_wait_delay);
+	/* Override use_mmc_bus_lock */
+	if (of_property_read_bool(node, "marvell,use_mmc_serializer"))
+		host->use_mmc_bus_lock = false;
+
+	dev_dbg(dev, "MMC bus lock enabled? %s\n",
+		host->use_mmc_bus_lock ? "Y" : "N");
 	/* Run the calibration to calculate per tap delay that would be
 	 * used to evaluate values. These values would be programmed in
 	 * MIO_EMM_TIMING.

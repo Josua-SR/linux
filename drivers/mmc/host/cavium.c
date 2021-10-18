@@ -1096,7 +1096,9 @@ no_req_done:
 	if (host_done) {
 		/* Disable emmc bus clock */
 		cvm_mmc_clk_logger_clk_off(slot);
-		host->release_bus(host);
+		host->mmc_bus_idle = true;
+		wake_up(&host->mmc_bus_op_wait);
+		//host->release_bus(host);
 	}
 out:
 	if (host->need_irq_handler_lock)
@@ -1526,7 +1528,9 @@ static void cvm_mmc_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	 * For requests the lock is only released after the completion
 	 * interrupt!
 	 */
-	host->acquire_bus(host);
+	ret = cvm_mmc_host_bus_acquire_interruptible(host);
+	if (ret)
+		goto error;
 
 	/* There should be no other request stil executing */
 	if (slot->current_req) {
@@ -1546,8 +1550,10 @@ static void cvm_mmc_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		ret = _cvm_mmc_request(host, slot, mrq);
 
 	/* Clock should be disabled by threaded irq handler after transaction */
-	if (!ret)
+	if (!ret) {
+		cvm_mmc_host_bus_unlock(host);
 		return;
+	}
 
 	/* Handle all kind of errors */
 error:
@@ -1555,9 +1561,9 @@ error:
 		cmd->opcode, ret);
 	/* Disable emmc bus clock */
 	cvm_mmc_clk_logger_clk_off(slot);
-	host->release_bus(host);
 	if (slot->current_req == mrq)
 		slot->current_req = NULL;
+	cvm_mmc_host_bus_release(host);
 	mmc_request_done(mmc, mrq);
 }
 
@@ -2082,7 +2088,8 @@ static void cvm_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		return;
 	}
 
-	host->acquire_bus(host);
+	cvm_mmc_host_bus_acquire(host);
+
 	/* Enable clock to be able to handle switch command */
 	cvm_mmc_clk_logger_clk_on(slot);
 
@@ -2185,7 +2192,7 @@ static void cvm_mmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	cvm_mmc_configure_delay(slot);
 out:
 	cvm_mmc_clk_logger_clk_off(slot);
-	host->release_bus(host);
+	cvm_mmc_host_bus_release(host);
 	if (ios->timing == MMC_TIMING_MMC_HS)
 		check_and_write_hs400_tuning_block(slot);
 
@@ -2648,7 +2655,7 @@ int cvm_mmc_of_slot_probe(struct device *dev, struct cvm_mmc_host *host)
 	slot->bus_id = id;
 	slot->cached_rca = 1;
 
-	host->acquire_bus(host);
+	cvm_mmc_host_bus_acquire(host);
 	/* Enable and lock emmc bus clock until initialization is done */
 	cvm_mmc_clk_logger_clk_on(slot);
 	cvm_mmc_host_clock_lock(host);
@@ -2661,8 +2668,7 @@ int cvm_mmc_of_slot_probe(struct device *dev, struct cvm_mmc_host *host)
 	/* Unlock and disable emmc bus clock after initialization */
 	cvm_mmc_host_clock_unlock(host);
 	cvm_mmc_clk_logger_clk_off(slot);
-
-	host->release_bus(host);
+	cvm_mmc_host_bus_release(host);
 
 	ret = mmc_add_host(mmc);
 	if (ret) {

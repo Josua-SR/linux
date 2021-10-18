@@ -176,6 +176,16 @@ static int octeon_mmc_probe(struct platform_device *pdev)
 	host->set_clock_state = NULL;
 	cvm_mmc_set_clock_state_init(host);
 
+	/* Initialize serialization mechanism for bus accesses */
+	host->use_mmc_bus_lock = false;
+	cvm_mmc_host_bus_init(host);
+	/* Override use_mmc_bus_lock */
+	if (of_property_read_bool(node, "marvell,use_mmc_bus_lock"))
+		host->use_mmc_bus_lock = true;
+
+	dev_dbg(dev, "MMC bus lock enabled? %s\n",
+		host->use_mmc_bus_lock ? "Y" : "N");
+
 	host->max_freq = MHZ_52;
 	host->sys_freq = octeon_get_io_clock_rate();
 

@@ -141,8 +141,13 @@ struct cvm_mmc_host {
 	bool tap_requires_noclk;
 	bool calibrate_glitch;
 	bool cond_clock_glitch;
+	bool use_mmc_bus_lock;
 	spinlock_t irq_handler_lock;
 	struct semaphore mmc_serializer;
+	/* Mechanism replaces serialization of calls using semaphore */
+	bool mmc_bus_idle;
+	struct mutex mmc_bus_op_lock;
+	wait_queue_head_t mmc_bus_op_wait;
 
 	struct gpio_desc *global_pwr_gpiod;
 	atomic_t shared_power_users;
@@ -346,7 +351,6 @@ struct cvm_mmc_cr_mods {
 
 /* Protoypes */
 irqreturn_t cvm_mmc_interrupt(int irq, void *dev_id);
-irqreturn_t cvm_mmc_interrupt_thread(int irq, void *dev_id);
 int cvm_mmc_of_slot_probe(struct device *dev, struct cvm_mmc_host *host);
 int cvm_mmc_of_slot_remove(struct cvm_mmc_slot *slot);
 
@@ -358,6 +362,122 @@ static inline bool is_mmc_8xxx(struct cvm_mmc_host *host)
 	u32 chip_id = (pdev->subsystem_device >> 12) & 0xF;
 
 	return (chip_id == PCI_SUBSYS_DEVID_8XXX);
+}
+
+/* MMC block has 3 slots to support up to 3 cards (MMC or SD).
+ * The slots are formed by dedicated CLK and CMD lines.
+ * Unfortunately DAT lines are shared between all 3 slots.
+ * This forces the driver to multiplex this lines among the slots.
+ * Hence, only one MMC request can be on the fly at given moment
+ * of time. To adjust to that requirement following functios are needed.
+ */
+
+/**
+ * Initialize the bus locking mechanism
+ *
+ * @param	host	host structure handle, there's only one in the system
+ *
+ * @note	This functions and locking mechanism must be used in process context
+ */
+static inline void cvm_mmc_host_bus_init(struct cvm_mmc_host *host)
+{
+	/* Bus idle creates the conditio for waitqueue */
+	host->mmc_bus_idle = true;
+	/* Access to this condition is enforced by mutexes */
+	mutex_init(&host->mmc_bus_op_lock);
+	/* Waitqueue ensures proper management of threads accessing the bus */
+	init_waitqueue_head(&host->mmc_bus_op_wait);
+}
+
+/**
+ * Lock the bus. Locking is mandatory for any operation on the bus from process context
+ *
+ * @param	host	Host structure handle.
+ *
+ * @note	This function requires the process context, it might sleep.
+ *
+ */
+static inline int cvm_mmc_host_bus_acquire_interruptible(struct cvm_mmc_host *host)
+{
+	int ret;
+
+	if (host->use_mmc_bus_lock) {
+		ret = mutex_lock_interruptible(&host->mmc_bus_op_lock);
+		if (ret == -EINTR)
+			goto error;
+		while (!host->mmc_bus_idle) {
+			mutex_unlock(&host->mmc_bus_op_lock);
+			ret = wait_event_interruptible(host->mmc_bus_op_wait,
+						       host->mmc_bus_idle);
+			if (ret == -ERESTARTSYS)
+				goto error;
+			ret = mutex_lock_interruptible(&host->mmc_bus_op_lock);
+			if (ret == -EINTR)
+				goto error;
+		}
+		/* Mark bus as busy */
+		host->mmc_bus_idle = false;
+	} else {
+		if (host->acquire_bus)
+			host->acquire_bus(host);
+	}
+
+	return 0;
+error:
+	return ret;
+}
+
+/**
+ * Lock the bus. Locking is mandatory for any operation on the bus from process context
+ *
+ * @param	host	Host structure handle.
+ *
+ * @note	This function requires the process context, it might sleep.
+ *
+ */
+static inline int cvm_mmc_host_bus_acquire(struct cvm_mmc_host *host)
+{
+	if (host->use_mmc_bus_lock) {
+		mutex_lock(&host->mmc_bus_op_lock);
+		while (!host->mmc_bus_idle) {
+			mutex_unlock(&host->mmc_bus_op_lock);
+			wait_event(host->mmc_bus_op_wait, host->mmc_bus_idle);
+			mutex_lock(&host->mmc_bus_op_lock);
+		}
+
+		host->mmc_bus_idle = false;
+	} else {
+		if (host->acquire_bus)
+			host->acquire_bus(host);
+	}
+
+	return 0;
+}
+
+/**
+ * Unlock the bus. Allow other processes to check the state
+ *
+ * @param	host	Host structure handle.
+ *
+ * @note	This function requires the process context, it might sleep.
+ *
+ */
+static inline void cvm_mmc_host_bus_unlock(struct cvm_mmc_host *host)
+{
+	if (host->use_mmc_bus_lock)
+		mutex_unlock(&host->mmc_bus_op_lock);
+}
+
+static inline void cvm_mmc_host_bus_release(struct cvm_mmc_host *host)
+{
+	if (host->use_mmc_bus_lock) {
+		host->mmc_bus_idle = true;
+		mutex_unlock(&host->mmc_bus_op_lock);
+		wake_up(&host->mmc_bus_op_wait);
+	} else {
+		if (host->release_bus)
+			host->release_bus(host);
+	}
 }
 
 /**
