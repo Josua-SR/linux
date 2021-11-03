@@ -67,3 +67,11 @@
 	status = "okay";
 };
 
+&cp0_mdio_uio { /* uses cp0_mdio */
+	status = "okay";
+};
+
+&cp0_xmdio_uio { /* uses cp0_xmdio */
+	status = "okay";
+};
+
