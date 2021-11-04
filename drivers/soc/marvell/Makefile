@@ -11,3 +11,4 @@ obj-$(CONFIG_OCTEONTX2_PCI_CONSOLE) += otx2-pci-console.o
 obj-y		+= octeontx2-ghes/
 obj-y		+= octeontx2-llc/
 obj-y 		+= hw-access/
+obj-$(CONFIG_MARVELL_AVS_RESET) += avs_bus_reset.o

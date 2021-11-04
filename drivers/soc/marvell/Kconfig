@@ -213,4 +213,15 @@ config HW_CSR_ACCESS
 	help
 	  provides an interface which enables user space utility to read from or to write
 	  to HW Device Config Space Registers, Contexts, Memory.
+
+config MARVELL_AVS_RESET
+	bool "Marvell AVS reset support"
+	depends on ARM64
+	default n
+	help
+	  Enable support for AVS bus reset control. This control allows
+	  to stop AVS bus operation before reset. This ensures proper
+	  bus operation after SoC reset for all devices.
+	  If unsure, say N here.
+
 endmenu
