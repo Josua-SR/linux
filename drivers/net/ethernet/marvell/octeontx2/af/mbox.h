@@ -741,6 +741,7 @@ enum nix_af_status {
 	NIX_AF_ERR_INVALID_NIXBLK   = -424,
 	NIX_AF_ERR_CQ_CTX_WRITE_ERR  = -425,
 	NIX_AF_ERR_AQ_CTX_RETRY_WRITE  = -426,
+	NIX_AF_ERR_LINK_CREDITS  = -431,
 };
 
 /* For NIX RX vtag action  */
