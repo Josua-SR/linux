@@ -14,6 +14,8 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
+#include <linux/property.h>
+#include <linux/acpi.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/bitfield.h>
@@ -180,33 +182,127 @@ static void thunder_calibrate_mmc(struct cvm_mmc_host *host)
 	}
 }
 
+static int thunder_mmc_slot_probe(struct platform_device *plat_dev)
+{
+	struct device *dev;
+	struct device_node *np;
+	struct acpi_device *adev;
+	struct cvm_mmc_host *host;
+	const struct cvm_mmc_host_info *info;
+	int ret;
+
+
+	dev = &plat_dev->dev;
+	info = device_get_match_data(dev);
+
+	if (IS_ERR_OR_NULL(info->host)) {
+		if (!info->host)
+			return -EPROBE_DEFER;
+		else
+			return PTR_ERR(info->host);
+	}
+
+	host = info->host;
+	np = plat_dev->dev.of_node;
+	adev = ACPI_COMPANION(&plat_dev->dev);
+
+	if (!adev && !np)
+		return -EINVAL;
+
+	ret = cvm_mmc_of_slot_probe(&plat_dev->dev, host);
+	if (ret) {
+		if (ret != -EPROBE_DEFER)
+			dev_info(dev, "Probe has failed with error %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int thunder_mmc_slot_remove(struct platform_device *plat_dev)
+{
+	struct cvm_mmc_slot *slot;
+
+	slot = platform_get_drvdata(plat_dev);
+	if (slot)
+		cvm_mmc_of_slot_remove(slot);
+
+	return 0;
+}
+
+static struct cvm_mmc_host_info mmc_host_info = {
+	.host = NULL,  /* Set when host is ready */
+};
+
+static const struct acpi_device_id thunder_mmc_slot_ids[] = {
+	{ .id = "MRVL0003", .driver_data = (kernel_ulong_t)&mmc_host_info },
+	{ },
+};
+
+static const struct of_device_id thunder_mmc_slot_of_match[] = {
+	{ .compatible = "mmc-slot", .data = &mmc_host_info },
+	{ },
+};
+
+static struct platform_driver thunder_mmc_slot_driver = {
+	.driver = {
+		.name = "thunder-mmc-slot",
+		.of_match_table = thunder_mmc_slot_of_match,
+		.acpi_match_table = thunder_mmc_slot_ids,
+		},
+	.probe = thunder_mmc_slot_probe,
+	.remove = thunder_mmc_slot_remove,
+};
+
+MODULE_DEVICE_TABLE(acpi, thunder_mmc_slot_ids);
+MODULE_DEVICE_TABLE(of, thunder_mmc_slots_of_match);
+
+static int thunder_mmc_of_slot_create(struct device *dev)
+{
+	struct device_node *np, *child;
+
+	np = dev->of_node;
+	/* For Device tree case, we have to populate devices manually */
+	for_each_child_of_node(np, child) {
+		if (of_device_is_compatible(child, "mmc-slot"))
+			of_platform_device_create(child, NULL, dev);
+	}
+
+	return 0;
+}
+
 static int thunder_mmc_probe(struct pci_dev *pdev,
 			     const struct pci_device_id *id)
 {
-	struct device_node *node = pdev->dev.of_node;
 	struct device *dev = &pdev->dev;
-	struct device_node *child_node;
 	struct cvm_mmc_host *host;
-	int ret, i = 0;
+	int ret;
 	u8 chip_id;
 	u8 rev;
+	bool has_acpi;
 
 	host = devm_kzalloc(dev, sizeof(*host), GFP_KERNEL);
-	if (!host)
-		return -ENOMEM;
+	if (!host) {
+		ret = -ENOMEM;
+		goto error;
+	}
 
+	has_acpi = has_acpi_companion(dev);
 	pci_set_drvdata(pdev, host);
+
 	ret = pcim_enable_device(pdev);
 	if (ret)
-		return ret;
+		goto error;
 
 	ret = pci_request_regions(pdev, KBUILD_MODNAME);
 	if (ret)
-		return ret;
+		goto error;
 
 	host->base = pcim_iomap(pdev, 0, pci_resource_len(pdev, 0));
-	if (!host->base)
-		return -EINVAL;
+	if (!host->base) {
+		ret = -EINVAL;
+		goto error;
+	}
 
 	/* On ThunderX these are identical */
 	host->dma_base = host->base;
@@ -215,14 +311,19 @@ static int thunder_mmc_probe(struct pci_dev *pdev,
 	host->reg_off = 0x2000;
 	host->reg_off_dma = 0x160;
 
-	host->clk = devm_clk_get(dev, NULL);
-	if (IS_ERR(host->clk))
-		return PTR_ERR(host->clk);
+	if (!has_acpi) {
+		host->clk = devm_clk_get(dev, NULL);
+		if (IS_ERR(host->clk)) {
+			ret = PTR_ERR(host->clk);
+			goto no_clk;
+		}
 
-	ret = clk_prepare_enable(host->clk);
-	if (ret)
-		return ret;
-	host->sys_freq = clk_get_rate(host->clk);
+		ret = clk_prepare_enable(host->clk);
+		if (ret)
+			goto no_clk;
+		host->sys_freq = clk_get_rate(host->clk);
+	} else
+		host->sys_freq = 1000 * 1000000ul;
 
 	spin_lock_init(&host->irq_handler_lock);
 	sema_init(&host->mmc_serializer, 1);
@@ -236,9 +337,6 @@ static int thunder_mmc_probe(struct pci_dev *pdev,
 	host->big_dma_addr = true;
 	host->need_irq_handler_lock = true;
 	host->last_slot = -1;
-
-	if (ret)
-		goto error;
 
 	rev = pdev->revision;
 	chip_id = (pdev->subsystem_device >> 8) & 0xff;
@@ -289,7 +387,7 @@ static int thunder_mmc_probe(struct pci_dev *pdev,
 
 	ret = thunder_mmc_register_interrupts(host, pdev);
 	if (ret)
-		goto error;
+		goto no_irq;
 
 	/* Run the calibration to calculate per tap delay that would be
 	 * used to evaluate values. These values would be programmed in
@@ -297,42 +395,21 @@ static int thunder_mmc_probe(struct pci_dev *pdev,
 	 */
 	thunder_calibrate_mmc(host);
 
-	for_each_available_child_of_node(node, child_node) {
-		/*
-		 * mmc_of_parse and devm* require one device per slot.
-		 * Create a dummy device per slot and set the node pointer to
-		 * the slot. The easiest way to get this is using
-		 * of_platform_device_create.
-		 */
-		if (of_device_is_compatible(child_node, "mmc-slot")) {
-			host->slot_pdev[i] = of_platform_device_create(child_node, NULL,
-								       &pdev->dev);
-			if (!host->slot_pdev[i])
-				continue;
+	mmc_host_info.host = host;
+	/* For platforms with device tree, the driver has to create slot nodes */
+	if (!has_acpi)
+		thunder_mmc_of_slot_create(dev);
 
-			dev_info(dev, "Probing slot %d\n", i);
-
-			ret = cvm_mmc_of_slot_probe(&host->slot_pdev[i]->dev, host);
-			if (ret)
-				goto error;
-		}
-		i++;
-	}
-
-	dev_info(dev, "probed\n");
 	return 0;
 
+	/* Handle all kind of errors */
+no_irq:
+	if (!has_acpi)
+		clk_disable_unprepare(host->clk);
+no_clk:
+	dev_err(dev, "Can't get rclk frequency\n");
 error:
-	for (i = 0; i < CAVIUM_MAX_MMC; i++) {
-		if (host->slot[i])
-			cvm_mmc_of_slot_remove(host->slot[i]);
-		if (host->slot_pdev[i]) {
-			get_device(&host->slot_pdev[i]->dev);
-			of_platform_device_destroy(&host->slot_pdev[i]->dev, NULL);
-			put_device(&host->slot_pdev[i]->dev);
-		}
-	}
-	clk_disable_unprepare(host->clk);
+	mmc_host_info.host = ERR_PTR(ret);
 	return ret;
 }
 
@@ -340,11 +417,6 @@ static void thunder_mmc_remove(struct pci_dev *pdev)
 {
 	struct cvm_mmc_host *host = pci_get_drvdata(pdev);
 	u64 dma_cfg;
-	int i;
-
-	for (i = 0; i < CAVIUM_MAX_MMC; i++)
-		if (host->slot[i])
-			cvm_mmc_of_slot_remove(host->slot[i]);
 
 	dma_cfg = readq(host->dma_base + MIO_EMM_DMA_CFG(host));
 	dma_cfg |= MIO_EMM_DMA_CFG_CLR;
@@ -353,13 +425,16 @@ static void thunder_mmc_remove(struct pci_dev *pdev)
 		dma_cfg = readq(host->dma_base + MIO_EMM_DMA_CFG(host));
 	} while (dma_cfg & MIO_EMM_DMA_CFG_EN);
 
-	clk_disable_unprepare(host->clk);
+	if (!has_acpi_companion(&pdev->dev))
+		clk_disable_unprepare(host->clk);
 }
 
 static const struct pci_device_id thunder_mmc_id_table[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_CAVIUM, 0xa010) },
 	{ 0, }  /* end of table */
 };
+
+MODULE_DEVICE_TABLE(pci, thunder_mmc_id_table);
 
 static struct pci_driver thunder_mmc_driver = {
 	.name = KBUILD_MODNAME,
@@ -368,7 +443,30 @@ static struct pci_driver thunder_mmc_driver = {
 	.remove = thunder_mmc_remove,
 };
 
-module_pci_driver(thunder_mmc_driver);
+static int __init thunder_mmc_init(void)
+{
+	int ret;
+
+	/* Must be initialize before the platform driver (poor man's bus) */
+	ret = pci_register_driver(&thunder_mmc_driver);
+	if (ret)
+		return ret;
+
+	ret = platform_driver_register(&thunder_mmc_slot_driver);
+	if (!ret)
+		return 0;
+
+	pci_unregister_driver(&thunder_mmc_driver);
+	return ret;
+}
+module_init(thunder_mmc_init);
+
+static void __exit thunder_mmc_exit(void)
+{
+	platform_driver_unregister(&thunder_mmc_slot_driver);
+	pci_unregister_driver(&thunder_mmc_driver);
+}
+module_exit(thunder_mmc_exit);
 
 MODULE_AUTHOR("Cavium Inc.");
 MODULE_DESCRIPTION("Cavium ThunderX eMMC Driver");
