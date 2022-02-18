@@ -12,14 +12,11 @@
 #define _CAVIUM_MMC_H_
 
 #include <linux/bitops.h>
-#include <linux/atomic.h>
 #include <linux/clk.h>
 #include <linux/gpio/consumer.h>
 #include <linux/io.h>
 #include <linux/mmc/host.h>
 #include <linux/of.h>
-#include <linux/property.h>
-#include <linux/acpi.h>
 #include <linux/scatterlist.h>
 #include <linux/semaphore.h>
 #include <linux/pci.h>
@@ -126,7 +123,7 @@ struct cvm_mmc_host {
 	u64 n_minus_one;	/* OCTEON II workaround location */
 	int last_slot;
 	struct clk *clk;
-	unsigned long sys_freq;
+	int sys_freq;
 	int max_freq;
 	bool use_sg;
 	bool has_ciu3;
@@ -160,11 +157,6 @@ struct cvm_mmc_host {
 	void (*dmar_fixup)(struct cvm_mmc_host *, struct mmc_command *,
 			   struct mmc_data *, u64);
 	void (*dmar_fixup_done)(struct cvm_mmc_host *);
-};
-
-/* Provide slot devices an information about host */
-struct cvm_mmc_host_info {
-	struct cvm_mmc_host *host;
 };
 
 struct cvm_mmc_slot {
