@@ -14,7 +14,7 @@
 /* message types - userspace to kernel */
 enum {
 	ETHTOOL_MSG_USER_NONE,
-	ETHTOOL_MSG_RINGS_GET,
+	ETHTOOL_MSG_RINGS_GET = 15,
 	ETHTOOL_MSG_RINGS_SET,
 
 	/* add new constants above here */
@@ -25,7 +25,7 @@ enum {
 /* message types - kernel to userspace */
 enum {
 	ETHTOOL_MSG_KERNEL_NONE,
-	ETHTOOL_MSG_RINGS_GET_REPLY,
+	ETHTOOL_MSG_RINGS_GET_REPLY = 16,
 	ETHTOOL_MSG_RINGS_NTF,
 
 	/* add new constants above here */
