@@ -23,6 +23,7 @@
 #include "otx2_txrx.h"
 #include "otx2_devlink.h"
 #include <rvu_trace.h>
+#include "qos.h"
 
 /* PCI device IDs */
 #define PCI_DEVID_OCTEONTX2_RVU_PF              0xA063
@@ -440,6 +441,8 @@ struct otx2_nic {
 	u8			pfc_en;
 	u8			*queue_to_pfc_map;
 #endif
+	/* qos */
+	struct otx2_qos		qos;
 };
 
 static inline bool is_otx2_lbkvf(struct pci_dev *pdev)
@@ -963,4 +966,5 @@ int otx2_dcbnl_set_ops(struct net_device *dev);
 #endif
 /* qos support */
 void otx2_qos_sq_setup(struct otx2_nic *pfvf);
+int otx2_get_txq_by_classid(struct otx2_nic *pfvf, u16 classid);
 #endif /* OTX2_COMMON_H */
