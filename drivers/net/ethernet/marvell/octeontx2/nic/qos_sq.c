@@ -16,11 +16,11 @@
 
 #define OTX2_QOS_MAX_LEAF_NODES 16
 
-void otx2_qos_sq_setup(struct otx2_nic *pfvf)
+void otx2_qos_sq_setup(struct otx2_nic *pfvf, int qos_txqs)
 {
 	struct otx2_hw *hw = &pfvf->hw;
 
-	hw->tc_tx_queues = OTX2_QOS_MAX_LEAF_NODES;
+	hw->tc_tx_queues = qos_txqs;
 }
 EXPORT_SYMBOL(otx2_qos_sq_setup);
 
@@ -377,8 +377,9 @@ int otx2_qos_get_qid(struct otx2_nic *pfvf)
 	int qidx;
 
 	qidx = find_first_zero_bit(pfvf->qos.qos_sq_bmap,
-				   OTX2_QOS_MAX_LEAF_NODES);
-	return qidx == OTX2_QOS_MAX_LEAF_NODES ? -ENOSPC : qidx;
+				   pfvf->hw.tc_tx_queues);
+
+	return qidx == pfvf->hw.tc_tx_queues ? -ENOSPC : qidx;
 }
 
 void otx2_qos_free_qid(struct otx2_nic *pfvf, int qidx)
