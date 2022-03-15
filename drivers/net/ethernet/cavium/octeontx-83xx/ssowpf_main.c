@@ -316,6 +316,31 @@ void ssow_clear_nosched(u32 id, struct ssowpf_vf *vf, u64 grp_mask)
 	}
 }
 
+static int ssow_vf_get_work_pending(void __iomem *reg_base)
+{
+	unsigned long timeout = jiffies + usecs_to_jiffies(20000);
+	bool twice = false;
+	u64 reg;
+
+again:
+	/* Poll until pending get work is done */
+	reg = readq_relaxed(reg_base + SSOW_VF_VHWSX_PENDTAG(0));
+	if (!(reg & BIT_ULL(62)))
+		return 0;
+
+	if (time_before(jiffies, timeout)) {
+		usleep_range(1, 5);
+		goto again;
+	}
+
+	if (!twice) {
+		twice = true;
+		goto again;
+	}
+
+	return -EBUSY;
+}
+
 static void ssow_vf_get_work(u64 addr, struct wqe_s *wqe)
 {
 	u64 work0 = 0;
@@ -398,7 +423,7 @@ int ssow_reset_domain(u32 id, u16 domain_id, u64 grp_mask)
 			reg = readq_relaxed(reg_base +
 					    SSOW_VF_VHWSX_PENDTAG(0));
 			if (reg >> 63) {
-				if (((reg >> 32) & 0x3) < 2)
+				if (((reg >> 32) & 0x3) < 3)
 					writeq_relaxed(0x0, reg_base +
 						SSOW_VF_VHWSX_OP_DESCHED(0));
 			} else {
@@ -407,10 +432,18 @@ int ssow_reset_domain(u32 id, u16 domain_id, u64 grp_mask)
 				 * sure that the WQP we receive with it belongs
 				 * to GGRP mapped to this domain
 				 */
+				if (reg >> 62) {
+					/* Check for pending get work */
+					if (ssow_vf_get_work_pending(ssow->vf[i].domain.reg_base))
+						dev_info(&ssow->pdev->dev, "Get work still pending\n");
+				}
+
 				addr = ((u64)ssow->vf[i].domain.reg_base +
 					SSOW_VF_VHWSX_OP_GET_WORK0(0));
+
 				wqe.work0 = 0;
 				wqe.work1 = 0;
+
 				ssow_vf_get_work(addr, &wqe);
 
 				if (wqe.work1 != 0) {

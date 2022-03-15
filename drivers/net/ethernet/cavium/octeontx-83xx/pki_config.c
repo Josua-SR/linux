@@ -8,18 +8,6 @@
 
 #include "pki.h"
 
-#define PKI_DROP_STYLE	0
-
-#define QPG_INVALID	((u32)-1)
-#define PKIND_INVALID	((u32)-1)
-
-enum PKI_PORT_STATE {
-	PKI_PORT_CLOSE	 = 0,
-	PKI_PORT_OPEN	 = 1,
-	PKI_PORT_START	 = 2,
-	PKI_PORT_STOP	 = 3
-};
-
 static int alloc_pcam_rsrc(struct rsrc_bmap *rsrc)
 {
 	int id;
@@ -307,8 +295,7 @@ exit:
 	return qpg_base;
 }
 
-static int qpg_range_free(struct pki_t *pki, u32 qpg_base, u32 qpg_num,
-			  u16 domain_id)
+int qpg_range_free(struct pki_t *pki, u32 qpg_base, u32 qpg_num, u16 domain_id)
 {
 	u16 null_domain = ~((u16)0u);
 	u32 qpg_id = qpg_range_lookup_by_domain(pki, qpg_base, qpg_num,
@@ -1021,7 +1008,7 @@ int pki_port_stop(struct pkipf_vf *vf, u16 vf_id,
 	return MBOX_RET_SUCCESS;
 }
 
-static void free_port_pcam_entries(struct pki_t *pki, struct pki_port *port)
+void free_port_pcam_entries(struct pki_t *pki, struct pki_port *port)
 {
 	struct pcam *pcam = &pki->pcam;
 	struct pcam_bank *pcam_bank;

@@ -526,6 +526,7 @@ int pki_reset_domain(u32 id, u16 domain_id)
 {
 	int i;
 	struct pkipf_vf *vf = NULL;
+	struct pki_port *port;
 
 	mutex_lock(&octeontx_pki_devices_lock);
 
@@ -536,10 +537,24 @@ int pki_reset_domain(u32 id, u16 domain_id)
 	}
 
 	for (i = 0; i < MAX_PKI_PORTS; i++) {
-		if (vf->bgx_port[i].valid)
-			pki_port_reset_regs(vf->pki, &vf->bgx_port[i]);
+		if (vf->bgx_port[i].valid) {
+			port = &vf->bgx_port[i];
+			free_port_pcam_entries(vf->pki, port);
+		}
 		if (vf->lbk_port[i].valid)
-			pki_port_reset_regs(vf->pki, &vf->lbk_port[i]);
+			port = &vf->lbk_port[i];
+
+		if (qpg_range_free(vf->pki, port->qpg_base, port->num_entry,
+				   vf->domain.domain_id) < 0)
+			return -EINVAL;
+
+		/* Free up all the resources and reset regs */
+		pki_port_reset_regs(vf->pki, port);
+		port->init_style = PKI_DROP_STYLE;
+		port->qpg_base = QPG_INVALID;
+		port->num_entry = 0;
+		port->shared_mask = 0;
+		port->state = PKI_PORT_CLOSE;
 	}
 
 	identify(vf, vf->domain.domain_id, vf->domain.subdomain_id);

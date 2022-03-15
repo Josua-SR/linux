@@ -421,6 +421,18 @@ enum PKI_PCAM_TERM_E {
 #define MAX_PKI_PORTS	64
 #define NUM_FRAME_LEN_REG	2
 
+#define PKI_DROP_STYLE	0
+
+#define QPG_INVALID	((u32)-1)
+#define PKIND_INVALID	((u32)-1)
+
+enum PKI_PORT_STATE {
+	PKI_PORT_CLOSE	 = 0,
+	PKI_PORT_OPEN	 = 1,
+	PKI_PORT_START	 = 2,
+	PKI_PORT_STOP	 = 3
+};
+
 struct pki_port {
 	bool	valid;
 	bool	has_fcs;
@@ -604,6 +616,8 @@ int pki_port_start(struct pkipf_vf *vf, u16 vf_id, mbox_pki_port_t *port_data);
 int pki_port_stop(struct pkipf_vf *vf, u16 vf_id, mbox_pki_port_t *port_data);
 int pki_port_close(struct pkipf_vf *vf, u16 vf_id, mbox_pki_port_t *port_data);
 void pki_port_reset_regs(struct pki_t *pki, struct pki_port *port);
+int qpg_range_free(struct pki_t *pki, u32 qpg_base, u32 qpg_num, u16 domain_id);
+void free_port_pcam_entries(struct pki_t *pki, struct pki_port *port);
 int pki_port_pktbuf_cfg(struct pkipf_vf *vf, u16 vf_id,
 			mbox_pki_pktbuf_cfg_t *pcfg);
 int pki_port_errchk(struct pkipf_vf *vf, u16 vf_id,
