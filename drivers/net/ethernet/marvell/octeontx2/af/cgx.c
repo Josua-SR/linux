@@ -1682,7 +1682,7 @@ static int cgx_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct device *dev = &pdev->dev;
 	struct cgx *cgx;
-	int err, nvec;
+	int err = 0, nvec;
 
 	cgx = devm_kzalloc(dev, sizeof(*cgx), GFP_KERNEL);
 	if (!cgx)
@@ -1726,7 +1726,6 @@ static int cgx_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	 /* Skip probe if CGX is not mapped to NIX */
 	if (!is_cgx_mapped_to_nix(pdev->subsystem_device, cgx->cgx_id)) {
 		dev_notice(dev, "skip cgx%d probe\n", cgx->cgx_id);
-		err = -ENOMEM;
 		goto err_release_regions;
 	}
 
@@ -1764,11 +1763,11 @@ static void cgx_remove(struct pci_dev *pdev)
 {
 	struct cgx *cgx = pci_get_drvdata(pdev);
 
-	if (cgx) {
-		cgx_lmac_exit(cgx);
-		list_del(&cgx->cgx_list);
-	}
+	if (!cgx)
+		return;
 
+	cgx_lmac_exit(cgx);
+	list_del(&cgx->cgx_list);
 	pci_free_irq_vectors(pdev);
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
