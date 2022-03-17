@@ -244,7 +244,6 @@ int otx2_hw_set_mtu(struct otx2_nic *pfvf, int mtu)
 	req->maxlen = pfvf->netdev->mtu + OTX2_ETH_HLEN + pfvf->addl_mtu +
 		      OTX2_HW_TIMESTAMP_LEN + pfvf->xtra_hdr;
 
-	/* Use max receive length supported by hardware for loopback devices */
 	if (is_otx2_lbkvf(pfvf->pdev))
 		req->maxlen = maxlen;
 
