@@ -99,6 +99,10 @@
 #define ADIN1300_GE_SOFT_RESET_REG		0xff0c
 #define   ADIN1300_GE_SOFT_RESET		BIT(0)
 
+#define ADIN1300_GE_CLK_CFG_REG			0xff1f
+#define   ADIN1300_GE_CLK_CFG_MASK		GENMASK(5, 0)
+#define   ADIN1300_GE_CLK_CFG_FREE_125		BIT(4)
+
 #define ADIN1300_GE_RGMII_CFG_REG		0xff23
 #define   ADIN1300_GE_RGMII_RX_MSK		GENMASK(8, 6)
 #define   ADIN1300_GE_RGMII_RX_SEL(x)		\
@@ -433,6 +437,28 @@ static int adin_set_tunable(struct phy_device *phydev,
 	}
 }
 
+static int adin_config_clk_out(struct phy_device *phydev)
+{
+	struct device *dev = &phydev->mdio.dev;
+	u32 val;
+	u8 sel;
+
+	if (device_property_read_u32(dev, "adi,clk-out-frequency", &val))
+		return 0;
+
+	switch (val) {
+	case 125000000:
+		sel = ADIN1300_GE_CLK_CFG_FREE_125;
+		break;
+	default:
+		phydev_err(phydev, "invalid adi,clk-out-frequency\n");
+		return -EINVAL;
+	}
+
+	return phy_modify_mmd(phydev, MDIO_MMD_VEND1, ADIN1300_GE_CLK_CFG_REG,
+			      ADIN1300_GE_CLK_CFG_MASK, sel);
+}
+
 static int adin_config_init(struct phy_device *phydev)
 {
 	int rc;
@@ -452,6 +478,10 @@ static int adin_config_init(struct phy_device *phydev)
 		return rc;
 
 	rc = adin_set_edpd(phydev, ETHTOOL_PHY_EDPD_DFLT_TX_MSECS);
+	if (rc < 0)
+		return rc;
+
+	rc = adin_config_clk_out(phydev);
 	if (rc < 0)
 		return rc;
 
