@@ -651,6 +651,25 @@ int mv88e6352_port_get_cmode(struct mv88e6xxx_chip *chip, int port, u8 *cmode)
 	return 0;
 }
 
+int mv88e6393x_port_set_eee(struct mv88e6xxx_chip *chip, int port, bool enable)
+{
+	u16 reg;
+	int err;
+
+	err = mv88e6xxx_port_read(chip, port, MV88E6XXX_PORT_MAC_CTL, &reg);
+	if (err)
+		return err;
+
+	if (enable)
+		reg |= MV88E6XXX_PORT_MAC_CTL_EEEVALUE;
+	else
+		reg &= ~MV88E6XXX_PORT_MAC_CTL_EEEVALUE;
+
+	reg |= MV88E6XXX_PORT_MAC_CTL_FORCEEEE;
+
+	return mv88e6xxx_port_write(chip, port, MV88E6XXX_PORT_MAC_CTL, reg);
+}
+
 int mv88e6250_port_link_state(struct mv88e6xxx_chip *chip, int port,
 			      struct phylink_link_state *state)
 {

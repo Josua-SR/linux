@@ -70,6 +70,8 @@
 #define MV88E6390_PORT_MAC_CTL_FORCE_SPEED		0x2000
 #define MV88E6390_PORT_MAC_CTL_ALTSPEED			0x1000
 #define MV88E6352_PORT_MAC_CTL_200BASE			0x1000
+#define MV88E6XXX_PORT_MAC_CTL_EEEVALUE			0x0200
+#define MV88E6XXX_PORT_MAC_CTL_FORCEEEE			0x0100
 #define MV88E6185_PORT_MAC_CTL_AN_EN			0x0400
 #define MV88E6185_PORT_MAC_CTL_AN_RESTART		0x0200
 #define MV88E6185_PORT_MAC_CTL_AN_DONE			0x0100
@@ -383,5 +385,5 @@ int mv88e6xxx_port_hidden_write(struct mv88e6xxx_chip *chip, int block,
 int mv88e6xxx_port_hidden_wait(struct mv88e6xxx_chip *chip);
 int mv88e6xxx_port_hidden_read(struct mv88e6xxx_chip *chip, int block, int port,
 			       int reg, u16 *val);
-
+int mv88e6393x_port_set_eee(struct mv88e6xxx_chip *chip, int port, bool enable);
 #endif /* _MV88E6XXX_PORT_H */
