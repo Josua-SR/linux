@@ -1143,3 +1143,19 @@ int rvu_mbox_handler_cgx_mac_addr_update(struct rvu *rvu,
 	rvu_get_cgx_lmac_id(rvu->pf2cgxlmac_map[pf], &cgx_id, &lmac_id);
 	return  cgx_lmac_addr_update(cgx_id, lmac_id, req->mac_addr, req->index);
 }
+
+void rvu_mac_reset(struct rvu *rvu, u16 pcifunc)
+{
+	int pf = rvu_get_pf(pcifunc);
+	struct cgx *cgxd;
+	u8 cgx, lmac;
+
+	if (!is_pf_cgxmapped(rvu, pf))
+		return;
+
+	rvu_get_cgx_lmac_id(rvu->pf2cgxlmac_map[pf], &cgx, &lmac);
+	cgxd = rvu_cgx_pdata(cgx, rvu);
+
+	if (cgx_lmac_reset(cgxd, lmac))
+		dev_err(rvu->dev, "Failed to reset MAC\n");
+}

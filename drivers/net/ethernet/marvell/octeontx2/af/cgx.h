@@ -42,6 +42,7 @@
 #define CGXX_CMRX_INT_ENA_W1S		0x058
 #define CGXX_CMRX_RX_ID_MAP		0x060
 #define CGXX_CMRX_RX_STAT0		0x070
+#define CGXX_CMRX_RX_LOGL_XON		0x100
 #define CGXX_CMRX_RX_LMACS		0x128
 #define CGXX_CMRX_RX_DMAC_CTL0		0x1F8
 #define CGX_DMAC_CTL0_CAM_ENABLE	BIT_ULL(3)
@@ -183,4 +184,5 @@ int cgx_set_link_mode(void *cgxd, struct cgx_set_link_mode_args args,
 u64 cgx_read_dmac_ctrl(void *cgxd, int lmac_id);
 u64 cgx_read_dmac_entry(void *cgxd, int index);
 int cgx_lmac_addr_update(u8 cgx_id, u8 lmac_id, u8 *mac_addr, u8 index);
+int cgx_lmac_reset(void *cgxd, int lmac_id);
 #endif /* CGX_H */
