@@ -323,7 +323,8 @@ struct nicvf {
 	struct nicvf_pfc	pfc;
 	struct tasklet_struct	qs_err_task;
 	struct work_struct	reset_task;
-
+	struct workqueue_struct *nicvf_rx_mode_wq;
+	struct delayed_work     link_change_work;
 	/* PTP timestamp */
 	struct cavium_ptp	*ptp_clock;
 	bool			hw_rx_tstamp;
