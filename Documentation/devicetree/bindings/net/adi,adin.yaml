@@ -36,6 +36,11 @@ properties:
     enum: [ 4, 8, 12, 16, 20, 24 ]
     default: 8
 
+  adi,clk-out-frequency:
+    description: Clock output frequency in Hertz.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [125000000]
+
 unevaluatedProperties: false
 
 examples:
