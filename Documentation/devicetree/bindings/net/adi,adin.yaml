@@ -36,6 +36,23 @@ properties:
     enum: [ 4, 8, 12, 16, 20, 24 ]
     default: 8
 
+  adi,phy-output-clock:
+    description: Select clock output on GP_CLK pin. Three clocks are available:
+      A 25MHz reference, a free-running 125MHz and a recovered 125MHz.
+      The phy can also automatically switch between the reference and the
+      respective 125MHz clocks based on its internal state.
+    $ref: /schemas/types.yaml#/definitions/string
+    enum:
+      - 25mhz-reference
+      - 125mhz-free-running
+      - 125mhz-recovered
+      - adaptive-free-running
+      - adaptive-recovered
+
+  adi,phy-output-reference-clock:
+    description: Enable 25MHz reference clock output on CLK25_REF pin.
+    type: boolean
+
 unevaluatedProperties: false
 
 examples:
