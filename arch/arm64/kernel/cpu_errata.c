@@ -98,8 +98,8 @@ static const struct midr_range marvell_erratum_38627_cpus[] = {
 	MIDR_ALL_VERSIONS(MIDR_MRVL_OCTEONTX2_95XX),
 	/* Marvell OcteonTX 2, 95MM all passes */
 	MIDR_ALL_VERSIONS(MIDR_MRVL_OCTEONTX2_95MM),
-	/* Marvell OcteonTX 2, LOKI all passes */
-	MIDR_ALL_VERSIONS(MIDR_MRVL_OCTEONTX2_LOKI),
+	/* Marvell OcteonTX 2, 95N all passes */
+	MIDR_ALL_VERSIONS(MIDR_MRVL_OCTEONTX2_95N),
 	/* Marvell OcteonTX 2, 96xx all passes */
 	MIDR_ALL_VERSIONS(MIDR_MRVL_OCTEONTX2_96XX),
 	/* Marvell OcteonTX 2, 98xx pass 1.0 */
@@ -810,10 +810,10 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		ERRATA_MIDR_ALL_VERSIONS(MIDR_MRVL_OCTEONTX2_95XX),
 	},
 	{
-	/* Marvell OcteonTX 2, LOKI all passes */
+	/* Marvell OcteonTX 2, 95N all passes */
 		.desc = "Marvell erratum 38545",
 		.capability = ARM64_WORKAROUND_MRVL_38545,
-		ERRATA_MIDR_ALL_VERSIONS(MIDR_MRVL_OCTEONTX2_LOKI),
+		ERRATA_MIDR_ALL_VERSIONS(MIDR_MRVL_OCTEONTX2_95N),
 	},
 	{
 	/* Marvell OcteonTX 2, 95MM all passes */
