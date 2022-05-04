@@ -98,6 +98,7 @@ struct itrace_synth_opts {
 	bool			ptwrites;
 	bool			pwr_events;
 	bool			other_events;
+	bool			mem;
 	bool			errors;
 	bool			dont_decode;
 	bool			log;
