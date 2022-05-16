@@ -1052,7 +1052,7 @@ static void data_process(void)
 			data__fprintf();
 
 		/* Don't sort callchain for perf diff */
-		perf_evsel__reset_sample_bit(evsel_base, CALLCHAIN);
+		evsel__reset_sample_bit(evsel_base, CALLCHAIN);
 
 		hists__process(hists_base);
 	}

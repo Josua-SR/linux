@@ -441,7 +441,7 @@ static int cs_etm_recording_options(struct auxtrace_record *itr,
 	 * when a context switch happened.
 	 */
 	if (!perf_cpu_map__empty(cpus)) {
-		perf_evsel__set_sample_bit(cs_etm_evsel, CPU);
+		evsel__set_sample_bit(cs_etm_evsel, CPU);
 
 		err = cs_etm_set_option(itr, cs_etm_evsel,
 					ETM_SET_OPT_CTXTID | ETM_SET_OPT_TS);
@@ -465,7 +465,7 @@ static int cs_etm_recording_options(struct auxtrace_record *itr,
 
 		/* In per-cpu case, always need the time of mmap events etc */
 		if (!perf_cpu_map__empty(cpus))
-			perf_evsel__set_sample_bit(tracking_evsel, TIME);
+			evsel__set_sample_bit(tracking_evsel, TIME);
 	}
 
 out:

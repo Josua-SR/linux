@@ -200,16 +200,16 @@ const char *perf_evsel__name(struct evsel *evsel);
 const char *perf_evsel__group_name(struct evsel *evsel);
 int perf_evsel__group_desc(struct evsel *evsel, char *buf, size_t size);
 
-void __perf_evsel__set_sample_bit(struct evsel *evsel,
+void __evsel__set_sample_bit(struct evsel *evsel,
 				  enum perf_event_sample_format bit);
-void __perf_evsel__reset_sample_bit(struct evsel *evsel,
+void __evsel__reset_sample_bit(struct evsel *evsel,
 				    enum perf_event_sample_format bit);
 
-#define perf_evsel__set_sample_bit(evsel, bit) \
-	__perf_evsel__set_sample_bit(evsel, PERF_SAMPLE_##bit)
+#define evsel__set_sample_bit(evsel, bit) \
+	__evsel__set_sample_bit(evsel, PERF_SAMPLE_##bit)
 
-#define perf_evsel__reset_sample_bit(evsel, bit) \
-	__perf_evsel__reset_sample_bit(evsel, PERF_SAMPLE_##bit)
+#define evsel__reset_sample_bit(evsel, bit) \
+	__evsel__reset_sample_bit(evsel, PERF_SAMPLE_##bit)
 
 void perf_evsel__set_sample_id(struct evsel *evsel,
 			       bool use_sample_identifier);
