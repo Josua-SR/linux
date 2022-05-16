@@ -61,6 +61,7 @@ enum itrace_period_type {
  *          because 'perf inject' will write it out
  * @instructions: whether to synthesize 'instructions' events
  * @branches: whether to synthesize 'branches' events
+ * (branch misses only for Arm SPE)
  * @transactions: whether to synthesize events for transactions
  * @ptwrites: whether to synthesize events for ptwrites
  * @pwr_events: whether to synthesize power events
@@ -75,7 +76,11 @@ enum itrace_period_type {
  * @thread_stack: feed branches to the thread_stack
  * @last_branch: add branch context to 'instruction' events
  * @callchain_sz: maximum callchain size
- * @last_branch_sz: branch context size
+ * @last_branch_sz: branch context isize
+ * @flc: whether to synthesize first level cache events
+ * @llc: whether to synthesize last level cache events
+ * @tlb: whether to synthesize TLB events
+ * @remote_access: whether to synthesize remote access events
  * @period: 'instructions' events period
  * @period_type: 'instructions' events period type
  * @initial_skip: skip N events at the beginning.
@@ -103,6 +108,10 @@ struct itrace_synth_opts {
 	bool			last_branch;
 	unsigned int		callchain_sz;
 	unsigned int		last_branch_sz;
+	bool                    flc;
+	bool                    llc;
+	bool                    tlb;
+	bool                    remote_access;
 	unsigned long long	period;
 	enum itrace_period_type	period_type;
 	unsigned long		initial_skip;
@@ -561,7 +570,7 @@ void auxtrace__free(struct perf_session *session);
 
 #define ITRACE_HELP \
 "				i:	    		synthesize instructions events\n"		\
-"				b:	    		synthesize branches events\n"		\
+"				b:	    		synthesize branches events (branch misses for Arm SPE)\n" \
 "				c:	    		synthesize branches events (calls only)\n"	\
 "				r:	    		synthesize branches events (returns only)\n" \
 "				x:	    		synthesize transactions events\n"		\
@@ -569,6 +578,10 @@ void auxtrace__free(struct perf_session *session);
 "				p:	    		synthesize power events\n"			\
 "				e:	    		synthesize error events\n"			\
 "				d:	    		create a debug log\n"			\
+"				f:                      synthesize first level cache events\n" \
+"				m:                      synthesize last level cache events\n" \
+"				t:                      synthesize TLB events\n" \
+"				a:                      synthesize remote access events\n" \
 "				g[len]:     		synthesize a call chain (use with i or x)\n" \
 "				l[len]:     		synthesize last branch entries (use with i or x)\n" \
 "				sNUMBER:    		skip initial number of events\n"		\
