@@ -62,7 +62,7 @@
 #define ARM64_WORKAROUND_MRVL_38627		52
 #define ARM64_MPAM				53
 #define ARM64_SPECTRE_BHB			54
-
-#define ARM64_NCAPS				55
+#define ARM64_WORKAROUND_MARVELL_38891		55
+#define ARM64_NCAPS				56
 
 #endif /* __ASM_CPUCAPS_H */
