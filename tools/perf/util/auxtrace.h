@@ -88,6 +88,7 @@ enum itrace_period_type {
  * @cpu_bitmap: CPUs for which to synthesize events, or NULL for all
  * @ptime_range: time intervals to trace or NULL
  * @range_num: number of time intervals to trace
+ * @quick: quicker (less detailed) decoding
  */
 struct itrace_synth_opts {
 	bool			set;
@@ -120,6 +121,7 @@ struct itrace_synth_opts {
 	unsigned long		*cpu_bitmap;
 	struct perf_time_interval *ptime_range;
 	int			range_num;
+	unsigned int            quick;
 };
 
 /**
@@ -591,6 +593,7 @@ bool auxtrace__evsel_is_auxtrace(struct perf_session *session,
 "				g[len]:     		synthesize a call chain (use with i or x)\n" \
 "				l[len]:     		synthesize last branch entries (use with i or x)\n" \
 "				sNUMBER:    		skip initial number of events\n"		\
+"				q:                      quicker (less detailed) decoding\n" \
 "				PERIOD[ns|us|ms|i|t]:   specify period to sample stream\n" \
 "				concatenate multiple options. Default is ibxwpe or cewp\n"
 
