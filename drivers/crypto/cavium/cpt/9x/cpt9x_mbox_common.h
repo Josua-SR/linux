@@ -45,7 +45,9 @@ struct rx_inline_lf_cfg {
 	u16 sso_pf_func;
 	u16 param1;
 	u16 param2;
-	u16 reserved;
+	u16 opcode;
+	u32 credit;
+	u32 reserved;
 };
 
 /*
