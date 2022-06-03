@@ -416,48 +416,6 @@ static void cptpf_vfpf_mbox_destroy(struct cptpf_dev *cptpf)
 	otx2_mbox_destroy(&cptpf->vfpf_mbox);
 }
 
-static int cptx_device_reset(struct cptpf_dev *cptpf)
-{
-	int timeout = 10;
-	int ret = 0;
-	u64 reg;
-
-	ret = cpt_write_af_reg(cptpf->pdev, CPT_AF_BLK_RST, 0x1);
-	if (ret)
-		goto error;
-
-	do {
-		ret = cpt_read_af_reg(cptpf->pdev, CPT_AF_BLK_RST, &reg);
-		if (ret)
-			goto error;
-
-		if (!((reg >> 63) & 0x1))
-			break;
-
-		usleep_range(10000, 20000);
-		if (timeout-- < 0)
-			return -EBUSY;
-	} while (1);
-error:
-	return ret;
-}
-
-static int cptpf_device_reset(struct cptpf_dev *cptpf)
-{
-	int ret = 0;
-
-	if (cptpf->cpt1_implemented) {
-		cptpf->blkaddr = BLKADDR_CPT1;
-		ret = cptx_device_reset(cptpf);
-		if (ret)
-			return ret;
-	}
-	cptpf->blkaddr = BLKADDR_CPT0;
-	ret = cptx_device_reset(cptpf);
-
-	return ret;
-}
-
 static void cpt_check_block_implemented(struct cptpf_dev *cptpf)
 {
 	u64 cfg;
@@ -475,10 +433,6 @@ static int cptpf_device_init(struct cptpf_dev *cptpf)
 
 	/* check if 'implemented' bit is set for block BLKADDR_CPT1 */
 	cpt_check_block_implemented(cptpf);
-	/* Reset the CPT PF device */
-	ret = cptpf_device_reset(cptpf);
-	if (ret)
-		goto error;
 
 	/* Get number of SE, IE and AE engines */
 	ret = cpt_read_af_reg(cptpf->pdev, CPT_AF_CONSTANTS1, &af_cnsts1.u);
