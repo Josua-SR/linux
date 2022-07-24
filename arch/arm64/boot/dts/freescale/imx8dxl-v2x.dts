@@ -1,0 +1,266 @@
+// SPDX-License-Identifier: GPL-2.0+
+/*
+ * Copyright 2019~2020 NXP
+ * Copyright 2022 Josua Mayer <josua@solid-run.com>
+ */
+
+/dts-v1/;
+
+#include "imx8dxl.dtsi"
+#include "imx8dxl-sr-som.dtsi"
+
+/ {
+	model = "SolidRun i.MX8DXL V2X Carrier";
+	compatible = "fsl,imx8dxl-sr-som", "fsl,imx8dxl";
+
+	lte_vbat_reg: regulator-lte-vbat {
+		compatible = "regulator-fixed";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_lte_vbat>;
+		regulator-name = "lte-vbat";
+		regulator-min-microvolt = <3600000>;
+		regulator-max-microvolt = <3600000>;
+		gpio = <&lsio_gpio0 14 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
+	};
+
+	regulator_1v1: regulator-1v1 {
+		compatible = "regulator-fixed";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_reg_1v1>;
+		regulator-name = "1v1";
+		regulator-min-microvolt = <1100000>;
+		regulator-max-microvolt = <1100000>;
+		gpio = <&lsio_gpio4 5 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
+	};
+};
+
+&iomuxc {
+		pinctrl_i2c2_gpio: i2c2gpiogrp {
+			fsl,pins = <
+				/* gpio-expander reset: io without pull-up */
+				IMX8DXL_SCU_GPIO0_00_LSIO_GPIO2_IO03		0x0000061 /* some reason this fails in pinctrl driver */
+
+				/* gpio-expander interrupt: io without pull-up */
+				/* not usable, because this pin does not support lsio gpio mode :( */
+				IMX8DXL_SCU_GPIO0_01_SCU_GPIO0_IO01		0x0000061
+			>;
+		};
+
+		pinctrl_i2c3: i2c3grp {
+			fsl,pins = <
+				IMX8DXL_SPI1_CS0_ADMA_I2C3_SDA		0x06000021
+				IMX8DXL_SPI1_SDI_ADMA_I2C3_SCL		0x06000021
+			>;
+		};
+
+		pinctrl_lpuart1: lpuart1grp {
+			fsl,pins = <
+				IMX8DXL_UART1_RX_ADMA_UART1_RX			0x06000020
+				IMX8DXL_UART1_TX_ADMA_UART1_TX			0x06000020
+				IMX8DXL_UART1_CTS_B_ADMA_UART1_CTS_B	0x06000020
+				IMX8DXL_UART1_RTS_B_ADMA_UART1_RTS_B	0x06000020
+			>;
+		};
+
+		pinctrl_strange: strangegrp {
+			fsl,pins = <
+				/* RST_N SJA1110AEL */
+				IMX8DXL_USB_SS3_TC0_LSIO_GPIO4_IO03		0x00000021
+
+				/* RST_CORE_N SJA1110AEL */
+				/*IMX8DXL_USB_SS3_TC1_LSIO_GPIO4_IO04			0x00000021*/
+				IMX8DXL_USB_SS3_TC1_CONN_USB_OTG2_PWR	0x00000021
+			>;
+		};
+
+		pinctrl_lte: ltegrp {
+			fsl,pins = <
+				/* modem RESET_N: io open drain drive 2mA */
+				IMX8DXL_ADC_IN3_LSIO_GPIO1_IO11	0x2000061
+
+				/* modem PWRKEY: io open drain drive 2mA */
+				IMX8DXL_ADC_IN2_LSIO_GPIO1_IO12	0x2000061
+			>;
+		};
+
+		pinctrl_lte_vbat: ltevbatgrp {
+			fsl,pins = <
+				/* RF_PWR: io without pull-up */
+				IMX8DXL_SPI3_SDO_LSIO_GPIO0_IO14	0x0000061
+			>;
+		};
+
+		pinctrl_usdhc3: usdhc3grp {
+			fsl,pins = <
+				IMX8DXL_ENET0_RGMII_TXC_CONN_USDHC2_CLK			0x06000040
+				IMX8DXL_ENET0_RGMII_TX_CTL_CONN_USDHC2_CMD		0x00000021
+				IMX8DXL_ENET0_RGMII_TXD0_CONN_USDHC2_DATA0		0x00000021
+				IMX8DXL_ENET0_RGMII_TXD1_CONN_USDHC2_DATA1		0x00000021
+				IMX8DXL_ENET0_RGMII_TXD2_CONN_USDHC2_DATA2		0x00000021
+				IMX8DXL_ENET0_RGMII_TXD3_CONN_USDHC2_DATA3		0x00000021
+			>;
+		};
+
+		pinctrl_usdhc3_100mhz: usdhc3grp100mhz {
+			fsl,pins = <
+				IMX8DXL_ENET0_RGMII_TXC_CONN_USDHC2_CLK			0x06000040
+				IMX8DXL_ENET0_RGMII_TX_CTL_CONN_USDHC2_CMD		0x00000021
+				IMX8DXL_ENET0_RGMII_TXD0_CONN_USDHC2_DATA0		0x00000021
+				IMX8DXL_ENET0_RGMII_TXD1_CONN_USDHC2_DATA1		0x00000021
+				IMX8DXL_ENET0_RGMII_TXD2_CONN_USDHC2_DATA2		0x00000021
+				IMX8DXL_ENET0_RGMII_TXD3_CONN_USDHC2_DATA3		0x00000021
+			>;
+		};
+
+		pinctrl_usdhc3_200mhz: usdhc3grp200mhz {
+			fsl,pins = <
+				IMX8DXL_ENET0_RGMII_TXC_CONN_USDHC2_CLK			0x06000040
+				IMX8DXL_ENET0_RGMII_TX_CTL_CONN_USDHC2_CMD		0x00000021
+				IMX8DXL_ENET0_RGMII_TXD0_CONN_USDHC2_DATA0		0x00000021
+				IMX8DXL_ENET0_RGMII_TXD1_CONN_USDHC2_DATA1		0x00000021
+				IMX8DXL_ENET0_RGMII_TXD2_CONN_USDHC2_DATA2		0x00000021
+				IMX8DXL_ENET0_RGMII_TXD3_CONN_USDHC2_DATA3		0x00000021
+			>;
+		};
+
+		pinctrl_wifi: wifigrp {
+			fsl,pins = <
+				/* wl_reg_on: io without pull-up */
+				/* IMX8DXL_SPI3_CS1 not a GPIO :( */
+				IMX8DXL_SPI3_CS1_ADMA_SPI3_CS1		0x0000061
+				/* measure if this is high */
+			>;
+		};
+
+		pinctrl_bluetooth: bluetoothgrp {
+			fsl,pins = <
+				/* bt_reg_on: io without pull-up TODO: pull-up */
+				IMX8DXL_SPI3_SCK_LSIO_GPIO0_IO13	0x0000061
+			>;
+		};
+
+		pinctrl_reg_1v1: 1v1grp {
+			fsl,pins = <
+				/* SW_PE USB_OTG1_OC: io without pull-up */
+				IMX8DXL_USB_SS3_TC2_LSIO_GPIO4_IO05	0x0000061
+			>;
+		};
+};
+
+/* exposed on J14: SDA(51), SCL(53) */
+&i2c2 {
+	/* MFS5600AMMA7ES */
+	mfs5600: regulator@18 {
+		compatible = "nxp,fs5600"; /* driver missing */
+		reg = <0x18>;
+		/* max 400kHz bus speed with 2.2k pullup of i2c line */
+		/* max 3.4MHz bus speed with 500 pullup of i2c line */
+		/* feeds VIN_5V with 3A (5V0_PS???) */
+
+		clocks = <&clk IMX_SC_R_AUDIO_PLL_0 IMX_SC_PM_CLK_PLL>, <&mclkout0_lpcg 0>;
+		clock-names = "pll0", "mclk";
+	};
+
+	/* TCA6408ARGTR */
+	tca6408: gpio@20 {
+		compatible = "ti,tca6408";
+		reg = <0x20>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		reset-gpios = <&lsio_gpio2 3 GPIO_ACTIVE_LOW>;
+		//interrupt-parent = <&lsio_gpio0>;
+        //interrupts = <1 IRQ_TYPE_EDGE_FALLING>; /* re-enable after changing layout */
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_i2c2_gpio>;
+
+		/* max 100kHz bus speed */
+		/*
+		 * Lines:
+		 * 0: bDIG_IN1
+		 * 1: bDIG_IN2
+		 * 2: STNB1
+		 * 3: STNB2
+		 * 4: DIG_OUT1
+		 * 5: DIG_OUT2
+		 * 6: unused
+		 * 7: unused
+		 */
+	};
+};
+
+/* exposed on J14: SDA(33), SCL(31) */
+&i2c3 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	clock-frequency = <100000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c3>;
+	status = "okay";
+
+	/* nothing connected */
+};
+
+/* bluetooth */
+&lpuart1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_lpuart1>;
+	status = "okay";
+	uart-has-rtscts;
+
+	bt: bluetooth {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_bluetooth>;
+		compatible = "brcm,bcm4330-bt";
+		//max-speed = <1000000>;
+		shutdown-gpios = <&lsio_gpio0 13 GPIO_ACTIVE_HIGH>;
+	};
+};
+
+&usbotg2 {
+	srp-disable;
+	hnp-disable;
+	adp-disable;
+	power-active-high;
+	disable-over-current;
+	status = "okay";
+	dr_mode = "host";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_lte>;
+};
+
+&usbphy2 {
+	status = "okay";
+};
+
+/* WiFI (Carrier) */
+&usdhc3 {
+	// verify that REF_CLK_32K is enabled */
+    #address-cells = <1>;
+    #size-cells = <0>;
+	pinctrl-names = "default", "state_100mhz", "state_200mhz";
+	pinctrl-0 = <&pinctrl_usdhc3>;
+	pinctrl-1 = <&pinctrl_usdhc3_100mhz>;
+	pinctrl-2 = <&pinctrl_usdhc3_200mhz>;
+	bus-width = <4>;
+	no-sd;
+	non-removable;
+	status = "okay";
+	max-frequency = <40000000>;
+	fsl,delay-line = <12>;
+	keep-power-in-suspend;
+	enable-sdio-wakeup;
+
+	/* CYW43455 */
+    wifi: cyw43455@1 {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_wifi>;
+        reg = <1>;
+        compatible = "brcm,bcm4329-fmac";
+		/* WL_REG_ON high to operate */
+		/* BT_REG_ON high to operate */
+    };
+};
