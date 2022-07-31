@@ -86,6 +86,10 @@
 	};
 };
 
+&edma2 {
+	status = "okay";
+};
+
 /* exposed on J14: SDA(51), SCL(53) */
 &i2c2 {
 	#address-cells = <1>;
@@ -244,16 +248,19 @@
 
 		pinctrl_v2x: v2xgrp {
 			fsl,pins = <
-				/* v2x reset: io with pull-up */
-				IMX8DXL_ADC_IN0_LSIO_GPIO1_IO10		0x0000021
+				/* v2x reset: io without pull */
+				IMX8DXL_ADC_IN0_LSIO_GPIO1_IO10		0x0000060
 
 				/*
-				 * v2x boot0:
-				 * - pull-down: flash spi
-				 * - pull-up: slave sdio
-				 * Note: modem pins will change to outputs during boot ...
+				 * v2x boot0: io without pull
+				 * After reset, this pin selects modem boot media:
+				 * - 0: flash spi
+				 * - 1: slave sdio
+				 * Once the firmware boots however, the modem controls
+				 * this pin for flow-control to signal readiness.
 				 */
-				IMX8DXL_ADC_IN1_LSIO_GPIO1_IO09		0x0000021 /* io with pull-up */
+				IMX8DXL_ADC_IN1_LSIO_GPIO1_IO09		0x0000060 /* io without pull */
+				/* TODO: check whether this pin should have SoC pull-down, or external resistor, or neither */
 			>;
 		};
 
