@@ -297,7 +297,7 @@ static bool cvm_mmc_clk_logger_produce(struct clk_logger *logger, u32 state,
 	e->transition_type = state;
 	e->freq = freq;
 
-	ret = ptr_ring_produce(&logger->ring, e);
+	ret = ptr_ring_produce_any(&logger->ring, e);
 	if (ret) {
 		e->transition_type = 0xcafebabe;
 		list_add_tail(&e->list, &logger->free_list);
