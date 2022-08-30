@@ -923,6 +923,9 @@ static int fsl_lpspi_probe(struct platform_device *pdev)
 		 * to prevent the unexpected LPSPI module IRQ events*/
 		disable_irq(irq);
 
+	// i.MX8DXL has 2 chip-select ... ... ...
+	controller->num_chipselect = 2;
+
 	ret = devm_spi_register_controller(&pdev->dev, controller);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "spi_register_controller error.\n");
