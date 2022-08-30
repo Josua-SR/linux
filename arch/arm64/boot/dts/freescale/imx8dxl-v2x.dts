@@ -220,6 +220,14 @@
 	};
 };
 
+&lsio_gpio0 {
+	status = "okay";
+};
+
+&lsio_gpio4 {
+	status = "okay";
+};
+
 &usbotg2 {
 	srp-disable;
 	hnp-disable;

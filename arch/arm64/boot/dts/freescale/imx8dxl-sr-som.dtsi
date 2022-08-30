@@ -368,6 +368,18 @@
 	};
 };
 
+&lsio_gpio1 {
+	status = "okay";
+};
+
+&lsio_gpio2 {
+	status = "okay";
+};
+
+&lsio_gpio3 {
+	status = "okay";
+};
+
 /* OTG port for boot */
 &usbotg1 {
 	srp-disable;
