@@ -176,19 +176,8 @@
         //interrupts = <1 IRQ_TYPE_EDGE_FALLING>; /* re-enable after changing layout */
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_i2c2_gpio>;
-
+		gpio-line-names = "DIG_IN1", "DIG_IN2", "CAN_STNB1", "CAN_STNB2", "DIG_OUT1", "DIG_OUT2", "", "";
 		/* max 100kHz bus speed */
-		/*
-		 * Lines:
-		 * 0: bDIG_IN1
-		 * 1: bDIG_IN2
-		 * 2: STNB1
-		 * 3: STNB2
-		 * 4: DIG_OUT1
-		 * 5: DIG_OUT2
-		 * 6: unused
-		 * 7: unused
-		 */
 	};
 };
 
