@@ -36,9 +36,65 @@
 		enable-active-high;
 		regulator-always-on;
 	};
+
+	regulator_flexcan1_standby: regulator-flexcan1-standby {
+		compatible = "regulator-fixed";
+		regulator-name = "flexcan1-standby";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&tca6408 2 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+	};
+
+	regulator_flexcan2_standby: regulator-flexcan2-standby {
+		compatible = "regulator-fixed";
+		regulator-name = "flexcan2-standby";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&tca6408 3 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+	};
+};
+
+&flexcan1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_flexcan1>;
+	xceiver-supply = <&regulator_flexcan1_standby>;
+	status = "okay";
+
+	can-transceiver {
+		/* TJA1048 */
+		max-bitrate = <5000000>;
+	};
+};
+
+&flexcan2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_flexcan2>;
+	xceiver-supply = <&regulator_flexcan2_standby>;
+	status = "okay";
+
+	can-transceiver {
+		/* TJA1048 */
+		max-bitrate = <5000000>;
+	};
 };
 
 &iomuxc {
+		pinctrl_flexcan1: flexcan1grp {
+			fsl,pins = <
+				IMX8DXL_FLEXCAN0_TX_ADMA_FLEXCAN0_TX	0x00000021
+				IMX8DXL_FLEXCAN0_RX_ADMA_FLEXCAN0_RX	0x00000021
+			>;
+		};
+
+		pinctrl_flexcan2: flexcan2grp {
+			fsl,pins = <
+				IMX8DXL_FLEXCAN1_TX_ADMA_FLEXCAN1_TX	0x00000021
+				IMX8DXL_FLEXCAN1_RX_ADMA_FLEXCAN1_RX	0x00000021
+			>;
+		};
+
 		pinctrl_i2c2_gpio: i2c2gpiogrp {
 			fsl,pins = <
 				/* gpio-expander reset: io without pull-up */

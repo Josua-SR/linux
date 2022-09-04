@@ -329,7 +329,6 @@
 	fsl,spi-num-chipselects = <1>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_lpspi2>;
-	//pinctrl-assert-gpios = <&pca6416_1 7 GPIO_ACTIVE_HIGH>; // <-- what be dis?>
 	status = "okay";
 
 	/* SXF1800 (SoM) */
