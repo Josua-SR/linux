@@ -185,16 +185,15 @@
 
 		pinctrl_wifi: wifigrp {
 			fsl,pins = <
-				/* wl_reg_on: io without pull-up */
-				/* IMX8DXL_SPI3_CS1 not a GPIO :( */
-				IMX8DXL_SPI3_CS1_ADMA_SPI3_CS1		0x0000061
-				/* measure if this is high */
+				/* wl_reg_on: SPI CS with pull-up, to force high */
+				/* should be: io without pull-up (WiFi module has internal pull-down) */
+				IMX8DXL_SPI3_CS1_ADMA_SPI3_CS1		0x0000021
 			>;
 		};
 
 		pinctrl_bluetooth: bluetoothgrp {
 			fsl,pins = <
-				/* bt_reg_on: io without pull-up TODO: pull-up */
+				/* bt_reg_on: io without pull-up (BT module has internal pull-down) */
 				IMX8DXL_SPI3_SCK_LSIO_GPIO0_IO13	0x0000061
 			>;
 		};
@@ -209,17 +208,7 @@
 
 /* exposed on J14: SDA(51), SCL(53) */
 &i2c2 {
-	/* MFS5600AMMA7ES */
-	mfs5600: regulator@18 {
-		compatible = "nxp,fs5600"; /* driver missing */
-		reg = <0x18>;
-		/* max 400kHz bus speed with 2.2k pullup of i2c line */
-		/* max 3.4MHz bus speed with 500 pullup of i2c line */
-		/* feeds VIN_5V with 3A (5V0_PS???) */
-
-		clocks = <&clk IMX_SC_R_AUDIO_PLL_0 IMX_SC_PM_CLK_PLL>, <&mclkout0_lpcg 0>;
-		clock-names = "pll0", "mclk";
-	};
+	/* MFS5600AMMA7ES @ 18 */
 
 	/* TCA6408ARGTR */
 	tca6408: gpio@20 {
@@ -260,7 +249,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_bluetooth>;
 		compatible = "brcm,bcm4330-bt";
-		//max-speed = <1000000>;
+		max-speed = <4000000>;
 		shutdown-gpios = <&lsio_gpio0 13 GPIO_ACTIVE_HIGH>;
 	};
 };
@@ -295,9 +284,9 @@
     #address-cells = <1>;
     #size-cells = <0>;
 	pinctrl-names = "default", "state_100mhz", "state_200mhz";
-	pinctrl-0 = <&pinctrl_usdhc3>;
-	pinctrl-1 = <&pinctrl_usdhc3_100mhz>;
-	pinctrl-2 = <&pinctrl_usdhc3_200mhz>;
+	pinctrl-0 = <&pinctrl_usdhc3>, <&pinctrl_wifi>;
+	pinctrl-1 = <&pinctrl_usdhc3_100mhz>, <&pinctrl_wifi>;
+	pinctrl-2 = <&pinctrl_usdhc3_200mhz>, <&pinctrl_wifi>;
 	bus-width = <4>;
 	no-sd;
 	non-removable;
@@ -309,11 +298,7 @@
 
 	/* CYW43455 */
     wifi: cyw43455@1 {
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_wifi>;
-        reg = <1>;
-        compatible = "brcm,bcm4329-fmac";
-		/* WL_REG_ON high to operate */
-		/* BT_REG_ON high to operate */
+		reg = <1>;
+		compatible = "brcm,bcm4329-fmac";
     };
 };
