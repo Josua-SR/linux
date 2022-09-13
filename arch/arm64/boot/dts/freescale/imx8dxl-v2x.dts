@@ -241,13 +241,11 @@
 /* bluetooth */
 &lpuart1 {
 	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_lpuart1>;
+	pinctrl-0 = <&pinctrl_lpuart1>, <&pinctrl_bluetooth>;
 	status = "okay";
 	uart-has-rtscts;
 
 	bt: bluetooth {
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_bluetooth>;
 		compatible = "brcm,bcm4330-bt";
 		max-speed = <4000000>;
 		shutdown-gpios = <&lsio_gpio0 13 GPIO_ACTIVE_HIGH>;
