@@ -13,7 +13,7 @@
 	model = "SolidRun i.MX8DXL V2X Carrier";
 	compatible = "fsl,imx8dxl-sr-som", "fsl,imx8dxl";
 
-	lte_vbat_reg: regulator-lte-vbat {
+	/*lte_vbat_reg: regulator-lte-vbat {
 		compatible = "regulator-fixed";
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_lte_vbat>;
@@ -23,7 +23,7 @@
 		gpio = <&lsio_gpio0 14 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-always-on;
-	};
+	};*/
 
 	regulator_1v1: regulator-1v1 {
 		compatible = "regulator-fixed";
