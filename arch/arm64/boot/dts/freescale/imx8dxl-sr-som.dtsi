@@ -49,6 +49,13 @@
 		/* TODO: EVK reserves memory for vdevs here ... */
 	};
 
+	pps {
+		compatible = "pps-gpio";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_lpuart2_gps_pps>;
+		gpios = <&lsio_gpio2 6 GPIO_ACTIVE_HIGH>;
+	};
+
 	v2x_reg_1v2: regulator-v2x-1v2 {
 		compatible = "regulator-fixed";
 		pinctrl-names = "default";
@@ -162,7 +169,11 @@
 				/* gps interrupt: io without pull-up */
 				IMX8DXL_SNVS_TAMPER_IN0_LSIO_GPIO2_IO09_IN		0x0000061
 				/* IMX8DXL_SNVS_TAMPER_IN0_LSIO_GPIO6_IO23_IN */
+			>;
+		};
 
+		pinctrl_lpuart2_gps_pps: lpuart2gpsppsgrp {
+			fsl,pins = <
 				/* gps timepulse: input without pull-up */
 				IMX8DXL_SNVS_TAMPER_OUT2_LSIO_GPIO2_IO06_IN		0x0000061
 			>;
