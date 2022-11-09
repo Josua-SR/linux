@@ -3215,6 +3215,7 @@ static int sja1105_check_device_id(struct sja1105_private *priv)
 	const struct of_device_id *match;
 	u32 device_id;
 	u64 part_no;
+	u64 version;
 	int rc;
 
 	rc = sja1105_xfer_u32(priv, SPI_READ, regs->device_id, &device_id,
@@ -3228,6 +3229,9 @@ static int sja1105_check_device_id(struct sja1105_private *priv)
 		return rc;
 
 	sja1105_unpack(prod_id, &part_no, 19, 4, SJA1105_SIZE_DEVICE_ID);
+	sja1105_unpack(prod_id, &version,  3, 0, SJA1105_SIZE_DEVICE_ID);
+
+	priv->silicon_rev = version;
 
 	for (match = sja1105_dt_ids; match->compatible[0]; match++) {
 		const struct sja1105_info *info = match->data;
@@ -3325,7 +3329,8 @@ static int sja1105_probe(struct spi_device *spi)
 		return rc;
 	}
 
-	dev_info(dev, "Probed switch chip: %s\n", priv->info->name);
+	dev_info(dev, "Probed switch chip: %s (rev %d)\n", priv->info->name,
+		 priv->silicon_rev);
 
 	ds = devm_kzalloc(dev, sizeof(*ds), GFP_KERNEL);
 	if (!ds)
