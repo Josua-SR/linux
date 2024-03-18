@@ -49,6 +49,8 @@ dtb-$(CONFIG_ARCH_MVEBU) += cn9130-crb-C.dtb
 dtb-$(CONFIG_ARCH_MVEBU) += cn9130-crb-r1p3-A.dtb
 dtb-$(CONFIG_ARCH_MVEBU) += cn9130-crb-r1p3-B.dtb
 dtb-$(CONFIG_ARCH_MVEBU) += cn9130-crb-r1p3-C.dtb
+dtb-$(CONFIG_ARCH_MVEBU) += cn9130-cf-base.dtb
+dtb-$(CONFIG_ARCH_MVEBU) += cn9130-cf-pro.dtb
 
 always		:= $(dtb-y)
 subdir-y	:= $(dts-dirs)
