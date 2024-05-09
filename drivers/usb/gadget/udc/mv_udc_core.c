@@ -2138,8 +2138,13 @@ static int mv_udc_probe(struct platform_device *pdev)
 	if (!udc)
 		return -ENOMEM;
 
-	/* udc only have one sysclk. */
-	clk = devm_clk_get(&pdev->dev, NULL);
+	/* usb and sata share a general clock */
+	clk = devm_clk_get(&pdev->dev, "reg");
+	if (!IS_ERR(clk))
+		clk_prepare_enable(clk);
+
+	/* udc have one sysclk. */
+	clk = devm_clk_get(&pdev->dev, "core");
 	if (IS_ERR(clk))
 		return PTR_ERR(clk);
 
