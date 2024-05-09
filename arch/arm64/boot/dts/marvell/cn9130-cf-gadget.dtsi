@@ -1,0 +1,34 @@
+// SPDX-License-Identifier: GPL-2.0+
+/*
+ * Copyright (C) 2024 Josua Mayer <josua@solid-run.com>
+ *
+ * DTS for SolidRun CN9130 Clearfog as USB Gadget on USB-A Connector.
+ *
+ */
+
+#include "cn9130-cf-base.dts"
+
+&/ {
+	usb_vbusdet: usb-vbusdet {
+		compatible = "linux,extcon-usb-gpio";
+		vbus-gpio = <&cp0_gpio1 30 GPIO_ACTIVE_HIGH>;
+	}
+};
+
+&cp0_comphy1 {
+	extcon = <&usb_vbusdet>;
+};
+
+/* USB-2.0 Peripheral on Type-A connector */
+&cp0_udc {
+	pinctrl-0 = <&mikro_int_pins>, <&mikro_spi_pins>;
+	vbus-gpio = <&cp0_gpio1 30 GPIO_ACTIVE_HIGH>;
+	phys = <&cp0_utmi1>;
+	phy-names = "usb";
+	status = "okay";
+};
+
+&cp0_utmi1 {
+	/* connect to device controller */
+	utmi-port = <UTMI_PHY_TO_USB3_DEVICE0>;
+};

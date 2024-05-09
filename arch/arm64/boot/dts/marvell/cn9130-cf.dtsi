@@ -139,6 +139,11 @@
 		marvell,function = "uart1";
 	};
 
+	mikro_int_pins: cp0-mikro-int-pins {
+		marvell,pins = "mpp30"; // J2-22
+		marvell,function = "gpio";
+	};
+
 	expander0_pins: cp0-expander0-pins {
 		marvell,pins = "mpp4";
 		marvell,function = "gpio";
@@ -165,22 +170,26 @@
 
 &cp0_spi1 {
 	/* CS1 for mikrobus */
-	pinctrl-0 = <&cp0_spi1_pins &mikro_spi_pins>;
+	pinctrl-0 = <&cp0_spi1_pins>;
 };
 
-/*
- * SRDS #1 - USB-3.0 Host on Type-A connector
- * USB-2.0 Host on mPCI-e connector (CON3)
- */
+/* USB-2.0 Host on mPCI-e connector (CON3) */
 &cp0_usb3_0 {
-	phys = <&cp0_utmi0>, <&cp0_comphy1 0>;
-	phy-names = "usb", "usb3";
+	phys = <&cp0_utmi0>;
+	phy-names = "utmi";
 	vbus-supply = <&reg_usb3_vbus0>;
 	dr_mode = "host";
 	status = "okay";
 };
 
 &cp0_utmi0 {
+	status = "okay";
+};
+
+/* SRDS #1 - USB-3.0 Device on Type-A connector */
+&cp0_u3d {
+	phys = <&cp0_comphy1 0>;
+	phy-names = "usb";
 	status = "okay";
 };
 

@@ -112,18 +112,26 @@
 	};
 };
 
-/*
- * SRDS #4 - USB 3.0 host on M.2 connector
- * USB-2.0 Host on Type-A connector
- */
+/* USB-2.0 Peripheral on Type-A connector */
+&cp0_udc {
+	pinctrl-0 = <&mikro_int_pins>, <&mikro_spi_pins>;
+	vbus-gpio = <&cp0_gpio1 30 GPIO_ACTIVE_HIGH>;
+	pullup-gpio = <&cp0_gpio1 12 GPIO_ACTIVE_HIGH>;
+	phys = <&cp0_utmi1>;
+	phy-names = "usb";
+	status = "okay";
+};
+
+/* SRDS #4 - USB 3.0 host on M.2 connector */
 &cp0_usb3_1 {
-	phys = <&cp0_utmi1>, <&cp0_comphy4 1>;
-	phy-names = "usb", "usb3";
+	phys = <&cp0_comphy4 1>;
+	phy-names = "usb3";
 	dr_mode = "host";
 	status = "okay";
 };
 
 &cp0_utmi1 {
+	utmi-port = <UTMI_PHY_TO_USB3_DEVICE0>;
 	status = "okay";
 };
 

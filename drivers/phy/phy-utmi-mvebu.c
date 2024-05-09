@@ -450,6 +450,8 @@ static int mvebu_cp110_utmi_phy_power_on(struct phy *phy)
 	 * (Device can be connected to UTMI0 or to UTMI1)
 	 */
 	if (utmi_phy->connect_to == UTMI_PHY_TO_USB3_DEVICE0) {
+		dev_info(&phy->dev, "enable device mode\n");
+
 		/* USB3 Device UTMI enable */
 		mask = UTMI_USB_CFG_DEVICE_EN_MASK;
 		data = 0x1 << UTMI_USB_CFG_DEVICE_EN_OFFSET;
@@ -457,7 +459,8 @@ static int mvebu_cp110_utmi_phy_power_on(struct phy *phy)
 		mask |= UTMI_USB_CFG_DEVICE_MUX_MASK;
 		data |= utmi_phy->index << UTMI_USB_CFG_DEVICE_MUX_OFFSET;
 		mvebu_cp110_usb_cfg_set(utmi_phy, data, mask);
-	}
+	} else
+		dev_info(&phy->dev, "enable host mode\n");
 
 	/* Set Test suspendm mode */
 	mask = UTMI_CTRL_STATUS0_SUSPENDM_MASK;

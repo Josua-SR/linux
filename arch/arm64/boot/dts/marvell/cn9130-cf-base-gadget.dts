@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: GPL-2.0+
+/*
+ * Copyright (C) 2024 Josua Mayer <josua@solid-run.com>
+ *
+ * DTS for SolidRun CN9130 Clearfog Base as USB Gadget on USB-A Connector.
+ *
+ */
+
+#include "cn9130-cf-base.dts"
+#include "cn9130-cf-gadget.dtsi"
+
+&cp0_usb3_1 {
+	/* remove utmi phy */
+	phys = <&cp0_comphy4 1>;
+	phy-names = "comphy";
+};
