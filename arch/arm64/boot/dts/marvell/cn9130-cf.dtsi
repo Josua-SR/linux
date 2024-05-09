@@ -22,6 +22,7 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		gpios = <&expander0 6 GPIO_ACTIVE_LOW>;
+		regulator-always-on;
 	};
 
 	sfp: sfp {
@@ -177,11 +178,11 @@
 	phy-names = "usb", "usb3";
 	vbus-supply = <&reg_usb3_vbus0>;
 	dr_mode = "host";
-	status = "okay";
+	status = "disabled";
 };
 
 &cp0_utmi0 {
-	status = "okay";
+	status = "disabled";
 };
 
 /* mikrobus uart */

@@ -120,11 +120,11 @@
 	phys = <&cp0_utmi1>, <&cp0_comphy4 1>;
 	phy-names = "usb", "usb3";
 	dr_mode = "host";
-	status = "okay";
+	status = "disabled";
 };
 
 &cp0_utmi1 {
-	status = "okay";
+	status = "disabled";
 };
 
 &expander0 {
@@ -141,4 +141,24 @@
 		output-low;
 		line-name = "m2-reset";
 	};
+};
+
+&cp0_u3d {
+	phys = <&cp0_comphy1 0>;
+	phy-names = "usb";
+	status = "okay";
+};
+
+&cp0_udc {
+	status = "okay";
+};
+
+&cp0_utmi0 {
+	//utmi-port = <UTMI_PHY_TO_USB3_DEVICE0>;
+	status = "okay";
+};
+
+&cp0_utmi1 {
+	utmi-port = <UTMI_PHY_TO_USB3_DEVICE0>;
+	status = "okay";
 };
