@@ -2166,7 +2166,7 @@ static int mv_udc_probe(struct platform_device *pdev)
 	struct mv_usb_platform_data *pdata = dev_get_platdata(&pdev->dev);
 	struct mv_udc *udc;
 	int retval = 0;
-	struct resource *capregs, *phyregs, *irq;
+	struct resource *capregs, *phyregs;
 	size_t size;
 	struct clk *clk;
 	int err;
@@ -2330,13 +2330,12 @@ static int mv_udc_probe(struct platform_device *pdev)
 	udc->remote_wakeup = 0;
 
 	/* request irq */
-	irq = platform_get_resource(udc->dev, IORESOURCE_IRQ, 0);
-	if (irq == NULL) {
-		dev_err(&pdev->dev, "no IRQ resource defined\n");
-		retval = -ENODEV;
+	udc->irq = platform_get_irq(pdev, 0);
+	if (udc->irq < 0) {
+		dev_err(&pdev->dev, "no IRQ resource found: %d\n", udc->irq);
+		retval = udc->irq;
 		goto err_destroy_dma;
 	}
-	udc->irq = irq->start;
 	if (devm_request_irq(&pdev->dev, udc->irq, mv_udc_irq,
 		IRQF_SHARED, driver_name, udc)) {
 		dev_err(&pdev->dev, "Request irq %d for UDC failed\n",
