@@ -303,7 +303,7 @@ static int sfp_i2c_read(struct sfp *sfp, bool a2, u8 dev_addr, void *buf,
 
 		msgs[1].len = this_len;
 
-		ret = i2c_transfer(i2c, msgs, ARRAY_SIZE(msgs));
+		ret = i2c_transfer(sfp->i2c, msgs, ARRAY_SIZE(msgs));
 		if (ret < 0)
 			return ret;
 
