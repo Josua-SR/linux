@@ -130,11 +130,6 @@
 			marvell,function = "ge1";
 		};
 
-		cp0_i2c0_pins: cp0-i2c0-pins {
-			marvell,pins = "mpp37", "mpp38";
-			marvell,function = "i2c0";
-		};
-
 		cp0_mdio_pins: cp0-mdio-pins {
 			marvell,pins = "mpp40", "mpp41";
 			marvell,function = "ge";

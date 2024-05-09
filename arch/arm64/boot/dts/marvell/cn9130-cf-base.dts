@@ -68,25 +68,6 @@
 	 * - LED[2]: high impedance (floating)
 	 */
 	marvell,reg-init = <3 16 0xf000 0x0a61>;
-
-	leds {
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		led@0 {
-			reg = <0>;
-			color = <LED_COLOR_ID_GREEN>;
-			function = LED_FUNCTION_WAN;
-			default-state = "keep";
-		};
-
-		led@1 {
-			reg = <1>;
-			color = <LED_COLOR_ID_YELLOW>;
-			function = LED_FUNCTION_WAN;
-			default-state = "keep";
-		};
-	};
 };
 
 &cp0_gpio1 {
@@ -113,25 +94,6 @@
 		 */
 		marvell,reg-init = <3 16 0xf000 0x0a61>,
 				   <3 17 0x003f 0x000a>;
-
-		leds {
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			led@0 {
-				reg = <0>;
-				color = <LED_COLOR_ID_GREEN>;
-				function = LED_FUNCTION_LAN;
-				default-state = "keep";
-			};
-
-			led@1 {
-				reg = <1>;
-				color = <LED_COLOR_ID_YELLOW>;
-				function = LED_FUNCTION_LAN;
-				default-state = "keep";
-			};
-		};
 	};
 };
 
@@ -155,9 +117,13 @@
  * USB-2.0 Host on Type-A connector
  */
 &cp0_usb3_1 {
-	phys = <&cp0_comphy4 1>, <&cp0_utmi1>;
-	phy-names = "comphy", "utmi";
+	phys = <&cp0_utmi1>, <&cp0_comphy4 1>;
+	phy-names = "usb", "usb3";
 	dr_mode = "host";
+	status = "okay";
+};
+
+&cp0_utmi1 {
 	status = "okay";
 };
 

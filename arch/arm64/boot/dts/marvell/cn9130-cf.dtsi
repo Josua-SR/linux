@@ -39,7 +39,7 @@
 &cp0_eth0 {
 	managed = "in-band-status";
 	phys = <&cp0_comphy2 0>;
-	phy-mode = "10gbase-r";
+	phy-mode = "10gbase-kr";
 	sfp = <&sfp>;
 	status = "okay";
 };
@@ -123,11 +123,6 @@
 };
 
 &cp0_pinctrl {
-	cp0_i2c1_pins: cp0-i2c1-pins {
-		marvell,pins = "mpp35", "mpp36";
-		marvell,function = "i2c1";
-	};
-
 	cp0_mmc0_pins: cp0-mmc0-pins {
 		marvell,pins = "mpp43", "mpp56", "mpp57", "mpp58",
 			       "mpp59", "mpp60", "mpp61";
@@ -178,14 +173,14 @@
  * USB-2.0 Host on mPCI-e connector (CON3)
  */
 &cp0_usb3_0 {
-	phys = <&cp0_comphy1 0>, <&cp0_utmi0>;
-	phy-names = "comphy", "utmi";
+	phys = <&cp0_utmi0>, <&cp0_comphy1 0>;
+	phy-names = "usb", "usb3";
 	vbus-supply = <&reg_usb3_vbus0>;
 	dr_mode = "host";
 	status = "okay";
 };
 
-&cp0_utmi {
+&cp0_utmi0 {
 	status = "okay";
 };
 

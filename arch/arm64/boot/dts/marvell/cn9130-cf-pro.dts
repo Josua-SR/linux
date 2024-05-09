@@ -61,27 +61,6 @@
 	 * Identical configuration is impossible with hardware offload.
 	 */
 	marvell,reg-init = <3 16 0xf000 0x0a61>;
-
-	leds {
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		led@0 {
-			reg = <0>;
-			color = <LED_COLOR_ID_GREEN>;
-			function = LED_FUNCTION_WAN;
-			label = "LED2";
-			default-state = "keep";
-		};
-
-		led@1 {
-			reg = <1>;
-			color = <LED_COLOR_ID_RED>;
-			function = LED_FUNCTION_WAN;
-			label = "LED1";
-			default-state = "keep";
-		};
-	};
 };
 
 &cp0_mdio {
@@ -102,135 +81,30 @@
 				reg = <0>;
 				label = "lan5";
 				phy = <&switch0phy0>;
-
-				leds {
-					#address-cells = <1>;
-					#size-cells = <0>;
-
-					led@0 {
-						reg = <0>;
-						color = <LED_COLOR_ID_GREEN>;
-						function = LED_FUNCTION_LAN;
-						label = "LED12";
-						default-state = "keep";
-					};
-
-					led@1 {
-						reg = <1>;
-						color = <LED_COLOR_ID_RED>;
-						function = LED_FUNCTION_LAN;
-						label = "LED11";
-						default-state = "keep";
-					};
-				};
 			};
 
 			ethernet-port@1 {
 				reg = <1>;
 				label = "lan4";
 				phy = <&switch0phy1>;
-
-				leds {
-					#address-cells = <1>;
-					#size-cells = <0>;
-
-					led@0 {
-						reg = <0>;
-						color = <LED_COLOR_ID_GREEN>;
-						function = LED_FUNCTION_LAN;
-						label = "LED10";
-						default-state = "keep";
-					};
-
-					led@1 {
-						reg = <1>;
-						color = <LED_COLOR_ID_RED>;
-						function = LED_FUNCTION_LAN;
-						label = "LED9";
-						default-state = "keep";
-					};
-				};
 			};
 
 			ethernet-port@2 {
 				reg = <2>;
 				label = "lan3";
 				phy = <&switch0phy2>;
-
-				leds {
-					#address-cells = <1>;
-					#size-cells = <0>;
-
-					led@0 {
-						reg = <0>;
-						color = <LED_COLOR_ID_GREEN>;
-						function = LED_FUNCTION_LAN;
-						label = "LED8";
-						default-state = "keep";
-					};
-
-					led@1 {
-						reg = <1>;
-						color = <LED_COLOR_ID_RED>;
-						function = LED_FUNCTION_LAN;
-						label = "LED7";
-						default-state = "keep";
-					};
-				};
 			};
 
 			ethernet-port@3 {
 				reg = <3>;
 				label = "lan2";
 				phy = <&switch0phy3>;
-
-				leds {
-					#address-cells = <1>;
-					#size-cells = <0>;
-
-					led@0 {
-						reg = <0>;
-						color = <LED_COLOR_ID_GREEN>;
-						function = LED_FUNCTION_LAN;
-						label = "LED6";
-						default-state = "keep";
-					};
-
-					led@1 {
-						reg = <1>;
-						color = <LED_COLOR_ID_RED>;
-						function = LED_FUNCTION_LAN;
-						label = "LED5";
-						default-state = "keep";
-					};
-				};
 			};
 
 			ethernet-port@4 {
 				reg = <4>;
 				label = "lan1";
 				phy = <&switch0phy4>;
-
-				leds {
-					#address-cells = <1>;
-					#size-cells = <0>;
-
-					led@0 {
-						reg = <0>;
-						color = <LED_COLOR_ID_GREEN>;
-						function = LED_FUNCTION_LAN;
-						label = "LED4";
-						default-state = "keep";
-					};
-
-					led@1 {
-						reg = <1>;
-						color = <LED_COLOR_ID_RED>;
-						function = LED_FUNCTION_LAN;
-						label = "LED3";
-						default-state = "keep";
-					};
-				};
 			};
 
 			ethernet-port@5 {
@@ -351,8 +225,12 @@
 /* USB-2.0 Host on Type-A connector */
 &cp0_usb3_1 {
 	phys = <&cp0_utmi1>;
-	phy-names = "utmi";
+	phy-names = "usb";
 	dr_mode = "host";
+	status = "okay";
+};
+
+&cp0_utmi1 {
 	status = "okay";
 };
 
