@@ -625,8 +625,8 @@ static int mvebu_utmi_phy_probe(struct platform_device *pdev)
 	dev_set_drvdata(dev, utmi_phy);
 	phy_set_drvdata(phy, utmi_phy);
 
-	/* Power off the PHY as default */
-	mvebu_utmi_phy_ops->power_off(phy);
+	/* Power on the PHY as default */
+	mvebu_utmi_phy_ops->power_on(phy);
 
 	phy_provider = devm_of_phy_provider_register(&pdev->dev,
 						     of_phy_simple_xlate);
