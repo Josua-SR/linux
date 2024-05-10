@@ -2469,11 +2469,21 @@ static int mvc2_probe(struct platform_device *pdev)
 	cp->comphy = devm_of_phy_get(&pdev->dev, pdev->dev.of_node, "usb");
 	if (!IS_ERR(cp->comphy)) {
 		ret = phy_init(cp->comphy);
-		if (ret)
+		if (ret) {
+			dev_err(&pdev->dev, "comphy init failed: %d\n", ret);
 			goto disable_phy;
+		}
+
+		ret = phy_set_mode(cp->comphy, PHY_MODE_USB_DEVICE);
+		if (ret) {
+			dev_err(&pdev->dev, "comphy set-mode failed: %d\n", ret);
+			phy_exit(cp->comphy);
+			goto disable_phy;
+		}
 
 		ret = phy_power_on(cp->comphy);
 		if (ret) {
+			dev_err(&pdev->dev, "comphy power-on failed: %d\n", ret);
 			phy_exit(cp->comphy);
 			goto disable_phy;
 		}
