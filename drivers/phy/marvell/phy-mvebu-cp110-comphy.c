@@ -134,6 +134,7 @@ static const struct mvebu_comhy_conf mvebu_comphy_cp110_modes[] = {
 	MVEBU_COMPHY_CONF(1, 0, PHY_MODE_PCIE),
 	MVEBU_COMPHY_CONF(1, 0, PHY_MODE_SATA),
 	MVEBU_COMPHY_CONF(1, 0, PHY_MODE_USB_HOST),
+	MVEBU_COMPHY_CONF(1, 0, PHY_MODE_USB_DEVICE),
 	/* lane 2 */
 	MVEBU_COMPHY_CONF_ETH(2, 0, PHY_INTERFACE_MODE_SGMII),
 	MVEBU_COMPHY_CONF_ETH(2, 0, PHY_INTERFACE_MODE_2500BASEX),
@@ -167,6 +168,7 @@ static const struct mvebu_comhy_conf mvebu_comphy_cp110_modes[] = {
 	MVEBU_COMPHY_CONF_ETH(4, 1, PHY_INTERFACE_MODE_SGMII),
 	MVEBU_COMPHY_CONF(4, 1, PHY_MODE_PCIE),
 	MVEBU_COMPHY_CONF(4, 1, PHY_MODE_USB_HOST),
+	MVEBU_COMPHY_CONF(4, 0, PHY_MODE_USB_DEVICE),
 	MVEBU_COMPHY_CONF_ETH(4, 0, PHY_INTERFACE_MODE_RXAUI),
 	/* lane 5 */
 	MVEBU_COMPHY_CONF_ETH(5, 2, PHY_INTERFACE_MODE_SGMII),
@@ -341,9 +343,16 @@ static int mvebu_comphy_power_on(struct phy *phy)
 				 COMPHY_FW_MODE_FORMAT(COMPHY_SATA_MODE));
 		break;
 	case PHY_MODE_USB_HOST:
+		dev_info(priv->dev, "lane %d: usb3 host mode\n", lane->id);
 		ret = data->comphy_smc(MV_SIP_COMPHY_POWER_ON, priv->phys,
 				 lane->id,
 				 COMPHY_FW_MODE_FORMAT(COMPHY_USB3H_MODE));
+		break;
+	case PHY_MODE_USB_DEVICE:
+		dev_info(priv->dev, "lane %d: usb3 device mode\n", lane->id);
+		ret = data->comphy_smc(MV_SIP_COMPHY_POWER_ON, priv->phys,
+				 lane->id,
+				 COMPHY_FW_MODE_FORMAT(COMPHY_USB3D_MODE));
 		break;
 	case PHY_MODE_ETHERNET:
 		ret = mvebu_comphy_eth_power_on(phy);
