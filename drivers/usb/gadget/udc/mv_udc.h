@@ -217,8 +217,8 @@ struct mv_udc {
 				active:1,
 				stopped:1;      /* stop bit is setted */
 
-
-	int vbus_pin;
+	struct extcon_dev	*edev;
+	struct notifier_block	vbus_nb;
 	struct work_struct	vbus_work;
 	struct workqueue_struct *qwork;
 
