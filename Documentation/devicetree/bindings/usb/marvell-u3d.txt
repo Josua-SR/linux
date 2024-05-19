@@ -11,9 +11,6 @@ Required properties:
 - dma-coherent	: if controller is DMA coherent
 
 Optional properties :
-- vbus-gpio	: VBUS interrupt GPIO pin
-		  set to trigger VBUS event notification to PHY/controller
-		  whether VBUS was powered or not
 - phys		: the COMPHY associated to this controller
 - phy-names:	: the name of COMPHY indicated by above property of phys
 

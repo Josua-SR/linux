@@ -391,10 +391,7 @@ struct mvc2 {
 	unsigned int    u2pel;
 	struct mvc2_register *reg;
 	unsigned int	mvc2_version;
-	int vbus_pin;
 	int prev_vbus;
-	struct work_struct	vbus_work;
-	struct workqueue_struct *qwork;
 	/* Flags for HW reset. false: no need reset; true: need reset */
 	bool phy_hw_reset;
 };

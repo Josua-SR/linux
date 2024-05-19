@@ -1461,20 +1461,6 @@ static int mvc2_start(struct usb_gadget *gadget,
 	return 0;
 }
 
-static int mvc2_first_start(struct usb_gadget *gadget,
-			    struct usb_gadget_driver *driver)
-{
-	struct mvc2 *cp = container_of(gadget, struct mvc2, gadget);
-
-	mvc2_start(gadget, driver);
-
-	/* When boot with cable attached, there will be no vbus irq occurred */
-	if (cp->qwork)
-		queue_work(cp->qwork, &cp->vbus_work);
-
-	return 0;
-}
-
 static int mvc2_stop(struct usb_gadget *gadget)
 {
 	struct mvc2 *cp = container_of(gadget, struct mvc2, gadget);
@@ -1529,53 +1515,6 @@ static int mvc2_vbus_session(struct usb_gadget *gadget, int is_active)
 	return 0;
 }
 
-static irqreturn_t mvc2_vbus_irq(int irq, void *dev)
-{
-	struct mvc2 *cp = (struct mvc2 *)dev;
-
-	/* polling VBUS and init phy may cause too much time */
-	if (cp->qwork)
-		queue_work(cp->qwork, &cp->vbus_work);
-
-	return IRQ_HANDLED;
-}
-
-static void mvc2_vbus_work(struct work_struct *work)
-{
-	struct mvc2 *cp;
-	unsigned int vbus;
-	unsigned int reg;
-
-	cp = container_of(work, struct mvc2, vbus_work);
-
-	if (gpio_is_valid(cp->vbus_pin))
-		vbus = gpio_get_value_cansleep(cp->vbus_pin);
-	else {
-		dev_err(cp->dev, "VBUS interrupt status is missing\n");
-		return;
-	}
-
-	if (cp->prev_vbus != vbus)
-		cp->prev_vbus = vbus;
-	else
-		return;
-
-	if (!cp->phy_base) {
-		dev_err(cp->dev, "PHY register is missing\n");
-		return;
-	}
-
-	if (vbus == VBUS_HIGH) {
-		reg = readl(cp->phy_base);
-		reg |= 0x8000;
-		writel(reg, cp->phy_base);
-	} else if (vbus == VBUS_LOW) {
-		reg = readl(cp->phy_base);
-		reg &= ~0x8000;
-		writel(reg, cp->phy_base);
-	}
-}
-
 static int mvc2_vbus_draw(struct usb_gadget *gadget, unsigned mA)
 {
 	return -ENOTSUPP;
@@ -1624,7 +1563,7 @@ static const struct usb_gadget_ops mvc2_ops = {
 	.set_selfpowered = mvc2_set_selfpowered,
 
 	.pullup = mvc2_pullup,
-	.udc_start = mvc2_first_start,
+	.udc_start = mvc2_start,
 	.udc_stop = mvc2_stop,
 #ifdef CONFIG_USB_REMOTE_WAKEUP
 	.wakeup = mvc2_wakeup,
@@ -2332,7 +2271,6 @@ static int mvc2_probe(struct platform_device *pdev)
 	unsigned int ver;
 	int ret = 0;
 	void __iomem *base;
-	void __iomem *phy_base = NULL;
 	struct clk *clk;
 
 	/* disable U1/U2 mode, as part of the detection WA */
@@ -2354,17 +2292,6 @@ static int mvc2_probe(struct platform_device *pdev)
 	ret = clk_prepare_enable(clk);
 	if (ret < 0)
 		goto err_mem;
-
-	/* phy address for VBUS toggling */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	if (res) {
-		phy_base = devm_ioremap(&pdev->dev, res->start, resource_size(res));
-		if (!phy_base) {
-			dev_err(&pdev->dev, "%s: register mapping failed\n", __func__);
-			ret = -ENXIO;
-			goto err_clk;
-		}
-	}
 
 	/* general USB3 device initializations */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -2390,59 +2317,16 @@ static int mvc2_probe(struct platform_device *pdev)
 
 	cp->mvc2_version = ver & 0xFFFF;
 
-	/* setup vbus gpio */
-	cp->vbus_pin = of_get_named_gpio(pdev->dev.of_node, "vbus-gpio", 0);
-	if ((cp->vbus_pin == -ENODEV) || (cp->vbus_pin == -EPROBE_DEFER)) {
-		ret = -EPROBE_DEFER;
-		goto err_clk;
-	}
-
-	if (cp->vbus_pin < 0)
-		cp->vbus_pin = -ENODEV;
-
-	if (gpio_is_valid(cp->vbus_pin)) {
-		cp->prev_vbus = 0;
-		if (!devm_gpio_request(&pdev->dev, cp->vbus_pin, "mvebu-u3d")) {
-			/* Use the 'any_context' version of function to allow
-			 * requesting both direct GPIO interrupt (hardirq) and
-			 * IO-expander's GPIO (nested interrupt)
-			 */
-			ret = devm_request_any_context_irq(&pdev->dev,
-					       gpio_to_irq(cp->vbus_pin),
-					       mvc2_vbus_irq,
-					       IRQ_TYPE_EDGE_BOTH | IRQF_ONESHOT,
-					       "mvebu-u3d", cp);
-			if (ret < 0) {
-				cp->vbus_pin = -ENODEV;
-				dev_warn(&pdev->dev,
-					 "failed to request vbus irq; "
-					 "assuming always on\n");
-			}
-		}
-
-		/* setup work queue */
-		cp->qwork = create_singlethread_workqueue("mvc2_queue");
-		if (!cp->qwork) {
-			dev_err(&pdev->dev, "cannot create workqueue\n");
-			ret = -ENOMEM;
-			goto err_clk;
-		}
-
-		INIT_WORK(&cp->vbus_work, mvc2_vbus_work);
-	}
-
 	cp->reg = devm_kzalloc(&pdev->dev, sizeof(struct mvc2_register),
 			       GFP_KERNEL);
 	if (!cp->reg) {
 		ret = -ENOMEM;
-		goto err_qwork;
+		goto err_clk;
 	}
 
 	cp->dev = &pdev->dev;
 	cp->base = base;
 	cp->epnum = 16;
-	if (phy_base)
-		cp->phy_base = phy_base;
 
 	if (cp->mvc2_version >= USB3_IP_VER_Z2) {
 		cp->reg->lfps_signal = 0x8;
@@ -2499,7 +2383,7 @@ static int mvc2_probe(struct platform_device *pdev)
 	cp->eps = kzalloc(cp->epnum * sizeof(struct mvc2_ep) * 2, GFP_KERNEL);
 	if (!cp->eps) {
 		ret = -ENOMEM;
-		goto err_qwork;
+		goto disable_phy;
 	}
 
 	ret = mvc2_gadget_init(cp);
@@ -2518,9 +2402,6 @@ static int mvc2_probe(struct platform_device *pdev)
 
 err_alloc_eps:
 	kfree(cp->eps);
-err_qwork:
-	if (cp->qwork)
-		destroy_workqueue(cp->qwork);
 disable_phy:
 	if (cp->comphy) {
 		phy_power_off(cp->comphy);
@@ -2613,11 +2494,6 @@ static int mvc2_remove(struct platform_device *dev)
 
 	cp = (struct mvc2 *)platform_get_drvdata(dev);
 	mvc2_connect(cp, 0);
-
-	if (cp->qwork) {
-		flush_workqueue(cp->qwork);
-		destroy_workqueue(cp->qwork);
-	}
 
 	/* PHY exit if there is */
 	if (cp->comphy) {
