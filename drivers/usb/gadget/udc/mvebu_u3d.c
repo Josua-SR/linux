@@ -2467,7 +2467,9 @@ static int mvc2_probe(struct platform_device *pdev)
 
 	/* Get comphy and init if there is */
 	cp->comphy = devm_of_phy_get(&pdev->dev, pdev->dev.of_node, "usb");
-	if (!IS_ERR(cp->comphy)) {
+	if (IS_ERR(cp->comphy) && PTR_ERR(cp->comphy) != -ENODEV)
+		return PTR_ERR(cp->comphy);
+	else if (!IS_ERR(cp->comphy)) {
 		ret = phy_init(cp->comphy);
 		if (ret) {
 			dev_err(&pdev->dev, "comphy init failed: %d\n", ret);
