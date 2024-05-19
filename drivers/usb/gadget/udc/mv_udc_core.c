@@ -1485,7 +1485,7 @@ udc_prime_status(struct mv_udc *udc, u8 direction, u16 status, bool empty)
 		req->req.complete = NULL;
 	req->dtd_count = 0;
 
-	if (req->req.dma == DMA_ADDR_INVALID) {
+	if (req->req.dma == DMA_ADDR_INVALID && req->req.length) {
 		req->req.dma = dma_map_single(ep->udc->gadget.dev.parent,
 				req->req.buf, req->req.length,
 				ep_dir(ep) ? DMA_TO_DEVICE : DMA_FROM_DEVICE);
